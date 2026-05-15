@@ -4,7 +4,7 @@
 -- ============================================================================
 
 create table public.spreads (
-  id                       uuid primary key default uuid_generate_v4(),
+  id                       uuid primary key default gen_random_uuid(),
   user_id                  uuid not null references auth.users(id) on delete cascade,
 
   spread_type              text not null references public.spread_type_catalog(code),
@@ -93,7 +93,7 @@ create trigger spreads_updated_at
 -- ============================================================================
 
 create table public.spread_legs (
-  id            uuid primary key default uuid_generate_v4(),
+  id            uuid primary key default gen_random_uuid(),
   spread_id     uuid not null references public.spreads(id) on delete cascade,
   position_id   uuid not null references public.positions(id) on delete restrict,
   user_id       uuid not null references auth.users(id) on delete cascade,
@@ -124,7 +124,7 @@ create trigger spread_legs_updated_at
 -- ============================================================================
 
 create table public.spread_candidates (
-  id                  uuid primary key default uuid_generate_v4(),
+  id                  uuid primary key default gen_random_uuid(),
   user_id             uuid not null references auth.users(id) on delete cascade,
   suggested_type      text not null references public.spread_type_catalog(code),
   state               candidate_state not null default 'pending',

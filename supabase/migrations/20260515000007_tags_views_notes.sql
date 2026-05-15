@@ -3,7 +3,7 @@
 -- ============================================================================
 
 create table public.tags (
-  id          uuid primary key default uuid_generate_v4(),
+  id          uuid primary key default gen_random_uuid(),
   user_id     uuid not null references auth.users(id) on delete cascade,
   name        text not null,
   color       text not null default '#888888',
@@ -39,7 +39,7 @@ create index spread_tags_user_idx on public.spread_tags (user_id);
 -- ============================================================================
 
 create table public.saved_views (
-  id            uuid primary key default uuid_generate_v4(),
+  id            uuid primary key default gen_random_uuid(),
   user_id       uuid not null references auth.users(id) on delete cascade,
   name          text not null,
   scope         text not null check (scope in ('spreads', 'positions', 'fills')),
@@ -70,7 +70,7 @@ create trigger saved_views_updated_at
 -- ============================================================================
 
 create table public.notes (
-  id                  uuid primary key default uuid_generate_v4(),
+  id                  uuid primary key default gen_random_uuid(),
   user_id             uuid not null references auth.users(id) on delete cascade,
   spread_id           uuid not null references public.spreads(id) on delete cascade,
   body                text not null default '',
@@ -99,7 +99,7 @@ create trigger notes_updated_at
 -- ============================================================================
 
 create table public.note_attachments (
-  id            uuid primary key default uuid_generate_v4(),
+  id            uuid primary key default gen_random_uuid(),
   user_id       uuid not null references auth.users(id) on delete cascade,
   note_id       uuid not null references public.notes(id) on delete cascade,
   filename      text not null,

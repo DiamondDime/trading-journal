@@ -3,7 +3,7 @@
 -- ============================================================================
 
 create table public.allowlist (
-  id              uuid primary key default uuid_generate_v4(),
+  id              uuid primary key default gen_random_uuid(),
   email           citext not null unique,
   role            allowlist_role not null default 'user',
   invited_by      uuid references auth.users(id) on delete set null,

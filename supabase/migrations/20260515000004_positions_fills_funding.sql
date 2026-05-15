@@ -4,7 +4,7 @@
 -- ============================================================================
 
 create table public.positions (
-  id                       uuid primary key default uuid_generate_v4(),
+  id                       uuid primary key default gen_random_uuid(),
   user_id                  uuid not null references auth.users(id) on delete cascade,
   exchange_connection_id   uuid not null references public.exchange_connections(id) on delete restrict,
 
@@ -72,7 +72,7 @@ create trigger positions_updated_at
 -- ============================================================================
 
 create table public.fills (
-  id                       uuid primary key default uuid_generate_v4(),
+  id                       uuid primary key default gen_random_uuid(),
   user_id                  uuid not null references auth.users(id) on delete cascade,
   exchange_connection_id   uuid not null references public.exchange_connections(id) on delete restrict,
   position_id              uuid references public.positions(id) on delete set null,
@@ -144,7 +144,7 @@ create trigger fills_updated_at
 -- ============================================================================
 
 create table public.funding_events (
-  id                       uuid primary key default uuid_generate_v4(),
+  id                       uuid primary key default gen_random_uuid(),
   user_id                  uuid not null references auth.users(id) on delete cascade,
   exchange_connection_id   uuid not null references public.exchange_connections(id) on delete restrict,
   position_id              uuid references public.positions(id) on delete set null,
@@ -197,7 +197,7 @@ create trigger funding_events_updated_at
 -- ============================================================================
 
 create table public.sync_jobs (
-  id                       uuid primary key default uuid_generate_v4(),
+  id                       uuid primary key default gen_random_uuid(),
   user_id                  uuid not null references auth.users(id) on delete cascade,
   exchange_connection_id   uuid not null references public.exchange_connections(id) on delete cascade,
   state                    sync_job_state not null default 'queued',
