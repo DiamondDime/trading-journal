@@ -1,0 +1,577 @@
+{
+  "_meta": {
+    "purpose": "Realistic placeholder data for Claude Design. Drop these into mockups instead of inventing data shapes. Every field matches the SpreadPnl / Spread / SpreadLeg interface in src/types/canonical.ts. Numbers derive from the worked examples in the arbitrage domain brief, kept internally consistent under the spread_pnl view's formulas.",
+    "_formulas": {
+      "realized_apr": "(net_pnl_quote / capital_deployed_usd) * (365 / days_held)",
+      "bps_captured_net": "(net_pnl_quote / capital_deployed_usd) * 10000",
+      "bps_per_day": "bps_captured_net / days_held",
+      "realized_vs_expected_apr": "realized_apr / target_apr_at_open"
+    },
+    "_card_headline_per_type": {
+      "cross_exchange_perp_arb": "bps_captured (format: bps)",
+      "cash_carry":              "realized_apr (format: apr_pct)",
+      "calendar":                "bps_per_day (format: bps_per_day)",
+      "funding_capture":         "realized_apr (format: apr_pct)",
+      "dex_cex_arb":             "bps_captured (format: bps)"
+    },
+    "_render_rules": [
+      "All Decimal values are strings. Render with font-mono, tabular-nums.",
+      "Sign-prefix all PnL numbers (+ or − using U+2212).",
+      "Color +ve in --color-accent-up, -ve in --color-accent-down.",
+      "Never display notional. Always display capital_deployed_usd.",
+      "Spread name = display label; primary_base = ticker for filter chips."
+    ]
+  },
+
+  "spreads_list": [
+    {
+      "spread_id":               "01000000-0000-0000-0000-000000000001",
+      "user_id":                 "f6482446-8261-4375-85e6-e93f85a635c1",
+      "spread_type":             "cross_exchange_perp_arb",
+      "variant":                 null,
+      "status":                  "closed",
+      "name":                    "BTC perp arb · Binance↔Bybit",
+      "primary_base":            "BTC",
+      "opened_at":               "2026-03-14T14:22:08Z",
+      "closed_at":               "2026-03-14T15:09:14Z",
+      "capital_deployed_usd":    "5420.00",
+      "target_apr_at_open":      null,
+      "expected_holding_days":   1,
+      "regime_tags":             ["high_vol", "us_open"],
+      "custom_tags":             ["binance-bybit", "27k-notional"],
+      "exchanges":               ["binance", "bybit"],
+      "leg_count":               2,
+
+      "realized_pnl_quote":      "31.42",
+      "basis_pnl_quote":         "0.00",
+      "funding_received_quote":  "0.00",
+      "fees_quote":              "27.10",
+      "net_pnl_quote":           "4.32",
+      "gross_pnl_quote":         "31.42",
+
+      "days_held":               "0.0326",
+      "realized_apr":            "8.928571",
+      "bps_captured_net":        "7.97",
+      "bps_per_day":             "244.48",
+      "realized_vs_expected_apr": null,
+
+      "card_headline_metric":    "bps_captured",
+      "card_headline_value":     "7.97",
+      "card_headline_format":    "bps",
+
+      "created_at":              "2026-03-14T14:22:08Z",
+      "updated_at":              "2026-03-14T15:09:14Z"
+    },
+
+    {
+      "spread_id":               "01000000-0000-0000-0000-000000000002",
+      "user_id":                 "f6482446-8261-4375-85e6-e93f85a635c1",
+      "spread_type":             "cross_exchange_perp_arb",
+      "variant":                 null,
+      "status":                  "open",
+      "name":                    "ETH perp arb · OKX↔Bybit",
+      "primary_base":            "ETH",
+      "opened_at":               "2026-05-16T08:42:51Z",
+      "closed_at":               null,
+      "capital_deployed_usd":    "3180.00",
+      "target_apr_at_open":      null,
+      "expected_holding_days":   1,
+      "regime_tags":             ["normal"],
+      "custom_tags":             [],
+      "exchanges":               ["okx", "bybit"],
+      "leg_count":               2,
+
+      "realized_pnl_quote":      "0.00",
+      "basis_pnl_quote":         "12.84",
+      "funding_received_quote":  "0.00",
+      "fees_quote":              "15.90",
+      "net_pnl_quote":           "-3.06",
+      "gross_pnl_quote":         "12.84",
+
+      "days_held":               "0.0125",
+      "realized_apr":            "-28.13",
+      "bps_captured_net":        "-9.62",
+      "bps_per_day":             "-769.81",
+      "realized_vs_expected_apr": null,
+
+      "card_headline_metric":    "bps_captured",
+      "card_headline_value":     "-9.62",
+      "card_headline_format":    "bps",
+
+      "created_at":              "2026-05-16T08:42:51Z",
+      "updated_at":              "2026-05-16T09:00:00Z"
+    },
+
+    {
+      "spread_id":               "01000000-0000-0000-0000-000000000003",
+      "user_id":                 "f6482446-8261-4375-85e6-e93f85a635c1",
+      "spread_type":             "cash_carry",
+      "variant":                 "funding",
+      "status":                  "closed",
+      "name":                    "BTC cash-carry · Bitmex perp + Coinbase spot",
+      "primary_base":            "BTC",
+      "opened_at":               "2026-01-14T00:00:00Z",
+      "closed_at":               "2026-03-28T00:00:00Z",
+      "capital_deployed_usd":    "47300.00",
+      "target_apr_at_open":      "0.178",
+      "expected_holding_days":   90,
+      "regime_tags":             ["high_funding"],
+      "custom_tags":             ["bitmex-coinbase", "yield-trade"],
+      "exchanges":               ["binance", "kraken"],
+      "leg_count":               2,
+
+      "realized_pnl_quote":      "0.00",
+      "basis_pnl_quote":         "-43.00",
+      "funding_received_quote":  "1389.40",
+      "fees_quote":              "32.00",
+      "net_pnl_quote":           "1314.40",
+      "gross_pnl_quote":         "-43.00",
+
+      "days_held":               "73.0",
+      "realized_apr":            "0.139",
+      "bps_captured_net":        "277.89",
+      "bps_per_day":             "3.81",
+      "realized_vs_expected_apr": "0.781",
+
+      "card_headline_metric":    "realized_apr",
+      "card_headline_value":     "0.139",
+      "card_headline_format":    "apr_pct",
+
+      "created_at":              "2026-01-14T00:00:00Z",
+      "updated_at":              "2026-03-28T00:00:00Z"
+    },
+
+    {
+      "spread_id":               "01000000-0000-0000-0000-000000000004",
+      "user_id":                 "f6482446-8261-4375-85e6-e93f85a635c1",
+      "spread_type":             "cash_carry",
+      "variant":                 "basis",
+      "status":                  "open",
+      "name":                    "BTC basis · Deribit Jun-26 short + Bybit spot",
+      "primary_base":            "BTC",
+      "opened_at":               "2026-04-22T11:08:00Z",
+      "closed_at":               null,
+      "capital_deployed_usd":    "82100.00",
+      "target_apr_at_open":      "0.092",
+      "expected_holding_days":   55,
+      "expected_basis_convergence_date": "2026-06-27",
+      "regime_tags":             ["contango"],
+      "custom_tags":             ["jun-expiry"],
+      "exchanges":               ["deribit", "bybit"],
+      "leg_count":               2,
+
+      "realized_pnl_quote":      "0.00",
+      "basis_pnl_quote":         "428.50",
+      "funding_received_quote":  "0.00",
+      "fees_quote":              "41.20",
+      "net_pnl_quote":           "387.30",
+      "gross_pnl_quote":         "428.50",
+
+      "days_held":               "24.0",
+      "realized_apr":            "0.0717",
+      "bps_captured_net":        "47.18",
+      "bps_per_day":             "1.97",
+      "realized_vs_expected_apr": "0.779",
+
+      "card_headline_metric":    "realized_apr",
+      "card_headline_value":     "0.0717",
+      "card_headline_format":    "apr_pct",
+
+      "created_at":              "2026-04-22T11:08:00Z",
+      "updated_at":              "2026-05-16T08:00:00Z"
+    },
+
+    {
+      "spread_id":               "01000000-0000-0000-0000-000000000005",
+      "user_id":                 "f6482446-8261-4375-85e6-e93f85a635c1",
+      "spread_type":             "calendar",
+      "variant":                 null,
+      "status":                  "closed",
+      "name":                    "BTC calendar · Sep-26 long / Dec-26 short",
+      "primary_base":            "BTC",
+      "opened_at":               "2026-02-12T00:00:00Z",
+      "closed_at":               "2026-03-16T00:00:00Z",
+      "capital_deployed_usd":    "3140.00",
+      "target_apr_at_open":      null,
+      "expected_holding_days":   35,
+      "regime_tags":             ["contango_widening"],
+      "custom_tags":             ["short_spread"],
+      "exchanges":               ["deribit"],
+      "leg_count":               2,
+
+      "realized_pnl_quote":      "1600.00",
+      "basis_pnl_quote":         "0.00",
+      "funding_received_quote":  "0.00",
+      "fees_quote":              "72.00",
+      "net_pnl_quote":           "1528.00",
+      "gross_pnl_quote":         "1600.00",
+
+      "days_held":               "32.0",
+      "realized_apr":            "5.556",
+      "bps_captured_net":        "4866.24",
+      "bps_per_day":             "152.07",
+      "realized_vs_expected_apr": null,
+
+      "card_headline_metric":    "bps_per_day",
+      "card_headline_value":     "152.07",
+      "card_headline_format":    "bps_per_day",
+
+      "created_at":              "2026-02-12T00:00:00Z",
+      "updated_at":              "2026-03-16T00:00:00Z"
+    },
+
+    {
+      "spread_id":               "01000000-0000-0000-0000-000000000006",
+      "user_id":                 "f6482446-8261-4375-85e6-e93f85a635c1",
+      "spread_type":             "funding_capture",
+      "variant":                 "same_venue",
+      "status":                  "closed",
+      "name":                    "ETH funding capture · Bybit spot + perp",
+      "primary_base":            "ETH",
+      "opened_at":               "2026-02-03T00:00:00Z",
+      "closed_at":               "2026-02-22T00:00:00Z",
+      "capital_deployed_usd":    "30840.00",
+      "target_apr_at_open":      "0.137",
+      "expected_holding_days":   21,
+      "close_threshold_apr":     "0.08",
+      "close_threshold_periods": 3,
+      "regime_tags":             ["normal_funding"],
+      "custom_tags":             ["bybit"],
+      "exchanges":               ["bybit"],
+      "leg_count":               2,
+
+      "realized_pnl_quote":      "0.00",
+      "basis_pnl_quote":         "-5.00",
+      "funding_received_quote":  "214.30",
+      "fees_quote":              "28.00",
+      "net_pnl_quote":           "181.30",
+      "gross_pnl_quote":         "-5.00",
+
+      "days_held":               "19.0",
+      "realized_apr":            "0.1129",
+      "bps_captured_net":        "58.79",
+      "bps_per_day":             "3.09",
+      "realized_vs_expected_apr": "0.824",
+
+      "card_headline_metric":    "realized_apr",
+      "card_headline_value":     "0.1129",
+      "card_headline_format":    "apr_pct",
+
+      "created_at":              "2026-02-03T00:00:00Z",
+      "updated_at":              "2026-02-22T00:00:00Z"
+    },
+
+    {
+      "spread_id":               "01000000-0000-0000-0000-000000000007",
+      "user_id":                 "f6482446-8261-4375-85e6-e93f85a635c1",
+      "spread_type":             "funding_capture",
+      "variant":                 "cross_venue",
+      "status":                  "winding_down",
+      "name":                    "SOL funding · Bybit long perp / Binance short perp",
+      "primary_base":            "SOL",
+      "opened_at":               "2026-05-08T17:30:00Z",
+      "closed_at":               null,
+      "capital_deployed_usd":    "12400.00",
+      "target_apr_at_open":      "0.215",
+      "expected_holding_days":   14,
+      "close_threshold_apr":     "0.10",
+      "close_threshold_periods": 3,
+      "regime_tags":             ["funding_inversion"],
+      "custom_tags":             [],
+      "exchanges":               ["bybit", "binance"],
+      "leg_count":               2,
+
+      "realized_pnl_quote":      "84.20",
+      "basis_pnl_quote":         "-3.10",
+      "funding_received_quote":  "61.18",
+      "fees_quote":              "11.40",
+      "net_pnl_quote":           "130.88",
+      "gross_pnl_quote":         "81.10",
+
+      "days_held":               "8.2",
+      "realized_apr":            "0.4699",
+      "bps_captured_net":        "105.55",
+      "bps_per_day":             "12.87",
+      "realized_vs_expected_apr": "2.185",
+
+      "card_headline_metric":    "realized_apr",
+      "card_headline_value":     "0.4699",
+      "card_headline_format":    "apr_pct",
+
+      "created_at":              "2026-05-08T17:30:00Z",
+      "updated_at":              "2026-05-16T09:30:00Z"
+    },
+
+    {
+      "spread_id":               "01000000-0000-0000-0000-000000000008",
+      "user_id":                 "f6482446-8261-4375-85e6-e93f85a635c1",
+      "spread_type":             "dex_cex_arb",
+      "variant":                 null,
+      "status":                  "closed",
+      "name":                    "PEPE DEX-CEX · OKX DEX long / OKX perp short",
+      "primary_base":            "PEPE",
+      "opened_at":               "2026-04-11T03:14:22Z",
+      "closed_at":               "2026-04-11T14:28:18Z",
+      "capital_deployed_usd":    "8420.00",
+      "target_apr_at_open":      null,
+      "expected_holding_days":   1,
+      "max_gas_budget_usd":      "60.00",
+      "slippage_tolerance_bps":  "40",
+      "regime_tags":             ["liquidity_thin"],
+      "custom_tags":             ["pepe", "okx-dex-okx"],
+      "exchanges":               ["okx_dex", "okx"],
+      "leg_count":               2,
+
+      "realized_pnl_quote":      "62.40",
+      "basis_pnl_quote":         "0.00",
+      "funding_received_quote":  "2.10",
+      "fees_quote":              "114.50",
+      "net_pnl_quote":           "-50.00",
+      "gross_pnl_quote":         "62.40",
+
+      "days_held":               "0.468",
+      "realized_apr":            "-4.633",
+      "bps_captured_net":        "-59.38",
+      "bps_per_day":             "-126.86",
+      "realized_vs_expected_apr": null,
+
+      "card_headline_metric":    "bps_captured",
+      "card_headline_value":     "-59.38",
+      "card_headline_format":    "bps",
+
+      "created_at":              "2026-04-11T03:14:22Z",
+      "updated_at":              "2026-04-11T14:28:18Z"
+    },
+
+    {
+      "spread_id":               "01000000-0000-0000-0000-000000000009",
+      "user_id":                 "f6482446-8261-4375-85e6-e93f85a635c1",
+      "spread_type":             "cash_carry",
+      "variant":                 "funding",
+      "status":                  "orphaned",
+      "name":                    "BTC cash-carry · Binance perp + Bybit spot — LEG ORPHANED",
+      "primary_base":            "BTC",
+      "opened_at":               "2026-05-11T20:14:00Z",
+      "closed_at":               null,
+      "capital_deployed_usd":    "31200.00",
+      "target_apr_at_open":      "0.125",
+      "expected_holding_days":   30,
+      "close_threshold_apr":     "0.07",
+      "close_threshold_periods": 3,
+      "regime_tags":             ["high_vol"],
+      "custom_tags":             [],
+      "exchanges":               ["binance", "bybit"],
+      "leg_count":               2,
+
+      "realized_pnl_quote":      "-1842.00",
+      "basis_pnl_quote":         "2178.40",
+      "funding_received_quote":  "82.10",
+      "fees_quote":              "44.00",
+      "net_pnl_quote":           "374.50",
+      "gross_pnl_quote":         "336.40",
+
+      "days_held":               "4.5",
+      "realized_apr":            "0.9743",
+      "bps_captured_net":        "120.03",
+      "bps_per_day":             "26.67",
+      "realized_vs_expected_apr": "7.794",
+
+      "card_headline_metric":    "realized_apr",
+      "card_headline_value":     "0.9743",
+      "card_headline_format":    "apr_pct",
+
+      "created_at":              "2026-05-11T20:14:00Z",
+      "updated_at":              "2026-05-16T03:42:00Z"
+    },
+
+    {
+      "spread_id":               "01000000-0000-0000-0000-00000000000a",
+      "user_id":                 "f6482446-8261-4375-85e6-e93f85a635c1",
+      "spread_type":             "cash_carry",
+      "variant":                 "basis",
+      "status":                  "expired",
+      "name":                    "BTC basis · Deribit Mar-26 short + Bybit spot (held to expiry)",
+      "primary_base":            "BTC",
+      "opened_at":               "2026-01-08T00:00:00Z",
+      "closed_at":               "2026-03-28T08:00:00Z",
+      "capital_deployed_usd":    "62500.00",
+      "target_apr_at_open":      "0.085",
+      "expected_holding_days":   80,
+      "expected_basis_convergence_date": "2026-03-28",
+      "regime_tags":             ["contango"],
+      "custom_tags":             ["mar-expiry", "deribit"],
+      "exchanges":               ["deribit", "bybit"],
+      "leg_count":               2,
+
+      "realized_pnl_quote":      "1132.00",
+      "basis_pnl_quote":         "0.00",
+      "funding_received_quote":  "0.00",
+      "fees_quote":              "58.40",
+      "net_pnl_quote":           "1073.60",
+      "gross_pnl_quote":         "1132.00",
+
+      "days_held":               "79.33",
+      "realized_apr":            "0.0790",
+      "bps_captured_net":        "171.78",
+      "bps_per_day":             "2.166",
+      "realized_vs_expected_apr": "0.929",
+
+      "card_headline_metric":    "realized_apr",
+      "card_headline_value":     "0.0790",
+      "card_headline_format":    "apr_pct",
+
+      "created_at":              "2026-01-08T00:00:00Z",
+      "updated_at":              "2026-03-28T08:00:00Z"
+    }
+  ],
+
+  "spread_detail_example": {
+    "_purpose": "Full payload for the /spreads/[id] detail page. Use this when designing the detail view, charts, decomposition bar, and post-trade review.",
+    "spread": {
+      "_": "Same shape as items in spreads_list[2] (BTC cash-carry funding-version, closed).",
+      "spread_id":              "01000000-0000-0000-0000-000000000003",
+      "user_id":                "f6482446-8261-4375-85e6-e93f85a635c1",
+      "spread_type":            "cash_carry",
+      "variant":                "funding",
+      "status":                 "closed",
+      "name":                   "BTC cash-carry · Bitmex perp + Coinbase spot",
+      "primary_base":           "BTC",
+      "opened_at":              "2026-01-14T00:00:00Z",
+      "closed_at":              "2026-03-28T00:00:00Z",
+      "capital_deployed_usd":   "47300.00",
+      "target_apr_at_open":     "0.178",
+      "expected_holding_days":  90,
+      "exit_plan":              "Hold until funding APR drops below 10% for 3 consecutive periods, or capital recall.",
+      "borrow_cost_assumed_bps": "0",
+      "close_threshold_apr":    "0.10",
+      "close_threshold_periods": 3,
+      "regime_tags":            ["high_funding"],
+      "custom_tags":            ["bitmex-coinbase", "yield-trade"],
+      "exchanges":              ["binance", "kraken"],
+      "leg_count":              2,
+      "net_pnl_quote":          "1314.40",
+      "card_headline_metric":   "realized_apr",
+      "card_headline_value":    "0.139",
+      "card_headline_format":   "apr_pct"
+    },
+    "decomposition_bar": [
+      { "label": "Funding received", "value": "1389.40",  "sign": "+", "color_token": "--color-accent-up" },
+      { "label": "Basis MTM",        "value": "-43.00",   "sign": "-", "color_token": "--color-accent-down" },
+      { "label": "Fees",             "value": "-32.00",   "sign": "-", "color_token": "--color-accent-down" },
+      { "label": "Net",              "value": "1314.40",  "sign": "+", "color_token": "--color-text" }
+    ],
+    "legs": [
+      {
+        "spread_leg_id":         "11111111-1111-1111-1111-000000000001",
+        "role":                  "long_spot",
+        "leg_index":             0,
+        "instrument":            { "exchange": "binance", "kind": "spot", "base": "BTC", "quote": "USDT", "raw_symbol": "BTCUSDT" },
+        "side":                  "long",
+        "qty_total":             "1.0",
+        "avg_entry_price":       "47300.00",
+        "avg_exit_price":        "50140.00",
+        "intended_price":        "47300.00",
+        "intended_price_set_at": "2026-01-14T00:00:00Z",
+        "slippage_bps":          "0",
+        "time_to_fill_seconds":  4,
+        "realized_pnl_quote":    "2840.00",
+        "fees_paid":             "16.00",
+        "opened_at":             "2026-01-14T00:00:04Z",
+        "closed_at":             "2026-03-28T00:00:00Z"
+      },
+      {
+        "spread_leg_id":         "11111111-1111-1111-1111-000000000002",
+        "role":                  "short_perp",
+        "leg_index":             1,
+        "instrument":            { "exchange": "bybit", "kind": "perp", "base": "BTC", "quote": "USDT", "raw_symbol": "BTC-PERP" },
+        "side":                  "short",
+        "qty_total":             "1.0",
+        "avg_entry_price":       "47324.00",
+        "avg_exit_price":        "50161.00",
+        "intended_price":        "47320.00",
+        "intended_price_set_at": "2026-01-14T00:00:00Z",
+        "slippage_bps":          "0.84",
+        "time_to_fill_seconds":  6,
+        "realized_pnl_quote":    "-2883.00",
+        "funding_pnl_quote":     "1389.40",
+        "fees_paid":             "16.00",
+        "opened_at":             "2026-01-14T00:00:06Z",
+        "closed_at":             "2026-03-28T00:00:00Z"
+      }
+    ],
+    "funding_events_chart": {
+      "_purpose": "Bars for the cumulative-funding chart on the detail page. 219 settlements over 73 days (8h interval). Truncated here to first 5 + last 5.",
+      "settlements": [
+        { "ts": "2026-01-14T08:00:00Z", "amount_quote": "7.71",  "rate_bps": "1.63" },
+        { "ts": "2026-01-14T16:00:00Z", "amount_quote": "7.21",  "rate_bps": "1.52" },
+        { "ts": "2026-01-15T00:00:00Z", "amount_quote": "6.89",  "rate_bps": "1.45" },
+        { "ts": "2026-01-15T08:00:00Z", "amount_quote": "7.40",  "rate_bps": "1.56" },
+        { "ts": "2026-01-15T16:00:00Z", "amount_quote": "8.02",  "rate_bps": "1.69" },
+        "...",
+        { "ts": "2026-03-26T16:00:00Z", "amount_quote": "5.10",  "rate_bps": "1.02" },
+        { "ts": "2026-03-27T00:00:00Z", "amount_quote": "4.61",  "rate_bps": "0.92" },
+        { "ts": "2026-03-27T08:00:00Z", "amount_quote": "4.40",  "rate_bps": "0.88" },
+        { "ts": "2026-03-27T16:00:00Z", "amount_quote": "4.05",  "rate_bps": "0.81" },
+        { "ts": "2026-03-28T00:00:00Z", "amount_quote": "3.92",  "rate_bps": "0.78" }
+      ],
+      "total_received_quote":  "1389.40",
+      "mean_rate_bps":         "1.43",
+      "stability_score":       "0.18",
+      "_render_hint":          "Bars on the x-axis (8h intervals, 219 bars). Y-axis = $ per settlement. Overlay a cumulative-funding line. Add a horizontal threshold line at the trader's close_threshold (10% APR → 0.92 bps/8h) — when bars dip below for 3 consecutive periods, the close-alert fires."
+    },
+    "post_trade_review": {
+      "thesis": {
+        "target_apr_at_open":   "0.178",
+        "realized_apr":         "0.139",
+        "delta_ratio":          "0.781",
+        "verdict":              "underdelivered (79% of target — driven by funding rate decay in the back half of the hold)"
+      },
+      "execution": {
+        "worst_leg_slippage_bps": "0.84",
+        "largest_fill_gap_seconds": 2,
+        "verdict":                "clean"
+      },
+      "would_do_again": {
+        "operator_thumbs":      "up",
+        "operator_note":        "Regime was right (high-funding BTC into BTC-ETF inflow). Should have exited at day 50 when funding dropped below 12% APR. Set a tighter close_threshold (12%, not 10%) next time.",
+        "auto_tags":            ["regime_correct", "exit_late", "high_funding"]
+      }
+    },
+    "notes": [
+      {
+        "id":          "20000000-0000-0000-0000-000000000001",
+        "spread_id":   "01000000-0000-0000-0000-000000000003",
+        "body":        "Opening at +17.8% annualized funding. ETF inflow narrative still dominant — funding likely sticky through Feb. Capital allocation: 3% of book. Stop-loss criterion: funding flips negative for 3 ticks OR liq-buffer drops below 25%.",
+        "created_at":  "2026-01-14T00:05:00Z"
+      },
+      {
+        "id":          "20000000-0000-0000-0000-000000000002",
+        "spread_id":   "01000000-0000-0000-0000-000000000003",
+        "body":        "Day 40 update — funding rate trending down to 14% APR, basis has been mean-reverting cleanly. Holding.",
+        "created_at":  "2026-02-23T18:14:00Z"
+      },
+      {
+        "id":          "20000000-0000-0000-0000-000000000003",
+        "spread_id":   "01000000-0000-0000-0000-000000000003",
+        "body":        "Closing. Funding dropped below 10% APR for 4 consecutive periods. Net 14.0% APR realized — slightly below target but the late exit cost 3-4 percentage points. Note for next time: trigger at 12% not 10%.",
+        "created_at":  "2026-03-28T00:30:00Z"
+      }
+    ]
+  },
+
+  "filter_chip_examples": {
+    "_purpose": "Real-feel filter values for the filter bar component. Order matches vocabulary.md § 8 priority.",
+    "spread_types":    ["cross_exchange_perp_arb", "cash_carry", "calendar", "funding_capture", "dex_cex_arb"],
+    "statuses":        ["open", "winding_down", "orphaned", "closed", "expired"],
+    "assets":          ["BTC", "ETH", "SOL", "ARB", "PEPE", "DOGE", "AVAX"],
+    "exchanges":       ["binance", "bybit", "okx", "deribit", "hyperliquid", "okx_dex"],
+    "regime_tags":     ["high_funding", "high_vol", "contango", "contango_widening", "funding_inversion", "us_open", "etf_inflow", "fed_week"],
+    "saved_views": [
+      { "name": "Open trades",       "filter": "status:open,winding_down" },
+      { "name": "Orphaned alerts",   "filter": "status:orphaned" },
+      { "name": "Funding Q1 2026",   "filter": "spread_type:funding_capture closed_at:2026-01-01..2026-03-31" },
+      { "name": "Cash-carry BTC",    "filter": "spread_type:cash_carry primary_base:BTC" },
+      { "name": "DEX-CEX gas-killed", "filter": "spread_type:dex_cex_arb net_pnl<0" }
+    ]
+  }
+}
