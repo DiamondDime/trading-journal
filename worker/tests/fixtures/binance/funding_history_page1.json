@@ -1,0 +1,52 @@
+[
+  {
+    "symbol": "BTCUSDT",
+    "incomeType": "FUNDING_FEE",
+    "income": "-0.12345678",
+    "asset": "USDT",
+    "info": "",
+    "time": 1715760000000,
+    "tranId": "5000001",
+    "tradeId": ""
+  },
+  {
+    "symbol": "BTCUSDT",
+    "incomeType": "FUNDING_FEE",
+    "income": "0.08765432",
+    "asset": "USDT",
+    "info": "",
+    "time": 1715788800000,
+    "tranId": "5000002",
+    "tradeId": ""
+  },
+  {
+    "symbol": "ETHUSDT",
+    "incomeType": "FUNDING_FEE",
+    "income": "-0.05432100",
+    "asset": "USDT",
+    "info": "",
+    "time": 1715760000000,
+    "tranId": "5000003",
+    "tradeId": ""
+  },
+  {
+    "symbol": "ETHUSDT",
+    "incomeType": "FUNDING_FEE",
+    "income": "0.03210987",
+    "asset": "USDT",
+    "info": "",
+    "time": 1715788800000,
+    "tranId": "5000004",
+    "tradeId": ""
+  },
+  {
+    "symbol": "SOLUSDT",
+    "incomeType": "FUNDING_FEE",
+    "income": "-0.00987654",
+    "asset": "USDT",
+    "info": "",
+    "time": 1715760000000,
+    "tranId": "5000005",
+    "tradeId": ""
+  }
+]

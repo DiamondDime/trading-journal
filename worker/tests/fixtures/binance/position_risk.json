@@ -1,0 +1,53 @@
+[
+  {
+    "symbol": "BTCUSDT",
+    "positionAmt": "0.001",
+    "entryPrice": "68150.23",
+    "markPrice": "68420.00",
+    "unRealizedProfit": "0.26977",
+    "liquidationPrice": "45000.00",
+    "leverage": "10",
+    "maxNotionalValue": "40000",
+    "marginType": "cross",
+    "isolatedMargin": "0.00000000",
+    "isAutoAddMargin": "false",
+    "positionSide": "LONG",
+    "notional": "68.42000",
+    "isolatedWallet": "0",
+    "updateTime": 1715780000000
+  },
+  {
+    "symbol": "ETHUSDT",
+    "positionAmt": "-0.5",
+    "entryPrice": "3120.00",
+    "markPrice": "3100.00",
+    "unRealizedProfit": "10.00000",
+    "liquidationPrice": "6000.00",
+    "leverage": "5",
+    "maxNotionalValue": "20000",
+    "marginType": "isolated",
+    "isolatedMargin": "312.00000000",
+    "isAutoAddMargin": "false",
+    "positionSide": "SHORT",
+    "notional": "-1550.00000",
+    "isolatedWallet": "312",
+    "updateTime": 1715780000000
+  },
+  {
+    "symbol": "SOLUSDT",
+    "positionAmt": "0",
+    "entryPrice": "0",
+    "markPrice": "175.80000000",
+    "unRealizedProfit": "0.00000000",
+    "liquidationPrice": "0",
+    "leverage": "10",
+    "maxNotionalValue": "5000",
+    "marginType": "cross",
+    "isolatedMargin": "0.00000000",
+    "isAutoAddMargin": "false",
+    "positionSide": "BOTH",
+    "notional": "0",
+    "isolatedWallet": "0",
+    "updateTime": 1715750000000
+  }
+]

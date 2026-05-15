@@ -46,6 +46,12 @@ strict = true
 warn_return_any = true
 warn_unused_ignores = true
 
+[[tool.mypy.overrides]]
+# ccxt ships no py.typed marker and no stubs; silence all errors for that module.
+module = ["ccxt", "ccxt.*"]
+ignore_missing_imports = true
+ignore_errors = true
+
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
