@@ -1,0 +1,41 @@
+{
+  "retCode": 0,
+  "retMsg": "OK",
+  "result": {
+    "list": [
+      {
+        "id": "1747267200000-BTCUSDT-100495671",
+        "symbol": "BTCUSDT",
+        "side": "Sell",
+        "size": "0.10",
+        "fundingRate": "0.00010000",
+        "execFee": "-0.67450100",
+        "execTime": "1747267200000",
+        "type": "SETTLEMENT"
+      },
+      {
+        "id": "1747238400000-BTCUSDT-100495671",
+        "symbol": "BTCUSDT",
+        "side": "Sell",
+        "size": "0.10",
+        "fundingRate": "0.00008500",
+        "execFee": "-0.57332585",
+        "execTime": "1747238400000",
+        "type": "SETTLEMENT"
+      },
+      {
+        "id": "1747267200000-ETHUSDT-100495671",
+        "symbol": "ETHUSDT",
+        "side": "Buy",
+        "size": "1.00",
+        "fundingRate": "-0.00005000",
+        "execFee": "0.17564000",
+        "execTime": "1747267200000",
+        "type": "SETTLEMENT"
+      }
+    ],
+    "nextPageCursor": ""
+  },
+  "retExtInfo": {},
+  "time": 1747303200000
+}

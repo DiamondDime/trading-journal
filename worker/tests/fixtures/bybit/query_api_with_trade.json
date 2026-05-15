@@ -1,0 +1,42 @@
+{
+  "retCode": 0,
+  "retMsg": "OK",
+  "result": {
+    "id": "100495672",
+    "note": "key with Withdraw permission — UNSAFE",
+    "apiKey": "dangerousApiKey",
+    "readOnly": 1,
+    "secret": "",
+    "permissions": {
+      "ContractTrade": ["Order", "Position"],
+      "Spot": ["SpotTrade"],
+      "Wallet": ["AccountTransfer", "SubMemberTransfer", "Withdraw"],
+      "Options": ["OptionsTrade"],
+      "Derivatives": ["DerivativesTrade"],
+      "CopyTrading": [],
+      "BlockTrade": [],
+      "Exchange": ["ExchangeHistory"],
+      "NFT": [],
+      "Affiliate": []
+    },
+    "ips": ["*"],
+    "type": 1,
+    "deadlineDay": 0,
+    "expiredAt": "",
+    "createdAt": "2026-01-10T08:00:00Z",
+    "unified": 1,
+    "uta": 1,
+    "userID": 100495672,
+    "inviterID": 0,
+    "vipLevel": "No VIP",
+    "mktMakerLevel": "0",
+    "affiliateID": 0,
+    "rsaPublicKey": "",
+    "isMaster": true,
+    "parentUid": "0",
+    "kycLevel": "LEVEL_2",
+    "kycRegion": ""
+  },
+  "retExtInfo": {},
+  "time": 1747303200000
+}

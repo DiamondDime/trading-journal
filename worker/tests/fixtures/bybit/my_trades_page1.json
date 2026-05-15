@@ -1,0 +1,63 @@
+{
+  "retCode": 0,
+  "retMsg": "OK",
+  "result": {
+    "list": [
+      {
+        "symbol": "BTCUSDT",
+        "id": "2100000000011807391",
+        "orderId": "1544957ecca9703e",
+        "side": "Buy",
+        "orderPrice": "67450.10",
+        "orderQty": "0.01",
+        "execPrice": "67450.10",
+        "execType": "Trade",
+        "execQty": "0.01",
+        "execFee": "0.33725050",
+        "execValue": "674.5010",
+        "feeSide": "base",
+        "feeRate": "0.0005",
+        "execTime": "1747267200000",
+        "isMaker": false,
+        "leavesQty": "0",
+        "orderLinkId": "",
+        "tradeIv": "",
+        "markIv": "",
+        "markPrice": "67449.50",
+        "indexPrice": "",
+        "underlyingPrice": "",
+        "blockTradeId": "",
+        "seq": 100000001
+      },
+      {
+        "symbol": "ETHUSDT",
+        "id": "2100000000011807392",
+        "orderId": "1544957ecca9703f",
+        "side": "Sell",
+        "orderPrice": "3512.80",
+        "orderQty": "0.5",
+        "execPrice": "3512.80",
+        "execType": "Trade",
+        "execQty": "0.5",
+        "execFee": "0.87820000",
+        "execValue": "1756.40",
+        "feeSide": "base",
+        "feeRate": "0.0005",
+        "execTime": "1747267260000",
+        "isMaker": false,
+        "leavesQty": "0",
+        "orderLinkId": "",
+        "tradeIv": "",
+        "markIv": "",
+        "markPrice": "3512.10",
+        "indexPrice": "",
+        "underlyingPrice": "",
+        "blockTradeId": "",
+        "seq": 100000002
+      }
+    ],
+    "nextPageCursor": "eyJza2lwTG9jYWxUcmFkZUlkIjoyMTAwMDAwMDAwMDExODA3MzkyLCJza2lwT3JkZXJJZCI6IjE1NDQ5NTdlY2NhOTcwM2YiLCJza2lwVHJhZGVJZCI6MjEwMDAwMDAwMDAxMTgwNzM5Mn0="
+  },
+  "retExtInfo": {},
+  "time": 1747303200000
+}

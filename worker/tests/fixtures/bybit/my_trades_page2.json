@@ -1,0 +1,37 @@
+{
+  "retCode": 0,
+  "retMsg": "OK",
+  "result": {
+    "list": [
+      {
+        "symbol": "BTCUSDT",
+        "id": "2100000000011807500",
+        "orderId": "1544957ecca9704a",
+        "side": "Sell",
+        "orderPrice": "67520.00",
+        "orderQty": "0.01",
+        "execPrice": "67520.00",
+        "execType": "Trade",
+        "execQty": "0.01",
+        "execFee": "0.33760000",
+        "execValue": "675.20",
+        "feeSide": "base",
+        "feeRate": "0.0005",
+        "execTime": "1747270800000",
+        "isMaker": true,
+        "leavesQty": "0",
+        "orderLinkId": "",
+        "tradeIv": "",
+        "markIv": "",
+        "markPrice": "67519.00",
+        "indexPrice": "",
+        "underlyingPrice": "",
+        "blockTradeId": "",
+        "seq": 100000010
+      }
+    ],
+    "nextPageCursor": ""
+  },
+  "retExtInfo": {},
+  "time": 1747303200000
+}
