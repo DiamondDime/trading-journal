@@ -3,10 +3,14 @@
  */
 import { AuthError, requireAdmin, requireUser } from '@/lib/auth/server';
 import { errors } from '@/lib/api/response';
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
 import { z, ZodError } from 'zod';
 
-export type Handler = (req: NextRequest, ctx: { params: Promise<Record<string, string>> }) => Promise<Response>;
+export type Handler = (
+  req: NextRequest,
+  ctx: { params: Promise<Record<string, string>> }
+) => Promise<Response>;
+
 export type AuthedHandler = (
   req: NextRequest,
   ctx: { params: Promise<Record<string, string>>; userId: string }
@@ -45,7 +49,10 @@ function handleError(e: unknown): Response {
   return errors.internal();
 }
 
-export async function parseBody<S extends z.ZodType>(req: NextRequest, schema: S): Promise<z.infer<S>> {
+export async function parseBody<S extends z.ZodType>(
+  req: NextRequest,
+  schema: S
+): Promise<z.infer<S>> {
   const json = await req.json().catch(() => ({}));
   return schema.parse(json);
 }

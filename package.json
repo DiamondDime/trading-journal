@@ -12,19 +12,18 @@
     "test:ui": "vitest --ui",
     "test:coverage": "vitest run --coverage",
     "typecheck": "tsc --noEmit",
-    "db:start": "supabase start",
-    "db:stop": "supabase stop",
-    "db:reset": "supabase db reset",
-    "db:diff": "supabase db diff",
-    "db:types": "supabase gen types typescript --local > src/types/database.types.ts",
-    "worker:dev": "cd worker && uv run python -m worker.dev",
+    "db:create": "createdb crypto_spread_journal",
+    "db:drop": "dropdb --if-exists crypto_spread_journal",
+    "db:migrate": "for f in supabase/migrations/*.sql; do echo \"-- $f\"; psql -d crypto_spread_journal -v ON_ERROR_STOP=1 -f \"$f\" || exit 1; done",
+    "db:reset": "pnpm db:drop && pnpm db:create && pnpm db:migrate",
+    "db:psql": "psql -d crypto_spread_journal",
+    "worker:dev": "cd worker && uv run python -m csj_worker.main",
     "worker:test": "cd worker && uv run pytest"
   },
   "dependencies": {
-    "@supabase/ssr": "^0.7.0",
-    "@supabase/supabase-js": "^2.45.0",
     "decimal.js": "^10.4.3",
     "next": "16.2.6",
+    "postgres": "^3.4.9",
     "react": "19.2.4",
     "react-dom": "19.2.4",
     "zod": "^4.4.3"
@@ -38,14 +37,12 @@
     "@vitest/ui": "^4.1.6",
     "eslint": "^9",
     "eslint-config-next": "16.2.6",
-    "supabase": "^2.98.2",
     "tailwindcss": "^4",
     "typescript": "^5",
     "vitest": "^4.1.6"
   },
   "pnpm": {
     "onlyBuiltDependencies": [
-      "supabase",
       "@tailwindcss/oxide",
       "esbuild"
     ]

@@ -1,121 +1,92 @@
 /**
  * GET  /api/spreads — list user's spreads with filters
- * POST /api/spreads — manual spread creation from selected fills/positions
+ * POST /api/spreads — manual spread creation
  */
 import { withAuth, parseBody } from '@/lib/api/handler';
 import { ok, created, errors } from '@/lib/api/response';
-import { createClient } from '@/lib/supabase/server';
+import { sql } from '@/lib/db/client';
 import { CreateSpreadBody, ListSpreadsQuery } from '@/lib/db/zod-schemas';
 
 export const GET = withAuth(async (req, { userId }) => {
   const url = new URL(req.url);
   const q = ListSpreadsQuery.parse(Object.fromEntries(url.searchParams));
 
-  const supabase = await createClient();
-  let query = supabase
-    .from('spread_pnl')
-    .select('*')
-    .eq('user_id', userId);
+  const status = q.status ? q.status.split(',') : null;
+  const types = q.spread_type ? q.spread_type.split(',') : null;
+  const sortField = q.sort_field; // already validated by zod
+  const sortDir = q.sort_dir;
 
-  if (q.status) {
-    const statuses = q.status.split(',');
-    query = query.in('status', statuses);
-  }
-  if (q.spread_type) {
-    const types = q.spread_type.split(',');
-    query = query.in('spread_type', types);
-  }
-  if (q.opened_after) query = query.gte('opened_at', q.opened_after);
-  if (q.opened_before) query = query.lte('opened_at', q.opened_before);
-  if (q.search) query = query.ilike('name', `%${q.search}%`);
-
-  query = query.order(q.sort_field, { ascending: q.sort_dir === 'asc' });
-  query = query.limit(q.limit);
-
-  const { data, error } = await query;
-  if (error) return errors.internal(error.message);
-  return ok({ items: data ?? [], next_cursor: null });
+  const rows = await sql`
+    SELECT * FROM public.spread_pnl
+    WHERE user_id = ${userId}::uuid
+      ${status ? sql`AND status = ANY(${status}::text[])` : sql``}
+      ${types ? sql`AND spread_type = ANY(${types}::text[])` : sql``}
+      ${q.opened_after ? sql`AND opened_at >= ${q.opened_after}::timestamptz` : sql``}
+      ${q.opened_before ? sql`AND opened_at <= ${q.opened_before}::timestamptz` : sql``}
+      ${q.search ? sql`AND name ILIKE ${'%' + q.search + '%'}` : sql``}
+    ORDER BY ${sql(sortField)} ${sortDir === 'asc' ? sql`ASC` : sql`DESC`} NULLS LAST
+    LIMIT ${q.limit}
+  `;
+  return ok({ items: rows, next_cursor: null });
 });
 
 export const POST = withAuth(async (req, { userId }) => {
   const body = await parseBody(req, CreateSpreadBody);
-  const supabase = await createClient();
-
-  // Validate all position_ids belong to user and are not already in a spread
   const allPositionIds = body.legs.flatMap((l) => l.position_ids);
-  const { data: existingLegs } = await supabase
-    .from('spread_legs')
-    .select('position_id')
-    .in('position_id', allPositionIds);
 
-  if (existingLegs && existingLegs.length > 0) {
-    const claimedIds = existingLegs.map((l) => l.position_id);
+  const existing = await sql<{ positionId: string }[]>`
+    SELECT position_id FROM public.spread_legs
+    WHERE position_id = ANY(${allPositionIds}::uuid[])
+  `;
+  if (existing.length > 0) {
     return errors.unprocessable(
       'FILLS_ALREADY_MATCHED',
       'Some positions are already part of another spread',
-      { claimed_position_ids: claimedIds }
+      { claimed_position_ids: existing.map((r) => r.positionId) }
     );
   }
 
-  // Fetch positions to derive primary_base + exchanges
-  const { data: positions } = await supabase
-    .from('positions')
-    .select('id, instrument, exchange_connection_id, opened_at')
-    .in('id', allPositionIds)
-    .eq('user_id', userId);
-
-  if (!positions || positions.length !== allPositionIds.length) {
-    return errors.unprocessable('INVALID_LEG_COMPOSITION', 'Some position IDs not found or not owned');
+  const positions = await sql<
+    { id: string; instrument: { base: string }; openedAt: string }[]
+  >`
+    SELECT id, instrument, opened_at FROM public.positions
+    WHERE id = ANY(${allPositionIds}::uuid[]) AND user_id = ${userId}::uuid
+  `;
+  if (positions.length !== allPositionIds.length) {
+    return errors.unprocessable(
+      'INVALID_LEG_COMPOSITION',
+      'Some position IDs not found or not owned'
+    );
   }
-
-  // Derive metadata
-  const positionsByLeg = body.legs.map((leg) => ({
-    leg,
-    positions: positions.filter((p) => leg.position_ids.includes(p.id)),
-  }));
 
   const earliestOpened = positions
-    .map((p) => p.opened_at)
+    .map((p) => p.openedAt)
     .sort()[0];
-  const primary_base = (positions[0].instrument as { base: string }).base;
+  const primary_base = positions[0].instrument.base;
 
-  // Insert spread
-  const { data: spread, error: spreadErr } = await supabase
-    .from('spreads')
-    .insert({
-      user_id: userId,
-      spread_type: body.spread_type,
-      status: 'open',
-      origin: 'manual',
-      source: 'user',
-      name: body.name ?? `Manual ${body.spread_type} — ${primary_base}`,
-      primary_base,
-      opened_at: earliestOpened,
-      capital_deployed_usd: body.capital_deployed_usd ?? null,
-      custom_tags: body.custom_tags ?? [],
-      leg_count: body.legs.length,
-    })
-    .select('*')
-    .single();
+  const spreads = await sql`
+    INSERT INTO public.spreads (
+      user_id, spread_type, status, origin, source, name, primary_base,
+      opened_at, capital_deployed_usd, custom_tags, leg_count
+    ) VALUES (
+      ${userId}::uuid, ${body.spread_type}, 'open', 'manual', 'user',
+      ${body.name ?? `Manual ${body.spread_type} — ${primary_base}`},
+      ${primary_base}, ${earliestOpened}::timestamptz,
+      ${body.capital_deployed_usd ?? null}, ${body.custom_tags ?? []}, ${body.legs.length}
+    )
+    RETURNING *
+  `;
+  const spreadId = spreads[0].id;
 
-  if (spreadErr) return errors.internal(spreadErr.message);
-
-  // Insert spread_legs
-  const legRows = body.legs.map((leg, idx) =>
-    leg.position_ids.map((position_id) => ({
-      spread_id: spread.id,
-      user_id: userId,
-      position_id,
-      role: leg.role,
-      leg_index: idx,
-    }))
-  ).flat();
-
-  const { error: legsErr } = await supabase.from('spread_legs').insert(legRows);
-  if (legsErr) {
-    await supabase.from('spreads').delete().eq('id', spread.id);
-    return errors.internal(legsErr.message);
+  for (let i = 0; i < body.legs.length; i++) {
+    const leg = body.legs[i];
+    for (const positionId of leg.position_ids) {
+      await sql`
+        INSERT INTO public.spread_legs (spread_id, user_id, position_id, role, leg_index)
+        VALUES (${spreadId}::uuid, ${userId}::uuid, ${positionId}::uuid, ${leg.role}, ${i})
+      `;
+    }
   }
 
-  return created(spread);
+  return created(spreads[0]);
 });

@@ -1,37 +1,26 @@
 import { withAdmin, parseBody } from '@/lib/api/handler';
 import { ok, created, errors } from '@/lib/api/response';
-import { createClient } from '@/lib/supabase/server';
+import { sql } from '@/lib/db/client';
 import { AddAllowlistBody } from '@/lib/db/zod-schemas';
 
 export const GET = withAdmin(async () => {
-  const supabase = await createClient();
-  const { data, error } = await supabase
-    .from('allowlist')
-    .select('*')
-    .order('created_at', { ascending: false });
-  if (error) return errors.internal(error.message);
-  return ok(data ?? []);
+  const rows = await sql`SELECT * FROM public.allowlist ORDER BY created_at DESC`;
+  return ok(rows);
 });
 
 export const POST = withAdmin(async (req, { userId }) => {
   const body = await parseBody(req, AddAllowlistBody);
-  const supabase = await createClient();
-  const { data, error } = await supabase
-    .from('allowlist')
-    .insert({
-      email: body.email,
-      role: body.role,
-      notes: body.notes ?? null,
-      invited_by: userId,
-    })
-    .select('*')
-    .single();
-
-  if (error) {
-    if (error.code === '23505') {
+  try {
+    const rows = await sql`
+      INSERT INTO public.allowlist (email, role, notes, invited_by)
+      VALUES (${body.email}, ${body.role}, ${body.notes ?? null}, ${userId}::uuid)
+      RETURNING *
+    `;
+    return created(rows[0]);
+  } catch (e) {
+    if ((e as Error).message?.includes('allowlist_email_key')) {
       return errors.conflict('ALREADY_EXISTS', 'Email already on allowlist');
     }
-    return errors.internal(error.message);
+    throw e;
   }
-  return created(data);
 });

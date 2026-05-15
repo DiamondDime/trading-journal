@@ -1,16 +1,13 @@
 import { withAuth } from '@/lib/api/handler';
-import { errors, noContent } from '@/lib/api/response';
-import { createClient } from '@/lib/supabase/server';
+import { noContent } from '@/lib/api/response';
+import { sql } from '@/lib/db/client';
 
 export const DELETE = withAuth(async (_req, { params, userId }) => {
   const { id } = await params;
-  const supabase = await createClient();
-  const { error } = await supabase
-    .from('exchange_connections')
-    .update({ deleted_at: new Date().toISOString(), status: 'disabled' })
-    .eq('id', id)
-    .eq('user_id', userId);
-
-  if (error) return errors.internal(error.message);
+  await sql`
+    UPDATE public.exchange_connections
+    SET deleted_at = now(), status = 'disabled'
+    WHERE id = ${id}::uuid AND user_id = ${userId}::uuid
+  `;
   return noContent();
 });

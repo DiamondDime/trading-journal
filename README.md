@@ -1,74 +1,72 @@
 # Crypto Spread Journal
 
-Private, invite-only spread-specialist crypto trading journal. The atomic unit is a **SPREAD** — a multi-leg, often multi-venue trade.
+Private, single-user spread-specialist crypto trading journal. The atomic unit is a **SPREAD** — a multi-leg, often multi-venue trade. Runs locally against your own Postgres.
 
-## What's built (Phase 0–6, partial Phase 2 + 8)
+## What's built
 
 ### Backend
-- **9 Postgres migrations** with RLS on every user table, encrypted credentials via Supabase Vault, materialized views for daily PnL
-- **3 exchange adapters** (Python, ccxt + custom): Binance, Bybit, Hyperliquid — 35 tests passing
-- **Leg matcher** with 5 spread-type rules (TDD, 28/28 tests pass) + dedup engine
-- **Canonical models** in TypeScript (branded IDs, Decimal=string) + Python (Pydantic v2)
+- **9 Postgres migrations** — exchange catalog, profiles, encrypted credentials, fills/funding, positions, spreads, tags, notes, RLS policies, computed views (`spread_pnl`, daily PnL materialized view)
+- **3 exchange adapters** (Python + ccxt + custom httpx): Binance, Bybit, Hyperliquid — 35 tests
+- **Leg matcher** with 5 spread-type rules (TDD, 28 tests) + dedup engine
+- **Canonical models** in TypeScript (branded IDs, `Decimal = string`) + Python (Pydantic v2)
 - **API routes** (Next.js App Router): exchanges, spreads, candidates accept/reject, admin allowlist
-- **Auth**: Supabase magic-link + middleware + allowlist trigger + login page
+- **App-layer AES-256-GCM** credential encryption (Node `crypto` + Python `cryptography`)
 
 ### What's NOT built yet
-- Worker orchestrator (Python service that polls connections and triggers adapter sync) — Phase 5
-- Position-builder (folds fills into positions) — part of Phase 5
+- Worker orchestrator (polls connections, runs adapters, writes fills, runs matcher) — Phase 5
+- Position-builder (folds fills into positions) — Phase 5
 - Live PnL / WebSocket — v2
-- Telegram bot — v2
 - Tax export — v2
-- Notes/media upload endpoints — Phase 9 (DB schema exists; endpoints not wired)
+- Notes/media upload endpoints — Phase 9 (schema exists; endpoints not wired)
 - Integration tests (E2E) — Phase 10
-- Adversarial review pass — Phase 12
 
 ## Quick start
 
 ### Prerequisites
+- macOS with Homebrew (or any Linux with postgresql 14+)
+- `postgresql@14` running (`brew services start postgresql@14`)
 - pnpm 10+
 - Python 3.12+
 - uv (Python package manager)
-- Docker (only for local Supabase dev — Supabase cloud works without)
 
 ### 1. Install dependencies
 ```bash
-pnpm install                          # Next.js side
-cd worker && uv sync --extra dev && cd ..  # Python worker side (--extra dev pulls pytest/ruff/mypy)
+pnpm install
+cd worker && uv sync --extra dev && cd ..
 ```
 
-### 2. Set up Supabase
-
-**Option A — Local (needs Docker)**:
+### 2. Create + migrate the database
 ```bash
-pnpm db:start                         # starts local Postgres + Auth + Storage
-pnpm db:reset                         # apply migrations
-pnpm db:types                         # generate src/types/database.types.ts
+pnpm db:create     # createdb crypto_spread_journal
+pnpm db:migrate    # apply all SQL files in supabase/migrations/ in order
 ```
 
-**Option B — Cloud (no Docker)**:
-1. Create a project at supabase.com
-2. `pnpm exec supabase link --project-ref <your-ref>`
-3. `pnpm exec supabase db push` to apply migrations
-4. `pnpm exec supabase gen types typescript --linked > src/types/database.types.ts`
+`db:reset` drops + recreates + remigrates in one shot if you want to start clean.
 
 ### 3. Configure env
 ```bash
 cp .env.example .env.local
-# Fill NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_ANON_KEY
-# Service-role key + DB URL goes in worker/.env (NEVER in Vercel env)
+# DATABASE_URL — connection string (default: postgresql://$USER@localhost:5432/crypto_spread_journal)
+# CREDENTIALS_MASTER_KEY — `openssl rand -base64 32`
+# APP_USER_ID — filled in step 4
 ```
 
-### 4. Seed yourself as admin
-After Supabase is up:
+Copy the same `DATABASE_URL`, `CREDENTIALS_MASTER_KEY` and `APP_USER_ID` into `worker/.env`.
+
+### 4. Seed yourself
 ```sql
+-- pnpm db:psql
 INSERT INTO public.allowlist (email, role) VALUES ('you@example.com', 'admin');
+INSERT INTO auth.users (email) VALUES ('you@example.com') RETURNING id;
+-- copy that UUID into .env.local as APP_USER_ID
 ```
+
+The `auth.users` insert fires the `handle_new_user` trigger that creates the matching `profiles` row.
 
 ### 5. Run
-
 ```bash
-pnpm dev                              # Next.js dev server (http://localhost:3000)
-cd worker && uv run pytest            # run all worker tests
+pnpm dev                       # http://localhost:3000/spreads
+cd worker && uv run pytest     # worker tests
 ```
 
 ## Project layout
@@ -76,52 +74,51 @@ cd worker && uv run pytest            # run all worker tests
 ```
 crypto-spread-journal/
 ├── src/
-│   ├── app/                          # Next.js routes
-│   │   ├── api/                      # API routes (exchanges, spreads, admin)
-│   │   ├── auth/                     # login + callback
-│   │   ├── spreads/                  # spread list (placeholder)
-│   │   └── page.tsx                  # redirect-by-auth landing
+│   ├── app/
+│   │   ├── api/                      # exchanges, spreads, candidates, admin/allowlist
+│   │   └── spreads/                  # server-rendered spread list
 │   ├── lib/
-│   │   ├── api/                      # response envelope + handler wrappers
-│   │   ├── auth/                     # server-side auth helpers
-│   │   ├── supabase/                 # SSR + middleware clients
-│   │   └── db/                       # Zod schemas
-│   ├── types/
-│   │   ├── canonical.ts              # source of truth at app layer
-│   │   └── database.types.ts         # auto-generated from schema
-│   └── middleware.ts                 # auth gate
+│   │   ├── api/                      # response envelope + withAuth/withAdmin wrappers
+│   │   ├── auth/                     # APP_USER_ID-based v1 auth
+│   │   ├── crypto/                   # AES-256-GCM credential helpers
+│   │   └── db/                       # postgres.js singleton + Zod schemas
+│   └── types/
+│       └── canonical.ts              # source of truth at app layer
 ├── worker/                           # Python ingestion service
 │   ├── csj_worker/
 │   │   ├── adapters/                 # Binance, Bybit, Hyperliquid + base ABC
 │   │   ├── matcher/                  # leg matcher (5 rules + engine)
+│   │   ├── crypto.py                 # AESGCM mirror of src/lib/crypto
 │   │   └── types.py                  # Pydantic mirror of canonical.ts
-│   └── tests/                        # pytest suite (63 passing)
-├── supabase/
-│   └── migrations/                   # 9 numbered SQL migrations
-├── docs/specs/
-│   └── 2026-05-15-architecture.md    # full architecture spec
-└── tests/                            # Vitest TS tests
+│   └── tests/                        # 63 pytest cases
+├── supabase/migrations/              # 10 numbered SQL files (kept under supabase/ for path stability)
+│   └── 20260515000000_local_postgres_shim.sql  # creates auth schema + auth.uid() locally
+└── docs/specs/2026-05-15-architecture.md
 ```
+
+## Auth model (v1)
+
+Single-user, local-only. There is no login UI. Every request acts as the user whose UUID is `APP_USER_ID` in `.env.local`. The `auth` schema and `auth.uid()` function are simulated locally by `20260515000000_local_postgres_shim.sql`; `auth.uid()` reads `app.current_user_id` from the connection setting, which the API handler wrapper sets per-request.
+
+When v2 invite-mode lands, the shim gets dropped and a real provider plugs in.
 
 ## Tests
 
 ```bash
-pnpm test:run                         # Vitest (TS)
-cd worker && uv run python -m pytest  # pytest (Python) — use `python -m` so it runs in uv venv
+pnpm test:run                         # Vitest
+cd worker && uv run python -m pytest  # pytest (use `python -m` so it runs in uv venv)
+pnpm typecheck                        # tsc --noEmit
 ```
 
-Current: 63 Python tests pass (35 adapters + 28 matcher). TS typecheck passes.
+Current: 63 Python tests pass (35 adapters + 28 matcher). TS typecheck clean.
 
 ## Security defaults
 
-1. **Service-role key on Hetzner worker only.** Never in Vercel env.
-2. **API keys decrypted only on Hetzner** via `worker_get_exchange_credentials()`.
-3. **Read-only enforcement.** Adapters reject `withdraw` permission at `connect()`.
-4. **RLS everywhere.** Every user-data table.
-5. **Magic-link 10 min TTL, single-use, PKCE.** Configure in Supabase Auth.
-6. **Vault-stored secrets.** Plaintext only momentarily in Next.js on key creation.
-
-See `docs/specs/2026-05-15-architecture.md` § Security model.
+1. **Credentials encrypted with AES-256-GCM** before write — see `src/lib/crypto/credentials.ts` and `worker/csj_worker/crypto.py`.
+2. **`CREDENTIALS_MASTER_KEY` never logged or returned.** Lose it = lose all stored keys.
+3. **Read-only adapter enforcement** — every adapter rejects `withdraw` permission at `connect()`.
+4. **RLS policies** still on every user-data table (bypassed locally as superuser; useful if you later expose the DB to a less-trusted role).
+5. **No password auth in v1** — local-only product, single user.
 
 ## Adding a new exchange (~2–5 days)
 
@@ -130,8 +127,6 @@ See `docs/specs/2026-05-15-architecture.md` § Security model.
 3. Implement `connect`, `validate_credentials`, `fetch_fills`, `fetch_funding_events`, `fetch_open_positions`.
 4. Write fixture-based tests in `worker/tests/adapters/test_<exchange>.py`.
 5. Register adapter in `worker/csj_worker/adapters/__init__.py` and worker bootstrap.
-
-Adapter contract (`base.py`) is the abstraction boundary — matcher, position builder, PnL are exchange-agnostic.
 
 ## License
 Private. No license granted.

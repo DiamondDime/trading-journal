@@ -1,64 +1,63 @@
 import { withAuth, parseBody } from '@/lib/api/handler';
 import { ok, errors, noContent } from '@/lib/api/response';
-import { createClient } from '@/lib/supabase/server';
+import { sql } from '@/lib/db/client';
 import { UpdateSpreadBody } from '@/lib/db/zod-schemas';
 
 export const GET = withAuth(async (_req, { params, userId }) => {
   const { id } = await params;
-  const supabase = await createClient();
 
-  const [spreadRes, legsRes, fundingRes, notesRes] = await Promise.all([
-    supabase.from('spread_pnl').select('*').eq('id', id).eq('user_id', userId).maybeSingle(),
-    supabase
-      .from('spread_legs')
-      .select('id, position_id, role, leg_index, positions(*)')
-      .eq('spread_id', id)
-      .order('leg_index'),
-    supabase
-      .from('funding_events')
-      .select('*')
-      .eq('user_id', userId),
-    supabase.from('notes').select('*').eq('spread_id', id).eq('user_id', userId).maybeSingle(),
+  const [spreadRows, legs, funding, notes] = await Promise.all([
+    sql`SELECT * FROM public.spread_pnl WHERE spread_id = ${id}::uuid AND user_id = ${userId}::uuid LIMIT 1`,
+    sql`
+      SELECT sl.id, sl.position_id, sl.role, sl.leg_index,
+             p.* AS position
+      FROM public.spread_legs sl
+      JOIN public.positions p ON p.id = sl.position_id
+      WHERE sl.spread_id = ${id}::uuid
+      ORDER BY sl.leg_index
+    `,
+    sql`
+      SELECT fe.* FROM public.funding_events fe
+      JOIN public.spread_legs sl ON sl.position_id = fe.position_id
+      WHERE sl.spread_id = ${id}::uuid
+      ORDER BY fe.event_time ASC
+    `,
+    sql`SELECT * FROM public.notes WHERE spread_id = ${id}::uuid AND user_id = ${userId}::uuid LIMIT 1`,
   ]);
 
-  if (spreadRes.error) return errors.internal(spreadRes.error.message);
-  if (!spreadRes.data) return errors.notFound('Spread not found');
+  if (!spreadRows[0]) return errors.notFound('Spread not found');
 
   return ok({
-    spread: spreadRes.data,
-    legs: legsRes.data ?? [],
-    funding_events: fundingRes.data ?? [],
-    note: notesRes.data ?? null,
+    spread: spreadRows[0],
+    legs,
+    funding_events: funding,
+    note: notes[0] ?? null,
   });
 });
 
 export const PATCH = withAuth(async (req, { params, userId }) => {
   const { id } = await params;
   const body = await parseBody(req, UpdateSpreadBody);
-  const supabase = await createClient();
 
-  const { data, error } = await supabase
-    .from('spreads')
-    .update(body)
-    .eq('id', id)
-    .eq('user_id', userId)
-    .select('*')
-    .single();
-
-  if (error) return errors.internal(error.message);
-  if (!data) return errors.notFound();
-  return ok(data);
+  const rows = await sql`
+    UPDATE public.spreads
+    SET ${sql({
+      ...(body.name !== undefined && { name: body.name }),
+      ...(body.regime_tags !== undefined && { regime_tags: body.regime_tags }),
+      ...(body.custom_tags !== undefined && { custom_tags: body.custom_tags }),
+    })}
+    WHERE id = ${id}::uuid AND user_id = ${userId}::uuid
+    RETURNING *
+  `;
+  if (!rows[0]) return errors.notFound();
+  return ok(rows[0]);
 });
 
 export const DELETE = withAuth(async (_req, { params, userId }) => {
   const { id } = await params;
-  const supabase = await createClient();
-  const { error } = await supabase
-    .from('spreads')
-    .update({ deleted_at: new Date().toISOString() })
-    .eq('id', id)
-    .eq('user_id', userId);
-
-  if (error) return errors.internal(error.message);
+  await sql`
+    UPDATE public.spreads SET deleted_at = now()
+    WHERE id = ${id}::uuid AND user_id = ${userId}::uuid
+  `;
   return noContent();
 });

@@ -26,7 +26,7 @@ create policy mark_prices_read on public.mark_prices
 -- ============================================================================
 
 create or replace view public.position_pnl
-with (security_invoker = true) as
+ as
 select
   p.id                                                          as position_id,
   p.user_id,
@@ -83,7 +83,7 @@ comment on view public.position_pnl is
 -- ============================================================================
 
 create or replace view public.spread_pnl
-with (security_invoker = true) as
+ as
 with leg_pnl as (
   select
     sl.spread_id,
@@ -199,7 +199,7 @@ $$;
 
 -- Wrapped per-user view (since RLS can't be set on materialized views directly)
 create or replace view public.my_daily_pnl
-with (security_barrier = true) as
+ as
 select * from public.daily_pnl where user_id = auth.uid();
 
 comment on view public.my_daily_pnl is
