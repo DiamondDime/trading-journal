@@ -577,6 +577,7 @@ source = { editable = "." }
 dependencies = [
     { name = "apscheduler" },
     { name = "ccxt" },
+    { name = "cryptography" },
     { name = "fastapi" },
     { name = "httpx" },
     { name = "psycopg", extra = ["binary", "pool"] },
@@ -607,6 +608,7 @@ dev = [
 requires-dist = [
     { name = "apscheduler", specifier = ">=3.10.4" },
     { name = "ccxt", specifier = ">=4.4.0" },
+    { name = "cryptography", specifier = ">=44.0.0" },
     { name = "fastapi", specifier = ">=0.115.0" },
     { name = "httpx", specifier = ">=0.28.0" },
     { name = "mypy", marker = "extra == 'dev'", specifier = ">=1.13.0" },

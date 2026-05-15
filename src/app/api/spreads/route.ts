@@ -66,13 +66,29 @@ export const POST = withAuth(async (req, { userId }) => {
 
   const spreads = await sql`
     INSERT INTO public.spreads (
-      user_id, spread_type, status, origin, source, name, primary_base,
-      opened_at, capital_deployed_usd, custom_tags, leg_count
+      user_id, spread_type, variant, status, origin, source, name, primary_base,
+      opened_at, capital_deployed_usd,
+      regime_tags, custom_tags, leg_count,
+      target_apr_at_open, expected_holding_days, expected_basis_convergence_date,
+      exit_plan, borrow_cost_assumed_bps,
+      close_threshold_apr, close_threshold_periods,
+      max_gas_budget_usd, slippage_tolerance_bps
     ) VALUES (
-      ${userId}::uuid, ${body.spread_type}, 'open', 'manual', 'user',
+      ${userId}::uuid, ${body.spread_type}, ${body.variant ?? null},
+      'open', 'manual', 'user',
       ${body.name ?? `Manual ${body.spread_type} — ${primary_base}`},
       ${primary_base}, ${earliestOpened}::timestamptz,
-      ${body.capital_deployed_usd ?? null}, ${body.custom_tags ?? []}, ${body.legs.length}
+      ${body.capital_deployed_usd ?? null},
+      ${body.regime_tags ?? []}, ${body.custom_tags ?? []}, ${body.legs.length},
+      ${body.target_apr_at_open ?? null},
+      ${body.expected_holding_days ?? null},
+      ${body.expected_basis_convergence_date ?? null}::date,
+      ${body.exit_plan ?? null},
+      ${body.borrow_cost_assumed_bps ?? null},
+      ${body.close_threshold_apr ?? null},
+      ${body.close_threshold_periods ?? null},
+      ${body.max_gas_budget_usd ?? null},
+      ${body.slippage_tolerance_bps ?? null}
     )
     RETURNING *
   `;
@@ -82,8 +98,15 @@ export const POST = withAuth(async (req, { userId }) => {
     const leg = body.legs[i];
     for (const positionId of leg.position_ids) {
       await sql`
-        INSERT INTO public.spread_legs (spread_id, user_id, position_id, role, leg_index)
-        VALUES (${spreadId}::uuid, ${userId}::uuid, ${positionId}::uuid, ${leg.role}, ${i})
+        INSERT INTO public.spread_legs (
+          spread_id, user_id, position_id, role, leg_index,
+          intended_price, intended_price_set_at
+        )
+        VALUES (
+          ${spreadId}::uuid, ${userId}::uuid, ${positionId}::uuid, ${leg.role}, ${i},
+          ${leg.intended_price ?? null},
+          ${leg.intended_price ? sql`now()` : null}
+        )
       `;
     }
   }

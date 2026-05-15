@@ -7,12 +7,15 @@ type SpreadRow = {
   spreadId: string;
   name: string;
   spreadType: string;
+  variant: string | null;
   status: string;
   netPnlQuote: string;
-  aprComputed: string | null;
   daysHeld: string | null;
   primaryBase: string;
   openedAt: string | null;
+  cardHeadlineMetric: string;
+  cardHeadlineValue: string | null;
+  cardHeadlineFormat: string;
 };
 
 type CandidateRow = {
@@ -23,13 +26,25 @@ type CandidateRow = {
   earliestFillAt: string;
 };
 
+function formatHeadline(value: string | null, format: string): string {
+  if (value == null) return '—';
+  const n = Number(value);
+  switch (format) {
+    case 'bps':         return `${n >= 0 ? '+' : ''}${n.toFixed(1)} bps`;
+    case 'apr_pct':     return `${(n * 100).toFixed(1)}%`;
+    case 'bps_per_day': return `${n >= 0 ? '+' : ''}${n.toFixed(2)} bps/d`;
+    case 'usd':         return `$${n.toFixed(2)}`;
+    default:            return n.toFixed(2);
+  }
+}
+
 export default async function SpreadsPage() {
   const profile = await getCurrentProfile();
 
   const spreads = await sql<SpreadRow[]>`
-    SELECT spread_id, name, spread_type, status,
-           net_pnl_quote, apr_computed, days_held,
-           primary_base, opened_at
+    SELECT spread_id, name, spread_type, variant, status,
+           net_pnl_quote, days_held, primary_base, opened_at,
+           card_headline_metric, card_headline_value, card_headline_format
     FROM public.spread_pnl
     ORDER BY opened_at DESC NULLS LAST
     LIMIT 50
@@ -84,8 +99,8 @@ export default async function SpreadsPage() {
                 <th className="text-left py-2">Name</th>
                 <th className="text-left">Type</th>
                 <th className="text-left">Status</th>
-                <th className="text-right">Net PnL</th>
-                <th className="text-right">APR</th>
+                <th className="text-right">Headline</th>
+                <th className="text-right">Net PnL ($)</th>
                 <th className="text-right">Days held</th>
               </tr>
             </thead>
@@ -93,19 +108,24 @@ export default async function SpreadsPage() {
               {spreads.map((s) => (
                 <tr key={s.spreadId} className="border-b border-[#1a1a1a] hover:bg-[#141414]">
                   <td className="py-2">{s.name}</td>
-                  <td>{s.spreadType}</td>
+                  <td>{s.spreadType}{s.variant ? ` · ${s.variant}` : ''}</td>
                   <td>
-                    <span className={s.status === 'open' ? 'text-[#00ff88]' : 'text-[#888]'}>
+                    <span className={
+                      s.status === 'open' ? 'text-[#00ff88]' :
+                      s.status === 'orphaned' ? 'text-[#ff3b30]' :
+                      s.status === 'winding_down' ? 'text-[#ffaa00]' :
+                      'text-[#888]'
+                    }>
                       {s.status}
                     </span>
+                  </td>
+                  <td className="text-right tabular-nums">
+                    {formatHeadline(s.cardHeadlineValue, s.cardHeadlineFormat)}
                   </td>
                   <td className="text-right tabular-nums">
                     <span className={Number(s.netPnlQuote) >= 0 ? 'text-[#00ff88]' : 'text-[#ff3b30]'}>
                       {Number(s.netPnlQuote).toFixed(2)}
                     </span>
-                  </td>
-                  <td className="text-right tabular-nums">
-                    {s.aprComputed != null ? `${(Number(s.aprComputed) * 100).toFixed(1)}%` : '—'}
                   </td>
                   <td className="text-right tabular-nums">
                     {s.daysHeld != null ? Number(s.daysHeld).toFixed(1) : '—'}

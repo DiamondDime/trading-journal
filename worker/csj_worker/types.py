@@ -100,6 +100,39 @@ class SpreadType(str, Enum):
     CUSTOM = "custom"
 
 
+class SpreadStatus(str, Enum):
+    CANDIDATE = "candidate"        # matcher proposal, not yet accepted
+    REJECTED = "rejected"          # candidate dismissed
+    OPEN = "open"                  # all legs filled, position active
+    WINDING_DOWN = "winding_down"  # some legs closed, intentional exit in progress
+    ORPHANED = "orphaned"          # one leg open with no remaining hedge (UNINTENDED)
+    EXPIRED = "expired"            # dated-future settlement reached before manual close
+    CLOSED = "closed"              # all legs fully closed
+
+
+class SpreadVariant(str, Enum):
+    # cash_carry
+    CASH_CARRY_FUNDING = "funding"        # short leg is a perp
+    CASH_CARRY_BASIS = "basis"            # short leg is a dated future
+    # funding_capture
+    FUNDING_CAPTURE_SAME_VENUE = "same_venue"
+    FUNDING_CAPTURE_CROSS_VENUE = "cross_venue"
+
+
+class CardHeadlineMetric(str, Enum):
+    BPS_CAPTURED = "bps_captured"
+    REALIZED_APR = "realized_apr"
+    BPS_PER_DAY = "bps_per_day"
+    NET_PNL_QUOTE = "net_pnl_quote"
+
+
+class CardHeadlineFormat(str, Enum):
+    BPS = "bps"
+    APR_PCT = "apr_pct"
+    BPS_PER_DAY = "bps_per_day"
+    USD = "usd"
+
+
 class CandidateState(str, Enum):
     PENDING = "pending"
     ACCEPTED = "accepted"

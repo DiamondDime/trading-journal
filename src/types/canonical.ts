@@ -100,12 +100,43 @@ export const SpreadType = {
 export type SpreadType = typeof SpreadType[keyof typeof SpreadType];
 
 export const SpreadStatus = {
-  CANDIDATE: 'candidate',
-  OPEN:      'open',
-  CLOSED:    'closed',
-  REJECTED:  'rejected',
+  CANDIDATE:     'candidate',     // matcher proposal, not yet accepted
+  REJECTED:      'rejected',      // candidate dismissed
+  OPEN:          'open',          // all legs filled, position active
+  WINDING_DOWN:  'winding_down',  // some legs closed, intentional exit in progress
+  ORPHANED:      'orphaned',      // one leg open with no remaining hedge (UNINTENDED — alert)
+  EXPIRED:       'expired',       // dated-future settlement reached before manual close
+  CLOSED:        'closed',        // all legs fully closed
 } as const;
 export type SpreadStatus = typeof SpreadStatus[keyof typeof SpreadStatus];
+
+// Sub-variant per spread type. NULL for types without a meaningful subdivision.
+export const SpreadVariant = {
+  // cash_carry
+  CASH_CARRY_FUNDING:        'funding',      // short leg is a perp
+  CASH_CARRY_BASIS:          'basis',        // short leg is a dated future
+  // funding_capture
+  FUNDING_CAPTURE_SAME_VENUE:  'same_venue', // long spot + short perp on one exchange
+  FUNDING_CAPTURE_CROSS_VENUE: 'cross_venue',// long perp neg-funding + short perp pos-funding
+} as const;
+export type SpreadVariant = typeof SpreadVariant[keyof typeof SpreadVariant];
+
+// Card headline metric — one number the trader's eye lands on per spread type.
+export const CardHeadlineMetric = {
+  BPS_CAPTURED:  'bps_captured',  // cross-exchange perp, DEX-CEX
+  REALIZED_APR:  'realized_apr',  // cash-carry, funding capture
+  BPS_PER_DAY:   'bps_per_day',   // calendars
+  NET_PNL_QUOTE: 'net_pnl_quote', // custom / fallback
+} as const;
+export type CardHeadlineMetric = typeof CardHeadlineMetric[keyof typeof CardHeadlineMetric];
+
+export const CardHeadlineFormat = {
+  BPS:         'bps',
+  APR_PCT:     'apr_pct',
+  BPS_PER_DAY: 'bps_per_day',
+  USD:         'usd',
+} as const;
+export type CardHeadlineFormat = typeof CardHeadlineFormat[keyof typeof CardHeadlineFormat];
 
 export const SpreadOrigin = {
   AUTO_MATCHED:   'auto_matched',
@@ -261,6 +292,7 @@ export interface Spread {
   id:                  SpreadId;
   user_id:             UserId;
   spread_type:         SpreadType;
+  variant:             SpreadVariant | null;
   status:              SpreadStatus;
   origin:              SpreadOrigin;
   name:                string;
@@ -268,6 +300,17 @@ export interface Spread {
   regime_tags:         string[];
   custom_tags:         string[];
   capital_deployed:    Decimal;
+  // Open-intent fields (trader's expectations at open; used in post-trade review)
+  target_apr_at_open:              Decimal | null;
+  expected_holding_days:           number  | null;
+  expected_basis_convergence_date: Iso8601 | null;
+  exit_plan:                       string  | null;
+  borrow_cost_assumed_bps:         Decimal | null;
+  close_threshold_apr:             Decimal | null;
+  close_threshold_periods:         number  | null;
+  max_gas_budget_usd:              Decimal | null;
+  slippage_tolerance_bps:          Decimal | null;
+  // Aggregates
   gross_pnl:           Decimal;
   funding_pnl:         Decimal;
   fees_pnl:            Decimal;   // negative
@@ -281,6 +324,56 @@ export interface Spread {
   match_confidence:    number | null;
   created_at:          Iso8601;
   updated_at:          Iso8601;
+}
+
+// Shape returned by the spread_pnl view. Frontend renders this directly.
+export interface SpreadPnl {
+  spread_id:                SpreadId;
+  user_id:                  UserId;
+  spread_type:              SpreadType;
+  variant:                  SpreadVariant | null;
+  status:                   SpreadStatus;
+  name:                     string;
+  primary_base:             string;
+  opened_at:                Iso8601 | null;
+  closed_at:                Iso8601 | null;
+  capital_deployed_usd:     Decimal | null;
+  target_apr_at_open:       Decimal | null;
+  expected_holding_days:    number | null;
+  regime_tags:              string[];
+  custom_tags:              string[];
+  exchanges:                Exchange[];
+  leg_count:                number;
+  // Decomposition (stacked-bar inputs)
+  realized_pnl_quote:       Decimal;
+  basis_pnl_quote:          Decimal;       // net leg MTM ≈ basis P&L
+  funding_received_quote:   Decimal;
+  fees_quote:               Decimal;
+  net_pnl_quote:            Decimal;
+  gross_pnl_quote:          Decimal;
+  // Derived
+  days_held:                Decimal | null;
+  realized_apr:             Decimal | null;
+  bps_captured_net:         Decimal | null;
+  bps_per_day:              Decimal | null;
+  realized_vs_expected_apr: Decimal | null;
+  // Card headline (frontend renders blindly: {metric} {value} {format})
+  card_headline_metric:     CardHeadlineMetric;
+  card_headline_value:      Decimal | null;
+  card_headline_format:     CardHeadlineFormat;
+  created_at:               Iso8601;
+  updated_at:               Iso8601;
+}
+
+// Per-leg execution review (slippage, time-to-fill).
+export interface SpreadLegExecution {
+  spread_leg_id:         SpreadLegId;
+  intended_price:        Decimal | null;
+  intended_price_set_at: Iso8601 | null;
+  // computed at query time from positions/fills
+  avg_fill_price:        Decimal | null;
+  slippage_bps:          Decimal | null;
+  time_to_fill_seconds:  number  | null;
 }
 
 // ---------- Spread candidate (matcher output) ----------
