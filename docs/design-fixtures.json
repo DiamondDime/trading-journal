@@ -15,11 +15,14 @@
       "dex_cex_arb":             "bps_captured (format: bps)"
     },
     "_render_rules": [
-      "All Decimal values are strings. Render with font-mono, tabular-nums.",
-      "Sign-prefix all PnL numbers (+ or − using U+2212).",
-      "Color +ve in --color-accent-up, -ve in --color-accent-down.",
+      "All Decimal values are strings. Convert to display via formatters; never render raw.",
+      "Render numeric values with JetBrains Mono + tabular-nums (font-variant-numeric: tabular-nums).",
+      "Render body text, labels, button text, section headings with Inter — NOT mono.",
+      "Sign-prefix all PnL numbers using proper minus character U+2212, not hyphen.",
+      "Color +ve in --accent-up (#16a34a light / #3fb950 dark), -ve in --accent-down (#dc2626 / #f85149).",
       "Never display notional. Always display capital_deployed_usd.",
-      "Spread name = display label; primary_base = ticker for filter chips."
+      "Spread name = display label; primary_base = ticker for filter chips.",
+      "Aesthetic: Mercury × Stripe Treasury × Linear. NOT Bloomberg Terminal. See docs/design-spec.md § 0."
     ]
   },
 

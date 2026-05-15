@@ -1,136 +1,167 @@
-# Design Anti-References — what to NOT look like
+# Design Anti-References — what NOT to look like
 
 **Audience:** Claude Design + any designer / design-AI.
 
-**How to use:** Read alongside `docs/design-spec.md`. When Claude Design produces something that drifts toward any of the patterns below, that's the signal to paste this doc back and ask for revision.
+**How to use:** Read alongside `docs/design-spec.md`. When the output drifts toward any pattern below, paste this doc back and ask for revision against the specific rule.
 
-When in doubt, the rule is: **"if a normie product manager would call it pretty, we don't want it."**
+**Last updated:** 2026-05-16 (rev 2).
 
 ---
 
-## 1. Categorical anti-references (do not design like these)
+## 1. The primary failure mode: "AI-generic trading terminal"
 
-### Generic SaaS dashboards
-- **Stripe Dashboard, Linear (but pastel), Vercel Dashboard, Notion, Airtable, ClickUp.**
-- Light backgrounds, soft greys, generous whitespace, large illustrations on empty states, friendly copywriting, rounded everything, blue/purple accents.
-- **Why we don't want this:** the trader using our app isn't being onboarded. They want maximum data density and zero hand-holding. SaaS dashboards optimize for "anyone can use this" — we explicitly don't.
+This is the trap we're explicitly fighting. Symptoms:
 
-### Consumer crypto / Web3 marketing
-- **DeFiLlama homepage, Dune Analytics landing page, OpenSea, Magic Eden, Phantom Wallet.**
-- Neon-on-black, gradient accents, animated backgrounds, "Connect Wallet" CTA aesthetics, NFT-adjacent visual flair.
-- **Why we don't want this:** marketing visuals, not working visuals. We're a tool, not a brochure.
+- **Pure-black background** (`#000000` or `#0a0a0a`) — looks like a 1995 hacker movie
+- **Matrix-green accent** (`#00ff00`, `#00ff88`) — neon, juvenile
+- **JetBrains Mono everywhere** — body text, headings, buttons, labels
+- **All-caps uppercase mono section labels** ("OPEN SPREADS", "FILTERS")
+- **0px border-radius on everything** — "brutalist" flat
+- **No shadows / no elevation** — flat 2-tone
+- **11-13px body text** — squint mode
+- **`▲ ▼ • ✕` text-symbol icons** instead of real iconography
+- **No charts, just numbers in tables**
 
-### Fintech onboarding aesthetic
-- **Robinhood, Coinbase consumer app, eToro, Revolut.**
-- Single big number, friendly fonts (Cera, Fakt, custom rounded sans), green-for-good, soft confirmation modals.
-- **Why we don't want this:** these apps optimize for "lower the barrier to a retail trader." We assume the user is a professional.
+This is what every AI produces when asked for "a serious dashboard." It is **not** what real premium fintech looks like. Mercury, Stripe Treasury, Linear, Brex, Plaid — none of them use any of the patterns above.
+
+**If the output has any 3+ of those symptoms, it has fallen into the trap. Revise.**
+
+---
+
+## 2. Categorical anti-references
+
+### Generic consumer SaaS
+- Stripe Dashboard the marketing demo, Notion, Airtable, ClickUp, Linear's *landing page* (not the actual product), Vercel marketing pages.
+- Light backgrounds with cute illustrations, friendly copywriting, generous illustrations of stick-figure people, "Welcome back!" greetings, achievements UI, soft purples and pinks.
+- **Why bad:** consumer-friendly signals "anyone can use this." We're a premium B2B tool. Operators are paying us; we don't need to coddle.
+
+### "AI-trading-terminal" cliché (the new failure mode)
+- Pure black bg + neon green text + Courier/JetBrains Mono everywhere + all-caps labels.
+- Looks like every AI-generated "make me a Bloomberg clone" output since 2023.
+- **Why bad:** it's the visual fingerprint of "I asked an LLM for a dashboard." Generic. Cheap-looking. Performatively serious.
+
+### Web3 marketing aesthetic
+- DeFiLlama, Dune Analytics, OpenSea, Magic Eden, Phantom Wallet, Uniswap landing.
+- Neon-on-dark, gradient backgrounds, animated mesh patterns, "Connect Wallet" energy.
+- **Why bad:** marketing visuals, not working visuals. We're a tool, not a brochure.
+
+### Fintech-consumer
+- Robinhood, Coinbase consumer, Revolut, eToro.
+- Big single celebratory numbers, friendly rounded sans-serifs, green-for-good with thumbs-up energy.
+- **Why bad:** retail-trader UX. Our user is a pro who wants data, not encouragement.
 
 ### Trading-journal competitors at their worst
-- **TradeZella marketing site, Edgewonk, Tradervue.**
-- Specific patterns to NOT replicate:
-  - Purple/teal/pink accent palette (TradeZella in particular)
-  - Win-rate as headline KPI on the dashboard
-  - Equity curve as a single hero line
-  - Achievements / badges / streaks gamification
-  - Onboarding tour overlays
-  - Rounded cards with soft drop shadows
-  - "Friendly" empty-state illustrations
-- **Why we don't want these:** see `docs/vocabulary.md` § 4 anti-patterns — most of them are statistically misleading for multi-strategy traders, and the visual softness signals "consumer app" which we're not.
+- TradeZella marketing site (the app is OK), Edgewonk, Tradervue.
+- Purple/teal/pink palettes (TradeZella in particular).
+- Win-rate as headline KPI.
+- Equity curve as one big line.
+- Achievements / streaks / badges.
+- Rounded corners with soft shadows in a *consumer* way (not the disciplined fintech-pro way).
+- **Why bad:** consumer-trader UX. We're a tier above.
 
 ---
 
-## 2. Pixel-level patterns to ban
+## 3. Pixel-level banned patterns
 
 | Pattern | Why banned |
 |---|---|
-| `border-radius` greater than `0` | Softens the dense data look; reads as "consumer SaaS" |
-| `box-shadow` of any kind | We use border color for elevation. Shadows read as decoration. |
-| Gradients (`background: linear-gradient(...)`) | Decorative. State is conveyed by solid color only. |
-| Emoji (📈 🚀 💰 ✅ etc.) | Unprofessional for a tool. Use text symbols (▲ ▼ • ✓ ✕ → ⟶) sparingly. |
-| Illustrated empty states (a person looking at an empty chart, etc.) | Wastes space + signals "consumer app." Empty states are one line of text. |
-| Animation longer than 150ms | Slows the operator down. Hover transitions ≤100ms. |
-| Decorative icons in body cells | Icons only in toolbars/headers. Body rows are pure data. |
-| Centered alignment in tables | Hides the data structure. Numeric right, text left, nothing center. |
-| Bold weight to "emphasize" rows | Use color or a 2px left-border instead. |
-| Tooltips that explain basic UI ("click to filter") | Operator already knows. Tooltips only for non-obvious actions. |
-| "?" help-icon clusters | If the UI needs help icons, the UI needs to be redesigned. |
-| Sidebar nav with icons + labels (Notion-style) | We use a horizontal top-bar. Icons-with-labels-in-sidebar wastes vertical space. |
-| Modals with rounded corners + drop shadow | Modals are full-rectangle, 1px border, same aesthetic as cards. |
-| Charts with fill gradients under the line | TradingView convention we don't need. Lines only. |
-| Color palette with more than 4 chromatic colors | We have 4: up, down, warn, info. That's it. |
-| "Beautiful" hero numbers in a giant font on a gradient card | TradeZella's "Net P&L this week" card. Don't. |
+| Pure black `#000` or near-black `#0a0a0a` for bg | Hacker-movie cliché. Use `#0d1117` (GitHub-dark) or lighter. |
+| Neon green `#00ff00`, `#00ff88` for positive | Matrix cliché. Use mature green `#16a34a` / `#3fb950`. |
+| Neon red `#ff0000`, `#ff3b30` for negative | Use mature red `#dc2626` / `#f85149`. |
+| Monospace body text | Inter for body. Mono ONLY for numbers / tickers / IDs. |
+| All-caps section labels (`OPEN SPREADS`) | Sentence-case Inter medium. "Open spreads". |
+| 0px border-radius on everything | Cards 8px, buttons 6px, badges full-rounded. Brutalist 0-radius is the AI cliché. |
+| No shadows ever | Subtle shadows are how premium fintech does elevation. See spec § 4. |
+| 11px / 12px body text | 14px minimum for body. Density via hierarchy, not miniaturization. |
+| Text-symbol icons (▲ ▼ ✕ • ✓) in headers/buttons | Use Lucide icons (16-20px) for real iconography. Text symbols only in tabular indicators. |
+| Gradients on cards | Subtle bg-tone shift between surface levels is fine; gradients are not. |
+| Soft drop shadows with halo / glow | `--shadow-sm` and `--shadow-md` only. Disciplined. |
+| Emoji (📈 🚀 💰 ✅) | Never. Lucide icons or nothing. |
+| Cartoon illustrations on empty states | Subtle brand-color line icon (64px max) is fine; cartoon people are not. |
+| Animation longer than 300ms | Real motion, not performative. Hover 150ms, page transitions 300ms max. |
+| Decorative icons in body table cells | Icons in toolbars/headers only. Body rows = data. |
+| Centered text alignment in tables | Numeric right, text left, nothing centered. |
+| Bold weight to "emphasize" rows | Use bg-tone or left-border accent instead. |
+| Tooltips that explain basic UI | Operator already knows. Tooltips for non-obvious only. |
+| "?" help-icon clusters | If UI needs help icons, redesign the UI. |
+| Modals with rounded corners + soft drop shadow + backdrop blur in a CONSUMER way | Modals use `--shadow-xl`, `--radius-lg`, dark backdrop at 50% opacity. Disciplined, not airy. |
+| Color palette with more than 5 chromatic colors | Brand + 4 state colors = 5. That's the budget. |
+| `bg-{color}-500/10` gradient pills for status | Use `--accent-*-bg` solid tinted backgrounds. |
+| Sparkline charts decorating every metric | Charts where charts belong; numbers where numbers belong. |
 
 ---
 
-## 3. Copywriting anti-patterns
+## 4. Copywriting anti-patterns
 
-The text in the UI should sound like a Bloomberg field label, not a customer-success email.
+The text in the UI should sound like a Stripe API doc, not a customer-success email.
 
 | Wrong (consumer copy) | Right (operator copy) |
 |---|---|
-| "Welcome back, Andrew! Here's your trading dashboard." | (no greeting; data only) |
-| "Great trade! Your win rate just improved." | (no praise; data only) |
-| "Oops! Something went wrong." | "Failed to load spreads. [Retry]" |
-| "You haven't added any trades yet. Let's get started!" | "No spreads. Connect an exchange via `POST /api/exchanges`." |
-| "Your portfolio is up 12% this month — amazing!" | "+12.4% MTD (realized: +8.1%, MTM: +4.3%)" |
-| "Are you sure you want to delete this trade?" | "Delete spread? This action is irreversible." |
-| Sentence-case headings ("My trading journal") | Uppercase-mono section labels ("SPREADS", "FILTERS", "POST-TRADE REVIEW") |
-| Friendly button labels ("Got it!", "Let's go!") | Verb-only ("CLOSE", "ACCEPT", "REJECT", "EXPORT") |
+| "Welcome back, Andrew! Here's your dashboard." | (no greeting) |
+| "Great trade! Your win rate just improved." | (no praise) |
+| "Oops! Something went wrong." | "Failed to load spreads. Retry." |
+| "You haven't added any trades yet. Let's get started!" | "No spreads yet. Connect an exchange to start tracking." |
+| "Your portfolio is up 12% this month — amazing!" | "+12.4% MTD · realized $8,123, MTM $4,290" |
+| "Are you sure?" | "Delete spread? This cannot be undone." |
+| Page titles in sentence case: "My trading journal" | Page titles in sentence case: "Spreads" — but NOT all-caps mono. |
+| Button labels: "Got it!", "Let's go!" | Verb-only: "Save", "Accept", "Reject", "Export" |
 
-**No exclamation marks. Ever.**
+**No exclamation marks. No emojis. No greetings. No achievements.**
+
+But we *don't* need to be hostile/terse either. "Failed to load spreads. Retry." is fine — full sentences, just not chatty.
 
 ---
 
-## 4. Specific TradeZella patterns to invert
+## 5. Specific TradeZella patterns to invert
 
 | TradeZella does | We do instead |
 |---|---|
-| Win rate as the dashboard hero number | Per-spread-type APR distribution. Win rate is buried in detailed reports, never the headline. |
-| Equity curve as one line | Stacked equity curve: one band per spread type, or one band per component (realized / basis / funding / fees). |
-| Calendar heatmap with bright colors | Calendar heatmap, but monochrome — green→bg for positive intensity, red→bg for negative. Cell border 1px. |
-| Trades shown as rows with bright tag pills | Spreads as cards (multi-leg complexity demands more than a row) or as table rows with text-only tags. |
-| Bubbly notes section with profile-pic chat aesthetic | Plain `<textarea>` with monospace, attachment list below. |
-| "Strategy templates" gallery with screenshots | Drop-down list of named templates, no thumbnails. |
-| Trade replay slider with cute icons | (defer; v2) — when built, plain monospace timeline. |
-| Onboarding tour with tooltips and arrows | None. README in the repo is the docs. |
-| Gamified streaks / achievements | None. Stats only. |
-
----
-
-## 5. Specific Stripe Dashboard patterns to invert
-
-| Stripe Dashboard does | We do instead |
-|---|---|
-| Generous 80px+ vertical spacing between sections | 24px / 32px max. Density. |
-| White cards on light grey background | Black-on-dark; cards are bg with 1px border. |
-| Big rounded number cards ("$1,234.56 this month") with subtle grey labels | Tabular-num text in the table; "this month" is a filter, not a card. |
-| 14–16px body text everywhere | 11–13px body. Density. |
-| Subtle blue accent everywhere | Color reserved for state. No blue accent on chrome. |
+| Win rate as the dashboard hero number | Per-spread-type APR distribution. Win rate buried in detailed reports. |
+| Equity curve as one line | Stacked equity curve — band per spread type or per component (realized / basis / funding / fees). |
+| Calendar heatmap with consumer-bright colors | Calendar heatmap with brand-color saturation gradient for positive, red saturation for negative. Subtle. |
+| Trades as rows with bright colored pills | Spreads as cards (multi-leg needs more than a row) OR table rows with subtle tinted-bg badges per spec. |
+| Bubbly chat-style notes section | Plain prose notes with proper typography, attachments listed below. |
+| Onboarding tour with arrows + tooltips | None. README is the doc. |
+| Streaks / achievements / gamification | None. Stats only. |
 
 ---
 
 ## 6. The smell test
 
-After any Claude Design output, ask:
-- Could this be a screenshot of a B2B SaaS landing page? → It's wrong. Revise.
-- Does it have a "delightful empty state"? → It's wrong. Revise.
-- Does the dashboard headline number feel celebratory? → It's wrong. Revise.
-- Could you imagine this being shipped by Stripe / Linear / Notion? → It's wrong. Revise.
-- Could you imagine this being shipped by Bloomberg / IBKR / Deribit / Hyperdash? → ✓ Continue refining.
+After each Claude Design output, ask:
+
+- Could this be a Bloomberg Terminal screenshot? → **It's wrong. Revise — we're not a terminal.**
+- Does it look like every AI-generated trading dashboard ever made? → **It's wrong. Revise.**
+- Is it pure black + neon green? → **It's wrong. Revise.**
+- Is every element monospace? → **It's wrong. Inter is the default.**
+- Does it have all-caps section labels? → **It's wrong. Sentence-case Inter.**
+- Could you imagine this being shipped by Robinhood / Coinbase consumer / TradeZella? → **It's wrong, too consumer.**
+- Could you imagine this being shipped by Mercury / Stripe Treasury / Linear / Brex / Plaid / Carta? → ✓ **On target.**
 
 ---
 
-## 7. The single biggest tell of "AI generic"
+## 7. The single biggest tell of "AI generic" — 2026 edition
 
-The model defaults to a specific look when undirected:
+When undirected (or over-directed toward "trading terminal"), Claude Design defaults to one of two failure modes:
 
-- Dark navy or slate-900 background (not true black)
+**Failure mode A — Generic SaaS:**
 - Indigo or purple accent
-- Inter or Geist sans throughout (no monospace)
-- Rounded `xl` (12px+) on every card
-- Subtle drop shadows for "depth"
-- Pill-shaped status badges with `bg-*-500/10` backgrounds
-- Lucide icons paired with labels
-- Hero card with a big chart fill-gradient
+- Soft rounded `xl` (12px+) corners on everything
+- Lucide icons paired with all labels
+- Hero chart with fill gradient
+- "Beautiful" but undifferentiated
 
-**If you see ANY of these in Claude Design's output, paste this doc back and demand revision.** This is the "I asked an AI to make me a dashboard and got generic AI dashboard" failure mode. The whole point of the spec doc and this doc is to prevent it.
+**Failure mode B — AI trading terminal:** *(the one we just hit)*
+- Pure black bg
+- Neon green/red
+- JetBrains Mono everywhere
+- All-caps mono section labels
+- 0-radius brutalism
+- 11-13px squint text
+- No shadows, flat 2-tone
+- Performatively "serious"
+
+**Both are failures.** The target is the narrow band *between* them: premium fintech-pro. Mercury-ish, Stripe-Treasury-ish, Linear-actual-product-ish.
+
+If output drifts toward A: more brand-color discipline, less generic shadcn-defaults, real differentiated typography.
+If output drifts toward B: drop the mono, add radius, add shadows, switch to Inter, use mature colors.

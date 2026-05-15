@@ -1,130 +1,225 @@
 # Design Spec — Crypto Spread Journal
 
-**Audience:** Claude Design (Anthropic Labs web product) + any designer / design-AI building the UI for this project.
+**Audience:** Claude Design (Anthropic Labs) and any designer / design-AI building UI for this project.
 
-**How to use:** Upload this file as persistent context in your Claude Design project. Every prompt then inherits these tokens and rules without you re-stating them. When the output drifts from this spec, the spec wins — update the output, not the spec.
+**Aesthetic anchor:** Modern fintech-pro. Mercury × Stripe Treasury × Linear (the real product, not the AI-cliché of it) × Plaid Dashboard. "We charge $500/month and you'd pay it." NOT Bloomberg Terminal. NOT "hacker green-on-black."
 
-**Last updated:** 2026-05-16.
+**How to use:** Upload as persistent project context. Every prompt inherits these rules without re-stating. When output drifts, the spec wins — revise the output, not the spec.
 
----
-
-## 0. North-star aesthetic
-
-> **Bloomberg Terminal × Linear × Hyperdash, not Stripe Dashboard or TradeZella's marketing site.**
-
-Dense, monochrome, monospace numbers, color used only to convey state (green up, red down, yellow warn). Zero decoration: no shadows, no rounded corners, no gradients, no emoji, no illustrations. The trader's eye must land on the *number* first, the *label* second, the chrome third.
-
-This is a **professional tool for someone who already understands the domain**. We do not onboard them, we do not show tutorials, we do not soften the data with friendly copy. Friction-free density beats hand-holding.
+**Last updated:** 2026-05-16 (rev 2 — pivoted away from terminal aesthetic).
 
 ---
 
-## 1. Color tokens
+## 0. The aesthetic in one paragraph
 
-All colors are semantic — never named by hue. The tokens drive everything; no raw hex in components.
+A product trader pays $500/month for. Looks like Mercury's dashboard, not Bloomberg Terminal. Light mode is the default (most operators check the journal during work hours); dark mode is a toggle. Type is **Inter** everywhere except numeric tabular data. Numbers use **JetBrains Mono** only for `$`, `bps`, `%`, `APR`, fills, timestamps, and instrument IDs — never for headings, labels, or prose. Color is sophisticated: a **single distinctive brand teal** (`#0d8a8a`) plus a mature state palette (forest green, fire-engine red, amber, financial blue). Cards have **8px radius** and **subtle 1-line shadows**. Hover states are real. Density comes from disciplined whitespace and typographic hierarchy, not from squinting at 11px text.
+
+**Don't make it look like:**
+- A Bloomberg Terminal screenshot from 1995
+- Neon green on pure black ("hacker")
+- All-caps monospace section labels everywhere (cliché)
+- Pure flat 0-radius "brutalist AI dashboard"
+- A generic shadcn-with-default-config landing page
+
+**Do make it look like:**
+- Mercury (mercury.com) — light bg, subtle elevation, sage accent, Inter throughout, mono only for numbers
+- Stripe Treasury dashboard — minimal, blue accent, real polish, real charts
+- Linear (the actual product, dark mode) — sophisticated grey palette, Inter, beautiful subtle color
+- Plaid Dashboard — developer-grade B2B fintech, properly designed
+
+---
+
+## 1. Color tokens — light + dark mode
+
+Two complete palettes. App ships with a theme toggle; light is default.
+
+### Light mode
 
 ```css
---color-bg:                 #0a0a0a;   /* page background */
---color-surface:            #141414;   /* card / row hover background */
---color-surface-elevated:   #1a1a1a;   /* modal / popover background */
---color-border:             #2a2a2a;   /* all separators (1px) */
---color-border-strong:      #3a3a3a;   /* focus rings, active borders */
+/* Surfaces */
+--bg-app:           #f7f8fa;   /* page background */
+--bg-surface:       #ffffff;   /* cards, tables, panels */
+--bg-elevated:      #ffffff;   /* modals, popovers — same as surface but with stronger shadow */
+--bg-subtle:        #f2f4f7;   /* hover bg, secondary surface */
+--bg-inset:         #f9fafb;   /* inset wells (e.g. code blocks, decomposition rows) */
 
---color-text:               #e8e8e8;   /* primary text */
---color-text-dim:           #888888;   /* secondary text, labels */
---color-text-faint:         #666666;   /* placeholder, disabled */
+/* Borders */
+--border:           #e5e7eb;   /* default 1px borders */
+--border-strong:    #d1d5db;   /* focus rings, active borders */
+--border-subtle:    #f0f2f5;   /* internal table dividers */
 
---color-accent-up:          #00ff88;   /* positive PnL, "open" status, success */
---color-accent-down:        #ff3b30;   /* negative PnL, "orphaned" status, error */
---color-accent-warn:        #ffaa00;   /* "winding_down" status, threshold breach */
---color-accent-info:        #5ac8fa;   /* informational accent (rare) */
+/* Text */
+--text-primary:     #1a1d23;   /* body text, default */
+--text-secondary:   #4b5563;   /* secondary text, labels */
+--text-tertiary:    #6b7280;   /* metadata, hints */
+--text-disabled:    #9ca3af;   /* disabled inputs, placeholders */
 
---color-accent-up-dim:      rgba(0, 255, 136, 0.15);   /* up tag background tint */
---color-accent-down-dim:    rgba(255, 59, 48, 0.15);   /* down tag background tint */
---color-accent-warn-dim:    rgba(255, 170, 0, 0.15);   /* warn tag background tint */
+/* Accents — mature, not neon */
+--accent-brand:     #0d8a8a;   /* PRIMARY brand color — teal. Used for primary CTA, brand mark, key emphasis. */
+--accent-brand-bg:  #e6f4f4;   /* tint background for brand chips */
+--accent-up:        #16a34a;   /* positive PnL — forest green, not matrix green */
+--accent-up-bg:     #ecfdf5;   /* up tag bg */
+--accent-down:      #dc2626;   /* negative PnL — fire-engine red */
+--accent-down-bg:   #fef2f2;   /* down tag bg */
+--accent-warn:      #d97706;   /* warning state (winding_down, threshold breach) — amber */
+--accent-warn-bg:   #fffbeb;
+--accent-info:      #2563eb;   /* financial-blue for informational accents */
+--accent-info-bg:   #eff6ff;
 ```
 
-**Color rules — strict:**
-- Decorative color is forbidden. Every chromatic pixel conveys state.
-- Numbers use `--color-accent-up` if `value >= 0`, `--color-accent-down` if `value < 0`. Never both.
-- Status badges use accent colors as **text color**, never as solid pill background. (Tint backgrounds via the `-dim` variants are OK at low opacity for emphasis only.)
-- The `--color-accent-info` exists for "neutral signal" (e.g., information tooltip) and is rarely used.
-- No purple, no teal, no pink — those signal "consumer SaaS" and break the aesthetic.
+### Dark mode
+
+```css
+/* Surfaces */
+--bg-app:           #0d1117;   /* page background — GitHub-dark proven premium */
+--bg-surface:       #161b22;   /* cards, tables, panels */
+--bg-elevated:      #1c2128;   /* modals, popovers */
+--bg-subtle:        #21262d;   /* hover bg */
+--bg-inset:         #0d1117;   /* inset wells */
+
+/* Borders */
+--border:           #30363d;
+--border-strong:    #484f58;
+--border-subtle:    #21262d;
+
+/* Text */
+--text-primary:     #f0f3f7;
+--text-secondary:   #c9d1d9;
+--text-tertiary:    #8b949e;
+--text-disabled:    #6e7681;
+
+/* Accents — slightly brighter than light-mode for contrast */
+--accent-brand:     #2dd4bf;   /* teal — lighter for dark mode */
+--accent-brand-bg:  rgba(45, 212, 191, 0.12);
+--accent-up:        #3fb950;   /* GitHub-success green */
+--accent-up-bg:     rgba(63, 185, 80, 0.15);
+--accent-down:      #f85149;   /* GitHub-danger red */
+--accent-down-bg:   rgba(248, 81, 73, 0.15);
+--accent-warn:      #fb923c;
+--accent-warn-bg:   rgba(251, 146, 60, 0.15);
+--accent-info:      #58a6ff;
+--accent-info-bg:   rgba(88, 166, 255, 0.15);
+```
+
+**Color rules:**
+- **`--accent-brand`** is the visual signature. Use it for the primary CTA, the brand mark in the header, and the *most important* metric on a screen (the headline KPI on the dashboard). Used sparingly — once or twice per screen.
+- **State colors** (up / down / warn / info) only convey state — never decoration.
+- **Numbers**: `+ve` uses `--accent-up`, `-ve` uses `--accent-down`. Always the full color on the number itself, no background fill.
+- **Status chips/tags** use the `*-bg` tinted backgrounds with the foreground color — a real pill, not bare text. (Reversal from the previous spec which banned pills.)
+- **Brand teal** is rare in fintech. Stripe = purple, Mercury = sage, Brex = orange, Ramp = yellow. Teal at #0d8a8a is a distinctive signature. Use it deliberately.
 
 ---
 
 ## 2. Typography
 
 ```css
---font-mono:    'JetBrains Mono', 'Menlo', 'Consolas', ui-monospace, monospace;
---font-sans:    'Inter', 'SF Pro Text', -apple-system, system-ui, sans-serif;
+--font-sans: 'Inter', 'SF Pro Text', -apple-system, system-ui, sans-serif;
+--font-mono: 'JetBrains Mono', 'SF Mono', 'Menlo', ui-monospace, monospace;
 ```
 
-Imports (must be in HTML head — Claude Design needs explicit links or it will fall back to its defaults):
+Import in HTML head (Claude Design needs explicit links):
 
 ```html
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 ```
 
-**Font-usage rules — strict:**
-- **All numbers, all instrument symbols, all UUIDs, all timestamps** use `--font-mono` with `font-variant-numeric: tabular-nums`. Always.
-- **Prose, labels, body text** use `--font-sans`.
-- **Section headings** use `--font-mono` uppercase, letter-spaced.
-- **No serifs anywhere.**
-- Never mix two weights of mono in the same row — use 400 for normal, 600 for the headline metric only.
+### Font-usage rules — strict
+
+- **Default**: Inter. Body text, headings, labels, buttons, prose, navigation, form inputs — all Inter.
+- **JetBrains Mono is ONLY for**:
+  - Currency amounts: `$47,300.00`
+  - Basis points: `+11.6 bps`
+  - APR/percentage: `14.0%`
+  - Instrument tickers in tables: `BTC-PERP`
+  - Timestamps when shown precisely: `2026-03-28T08:14:22Z`
+  - Crypto addresses, transaction hashes, UUIDs (when shown for debugging)
+- **Never** put mono on a button label, a page title, a section heading, or a sentence of prose.
 
 ### Type scale
 
-| Token | Size | Line-height | Weight | Use |
-|---|---|---|---|---|
-| `text-headline` | 24px | 32px | 600 | Spread detail page hero metric |
-| `text-h1` | 16px | 24px | 500 | Page titles |
-| `text-h2` | 13px | 20px | 500 | Section labels (`SPREADS`, `FILTERS`) — uppercase, letter-spacing 0.08em |
-| `text-body` | 13px | 20px | 400 | Tables, default text |
-| `text-small` | 11px | 16px | 400 | Helper text, hints, metadata |
-| `text-tiny` | 10px | 14px | 500 | Badge text — uppercase, letter-spacing 0.06em |
+| Token | Size / Line-height | Weight | Use |
+|---|---|---|---|
+| `text-display` | 36px / 44px | 600 Inter | Page hero stat ("$1,314.40") — rare, max once per screen |
+| `text-h1`      | 24px / 32px | 600 Inter | Page titles |
+| `text-h2`      | 18px / 28px | 600 Inter | Section headings ("Open spreads", "Filters") |
+| `text-h3`      | 16px / 24px | 500 Inter | Subsection headings |
+| `text-body-lg` | 16px / 24px | 400 Inter | Lede paragraphs, key descriptions |
+| `text-body`    | 14px / 22px | 400 Inter | Default body, table cells, form inputs |
+| `text-small`   | 13px / 20px | 400 Inter | Secondary text, metadata, helper text |
+| `text-xs`      | 12px / 16px | 500 Inter | Labels, chip text, badge text |
+| `num-hero`     | 36px / 44px | 500 Mono | Page hero numeric stat |
+| `num-display`  | 28px / 36px | 500 Mono | Detail-page numeric stats |
+| `num-headline` | 18px / 24px | 500 Mono | Card-headline metric |
+| `num-body`     | 14px / 22px | 400 Mono | Table numeric cells |
+| `num-small`    | 13px / 20px | 400 Mono | Inline numeric (in prose) |
 
-13px / 11px is small on purpose. Density is the point. If a reviewer asks for "bigger text," push back.
+**Body text is 14px** (not 11–13px squint-mode). Density comes from hierarchy + whitespace discipline, not from miniaturization.
 
----
-
-## 3. Spacing
-
-```css
---space-1:  4px;   /* tight icon gap */
---space-2:  8px;   /* default inline gap, badge padding */
---space-3: 12px;   /* table cell padding-y */
---space-4: 16px;   /* card internal padding */
---space-5: 24px;   /* between sections */
---space-6: 32px;   /* between major regions */
---space-8: 48px;   /* page-level vertical rhythm */
-```
-
-**Spacing rules:**
-- 8px grid. No arbitrary values.
-- Table row height: 32px. Header row 28px. (Compactness over comfort.)
-- Card internal padding: 16px (`--space-4`).
-- Between two cards / sections: 24px (`--space-5`).
-- Form input height: 32px.
-- Button height: 28px (compact) or 32px (default). Never larger.
+**Section labels are sentence-case Inter medium, not all-caps mono.** "Open spreads" — not "OPEN SPREADS".
 
 ---
 
-## 4. Borders, corners, shadows
+## 3. Spacing — generous but disciplined
 
 ```css
---radius: 0;                              /* every component, every state */
---border-width: 1px;
---border-style: solid;
---shadow-none: none;                      /* the only valid shadow */
+--space-1:  4px;
+--space-2:  8px;
+--space-3: 12px;
+--space-4: 16px;
+--space-5: 20px;
+--space-6: 24px;
+--space-8: 32px;
+--space-10: 40px;
+--space-12: 48px;
+--space-16: 64px;
 ```
 
-**Rules — strict:**
-- `border-radius: 0` on every element. No exceptions. No "softening" with `2px`.
-- All separators are `1px solid var(--color-border)`.
-- **No box-shadows anywhere.** Elevation is conveyed by border color (use `--color-border-strong` for active/focused states) and background color (`--color-surface` for hover, `--color-surface-elevated` for popovers).
-- Focus rings: `outline: 1px solid var(--color-border-strong); outline-offset: 1px`. No glow, no halo.
+**Component spacing:**
+- Card internal padding: `24px` (`--space-6`)
+- Card-to-card vertical gap: `16px` in a list, `24px` between sections
+- Section vertical rhythm: `48px` between major regions, `32px` between subsections
+- Page padding: `32–48px` left/right, `24px` top
+- Form input height: `40px`
+- Button height: `36px` (default), `32px` (compact), `44px` (large/primary on landing)
+- Table row height: `48px` (header `44px`)
+
+**Whitespace is a feature, not waste.** Generous breathing room signals "premium B2B," cramped signals "AI generic."
+
+---
+
+## 4. Radius, borders, shadows
+
+```css
+--radius-sm:  4px;    /* inline tags, badges */
+--radius:     6px;    /* buttons, form inputs */
+--radius-lg:  8px;    /* cards, panels, modals */
+--radius-xl: 12px;    /* hero / feature cards (rare) */
+
+--shadow-sm:  0 1px 2px rgba(0, 0, 0, 0.04);                /* card resting (light) */
+--shadow-md:  0 1px 3px rgba(0, 0, 0, 0.08),
+              0 1px 2px rgba(0, 0, 0, 0.04);                /* card hover (light) */
+--shadow-lg:  0 4px 12px rgba(0, 0, 0, 0.08),
+              0 2px 4px rgba(0, 0, 0, 0.04);                /* modal, popover */
+--shadow-xl:  0 8px 32px rgba(0, 0, 0, 0.12);               /* full-screen modal */
+
+/* Dark mode shadows — almost imperceptible; use border-strong for elevation */
+.dark {
+  --shadow-sm: 0 0 0 1px rgba(255, 255, 255, 0.04);
+  --shadow-md: 0 1px 0 rgba(255, 255, 255, 0.06), 0 0 0 1px rgba(255, 255, 255, 0.04);
+  --shadow-lg: 0 4px 12px rgba(0, 0, 0, 0.32);
+  --shadow-xl: 0 8px 32px rgba(0, 0, 0, 0.48);
+}
+```
+
+**Rules:**
+- **Cards**: 8px radius, subtle shadow, 1px border in light-mode (`--border`), no border in dark-mode (shadow + bg-tone shift provides elevation).
+- **Buttons**: 6px radius.
+- **Form inputs**: 6px radius.
+- **Badges/chips**: full-rounded for status indicators, 4px for category tags.
+- **Focus rings**: `box-shadow: 0 0 0 3px var(--accent-brand-bg)` + `border-color: var(--accent-brand)`. Real focus state, accessibility-required.
+- **Hover transitions**: `transition: all 150ms ease`. Real motion, not jarring.
 
 ---
 
@@ -133,226 +228,259 @@ Imports (must be in HTML head — Claude Design needs explicit links or it will 
 ### 5.1 Button
 
 ```
-[Default]    bg: transparent; border: 1px solid var(--color-border); color: var(--color-text); padding: 0 var(--space-3); height: 28px; font-mono, 11px, uppercase, letter-spacing 0.06em.
-[Hover]      bg: var(--color-surface); border: 1px solid var(--color-border-strong).
-[Active]     bg: var(--color-text); color: var(--color-bg). (Invert.)
-[Disabled]   color: var(--color-text-faint); cursor: not-allowed.
-[Primary]    bg: var(--color-accent-up); color: var(--color-bg); no border. Used sparingly — only for the single most important action on a page.
-[Danger]     border: 1px solid var(--color-accent-down); color: var(--color-accent-down).
+Primary:    bg: var(--accent-brand); color: white; weight 500; 6px radius;
+            hover: opacity 0.9 + shadow-sm; active: opacity 0.85.
+Secondary:  bg: var(--bg-surface); color: var(--text-primary); 
+            border: 1px solid var(--border); 6px radius;
+            hover: bg: var(--bg-subtle); border: var(--border-strong).
+Ghost:      bg: transparent; color: var(--text-primary); no border;
+            hover: bg: var(--bg-subtle).
+Danger:     bg: var(--accent-down); color: white; same shape as primary.
+Link:       color: var(--accent-brand); no border, no bg; underline on hover.
+Disabled:   opacity 0.5; cursor: not-allowed; no hover.
 ```
 
-No icon-only buttons except in a toolbar. Text labels always.
+Icons in buttons OK (Lucide icon set, 16px, left of text, `--space-2` gap).
 
 ### 5.2 Status badge
 
-Text-only badge, color = state. Uppercase, 10px, letter-spacing 0.06em, font-weight 500.
+Now a real pill with bg tint + bold foreground, not bare text. Use the `*-bg` color tokens.
 
 ```
-candidate     → color: var(--color-text-dim)
-rejected      → color: var(--color-text-faint)
-open          → color: var(--color-accent-up)
-winding_down  → color: var(--color-accent-warn)
-orphaned      → color: var(--color-accent-down); PLUS a 1px outline in same color; PLUS a small dot (•) prefix
-expired       → color: var(--color-text-dim)
-closed        → color: var(--color-text-dim)
+candidate     → bg: var(--bg-subtle);          fg: var(--text-secondary)
+rejected      → bg: var(--bg-subtle);          fg: var(--text-tertiary)
+open          → bg: var(--accent-up-bg);       fg: var(--accent-up)
+winding_down  → bg: var(--accent-warn-bg);     fg: var(--accent-warn)
+orphaned      → bg: var(--accent-down-bg);     fg: var(--accent-down)
+                + pulse animation on the bg every 2s (live alert)
+                + bullet prefix: •
+expired       → bg: var(--bg-subtle);          fg: var(--text-secondary)
+closed        → bg: var(--bg-subtle);          fg: var(--text-secondary)
 ```
 
-`orphaned` is the only state with non-text emphasis (the outline + dot) because it's an alert that demands operator action — see `docs/vocabulary.md` § 3.
+Badge sizing: `12px` Inter medium text, `4px 10px` padding, full-rounded.
 
 ### 5.3 Table
 
-- Header row: `var(--font-mono)`, 10px, uppercase, letter-spacing 0.08em, color `--color-text-dim`, border-bottom `1px solid var(--color-border)`.
-- Body rows: 32px tall, border-bottom `1px solid var(--color-surface)` (subtle separator, not the strong border).
-- Row hover: `bg: var(--color-surface)`.
-- Numeric columns: right-aligned, `font-variant-numeric: tabular-nums`, sign-prefixed for PnL.
-- Text columns: left-aligned, truncate with ellipsis after column width.
-- Zebra striping: **off**. Use the row hover for "where am I" feedback.
+- Header row: 13px Inter 500, `--text-tertiary`, sentence-case (NOT all-caps). Bottom border 1px `--border`.
+- Body rows: 48px tall, 14px Inter 400, alternating row hover (no zebra). Row hover bg: `--bg-subtle`.
+- Numeric columns: right-aligned, `--font-mono` 14px tabular-nums, sign-prefixed for PnL with proper minus character `U+2212`.
+- Selected row: left border 3px `--accent-brand`, bg `--accent-brand-bg`.
+- Sticky header on scroll.
+- Sortable column headers: chevron icon on hover, full icon when sorted.
 
-### 5.4 Card (spread card)
-
-- `bg: var(--color-bg)`, `border: 1px solid var(--color-border)`, `padding: var(--space-4)`, `border-radius: 0`.
-- 6 fields max per spread-list card; see `docs/vocabulary.md` § 5 for what each spread type shows.
-- Card layout:
+### 5.4 Card
 
 ```
-┌────────────────────────────────────────────────────────────────┐
-│ [STATUS BADGE]                              [HEADLINE METRIC]  │  ← top row
-│                                                                │
-│ Spread name                              ⟶                     │  ← name + click hint
-│ Type · variant                                                 │  ← type identifier
-│                                                                │
-│ field1: value1   field2: value2   field3: value3   field4: …   │  ← detail row
-└────────────────────────────────────────────────────────────────┘
+Default card:
+- bg: var(--bg-surface)
+- border: 1px solid var(--border) (light only; dark uses shadow)
+- border-radius: var(--radius-lg) [8px]
+- padding: var(--space-6) [24px]
+- shadow: var(--shadow-sm)
+- transition: 150ms
+
+Hover (when clickable):
+- shadow: var(--shadow-md)
+- border-color: var(--border-strong)
+- cursor: pointer
 ```
 
-- Headline metric: 16px mono 600. Color-coded by sign. Right-aligned at the top-right.
-- Status badge: top-left, see § 5.2.
-- Click target: entire card. Hover: `bg: var(--color-surface)`, cursor: pointer.
-- Card-on-card: never nest cards. Use spacing instead.
-
-### 5.5 Stat (single number with label)
+**Spread card layout** (in the list view):
 
 ```
-┌─────────────────────┐
-│ LABEL (uppercase    │  ← text-tiny, color-text-dim
-│  10px, dim)         │
-│ 14.0%               │  ← text-headline, color-coded
-└─────────────────────┘
+┌──────────────────────────────────────────────────────────────┐
+│ [● open]              BTC cash-carry · Bitmex+Coinbase       │  ← header: status pill + name
+│                                                              │
+│                                                +14.0% APR    │  ← headline (num-headline, color-coded, right-aligned)
+│                                                              │
+│ ──────────────────────────────────────────────────────────   │  ← divider (1px border)
+│                                                              │
+│ Capital      Hold      Funding $/day    Liq buffer           │  ← labels (text-xs, --text-tertiary)
+│ $47,300.00   73 days   $19.03           58%                  │  ← values (num-body)
+└──────────────────────────────────────────────────────────────┘
 ```
 
-Used on the spread detail page hero, and in the post-trade review thesis-delta table.
+Card-on-card forbidden. Nested data uses dividers + indented sections.
+
+### 5.5 Stat (labeled number primitive)
+
+```
+┌──────────────────────┐
+│ Net PnL              │  ← label: text-xs, --text-tertiary, sentence-case
+│ +$1,314.40           │  ← value: num-display, color-coded by sign
+│ ↑ 14.0% target       │  ← optional delta: text-small, --accent-up/--accent-down
+└──────────────────────┘
+```
+
+Used in: dashboard hero row, spread detail page hero row, post-trade review thesis-delta cards.
 
 ### 5.6 Filter bar
 
-A horizontal row of segmented controls and select dropdowns. Always above the data, sticky on scroll.
+Horizontal row, sticky on scroll, `bg: var(--bg-surface)`, bottom border.
 
-- Each filter: 28px tall, 1px border, label inline (`status: open ✕`), close button removes the filter.
-- "Saved view" dropdown on the right: select a preset (`Funding captures Q1`, `Orphaned alerts`, `Open positions`, …).
-- Sort control: separate from filters, sits to the right of the saved-view dropdown.
+- Saved-view dropdown on far left (with brand-color accent on the active view).
+- Filter chips inline: `bg: var(--accent-brand-bg)`, `fg: var(--accent-brand)`, `×` to remove.
+- Empty filter slots: ghost button "+ Add filter".
+- Sort dropdown on far right.
+- Search input far right of that, with `Cmd+K` keyboard hint.
 
-### 5.7 Chart — line / bar / stacked-bar
+### 5.7 Chart
 
-- Background: `var(--color-bg)`. No grid lines except faint horizontal at 1/4 / 1/2 / 3/4 / 1 in `var(--color-surface)` (barely visible).
-- Axis labels: `font-mono`, 10px, `var(--color-text-dim)`.
-- Line: 1px solid in `--color-accent-up` or `--color-accent-down` depending on the trend direction.
-- Bars (funding events): `var(--color-accent-up)` for received, `var(--color-accent-down)` for paid. 1px gap between bars.
-- Stacked-bar (PnL decomposition): each component gets a different color (funding=up-green, basis=info-cyan, fees=down-red, total=text-white). Component labels rendered on the right side of the bar, never inside it.
-- No fill area under lines (that's a TradingView convention; we don't need it).
-- No animations longer than 150ms.
+Use **Recharts** (or Visx). Real charts, not stripped-down ASCII art.
+
+- Background: `--bg-surface`. Subtle grid lines `--border-subtle`.
+- Axes: 12px Inter, `--text-tertiary`.
+- Lines: 2px stroke, `--accent-brand` for default series, `--accent-up`/`--accent-down` when up/down semantics apply.
+- Area fills: 10% opacity of the line color (light mode) or 15% (dark mode). Subtle, not hero.
+- Bars (funding events): `--accent-up` for received, `--accent-down` for paid, 2px gap.
+- Tooltip on hover: `bg: var(--bg-elevated)`, 8px radius, shadow-lg, 12px padding. Shows date + all series values.
+- Animation: 300ms ease-out on initial render, no animation on hover.
 
 ### 5.8 Form input
 
-- Height 32px, `bg: var(--color-bg)`, `border: 1px solid var(--color-border)`.
-- Focus: `border-color: var(--color-border-strong)`. No glow.
-- Label above the input, `text-tiny`, uppercase, `color-text-dim`.
-- Helper text below in `text-small`, `color-text-faint`.
-- Error: border `var(--color-accent-down)`, helper text `var(--color-accent-down)`.
+- Height 40px, `bg: var(--bg-surface)`, 1px border `--border`, 6px radius.
+- Label above input: `text-xs` Inter 500, `--text-secondary`, `--space-2` gap below to input.
+- Focus: `box-shadow: 0 0 0 3px var(--accent-brand-bg)`, `border-color: var(--accent-brand)`.
+- Helper text below: `text-small`, `--text-tertiary`.
+- Error: `border-color: var(--accent-down)`, helper text `--accent-down`, error icon prefix in input.
+- Disabled: `bg: var(--bg-subtle)`, `cursor: not-allowed`.
 
 ---
 
-## 6. Density rules (the trading-terminal vibe)
+## 6. Component library recommendation
 
-- **A page should show as much data as legibly possible.** If the comp looks "spacious," it's wrong. Compact > airy.
-- **Tabular numbers, sign-prefixed.** `+11.6 bps` not `11.6 bps`. `−59 bps` not `-59 bps` (use the proper minus sign character U+2212).
-- **Right-align all numeric columns.** Left-align text columns. Center nothing — center alignment in tables hides the data structure.
-- **Truncate with ellipsis at column boundaries.** Don't wrap text in cells.
-- **No icons in body cells.** Icons only in toolbars / headers.
-- **Never use bold to "highlight" a row.** Use color or a left-border accent instead.
+**Use shadcn/ui** as the primitive base. It's Tailwind-native, matches this aesthetic out of the box, and Claude Design recognizes the patterns. Then apply our token overrides via CSS variables.
+
+Specifically:
+- `Button`, `Input`, `Select`, `Dialog`, `Tabs`, `Card`, `Badge`, `DropdownMenu`, `Table`, `Tooltip`, `Toast` — all shadcn defaults
+- Override the CSS variables in `globals.css` to match our palette
+- Custom components (SpreadCard, DecompositionBar, FundingChart) compose the shadcn primitives
+
+**For charts**: Recharts. For icons: Lucide (16px in body, 20px in headers/buttons).
 
 ---
 
 ## 7. State coverage — every screen must include
 
-Before any screen is "done," all of these must be designed:
-
-1. **Default state** — populated with realistic data (use `docs/design-fixtures.json`)
-2. **Empty state** — zero data: a single line of text, no illustration. e.g., `"No spreads yet. Connect an exchange via POST /api/exchanges."`
-3. **Loading state** — skeleton rows (greyed-out 1px lines, same height as real content). No spinners.
-4. **Error state** — single line, red, with a "retry" button: `"Failed to load spreads. [Retry]"`
-5. **Long-text overflow** — what happens when `name` is 80 characters
-6. **Orphaned/alert variant** — for spread cards, the red-outlined version when `status = 'orphaned'`
+1. **Default state** — populated with realistic data (`docs/design-fixtures.json`)
+2. **Empty state** — single illustration is OK if subtle and on-brand (a faded brand-color icon, 64px max), single line of text, and a CTA. Not a generic "no data 📊" — something specific: *"No spreads yet. Connect an exchange to start tracking."*
+3. **Loading state** — skeleton screens (animated shimmer at 1.5s loop) matching the layout of the loaded content. No spinners except for in-place button loading.
+4. **Error state** — toast notification + inline error message with retry CTA. Red accent, not red-everywhere.
+5. **Long-text overflow** — graceful truncation with tooltip on hover for full text.
+6. **Alert variant** — for cards: the orphaned-status variant has a left-border 3px `--accent-down`, the pulse-bg badge, and an inline "Resolve" CTA.
 
 ---
 
 ## 8. What to steal from TradeZella
 
-TradeZella is your direct competitor. Some of its patterns are excellent for a journal. Use them, but **strip the consumer aesthetic** (purple/teal palette, rounded cards, generous spacing, illustrations) and re-skin them in the monochrome dense style above.
+TradeZella has competent UX patterns wrapped in a too-consumer skin. Adopt the *patterns*, re-skin in the modern-fintech aesthetic.
 
-**Patterns to steal:**
+1. **Calendar heatmap** of daily PnL — 7×N grid, brand-color saturation for positive intensity, red saturation for negative. Click a day → list of spreads.
+2. **Per-spread detail page = "research note"** — timeline of legs, embedded notes, attached images, tags. Treat as a document, not a dashboard panel.
+3. **Tag taxonomy** (setups / emotions / mistakes) → maps to our `regime_tags` + `custom_tags`. Show as text-only chips with subtle bg tint.
+4. **Strategy templates** at trade-open — operator picks a template ("BTC cash-carry funding-version"), pre-fills the open-intent fields. v2.
+5. **Multi-account dashboard switcher** → our multi-exchange filter.
 
-1. **Calendar heatmap** of daily PnL. A 7×N grid of small squares, color = net PnL intensity for that day (green up, red down, dim grey for no trades). Click a day → list of spreads closed that day. Excellent at-a-glance "how was last month."
-2. **Per-spread detail page with attached notes + screenshots.** The detail page is the journal's "single source of truth" for any one trade. TradeZella does this well: timeline of legs, embedded notes, attached images, tags. Adopt the layout, lose the bubbly chat-style note presentation.
-3. **Custom-tag taxonomy.** TradeZella lets users tag trades with setups / emotions / mistakes. Map directly to our `regime_tags` (market state) and `custom_tags` (freeform). Show tags as text-only badges (see § 5.2), not colored pills.
-4. **Strategy / playbook templates** at trade-open. Operator picks a template ("BTC cash-carry funding-version"), pre-fills `target_apr_at_open`, `expected_holding_days`, `exit_plan`. Defer to v2 but design the form to anticipate it.
-5. **Multi-account dashboard switcher**. Our analog: multi-exchange filter. Top-of-page persistent switcher: `All exchanges ▼` or `Binance + Bybit ▼`.
-
-**Patterns to skip from TradeZella:**
-
-- Their primary palette (purple/teal/pink) — too consumer.
-- Their headline win-rate KPI — Simpson's paradox per our brief.
-- Their equity-curve-as-one-line — anti-pattern per our brief. Use stacked-by-spread-type instead.
-- Chart screenshots as primary data. We're API-driven; embedded TradingView charts are v2.
-- Onboarding tour, gamification, achievements. Not a thing here.
-
----
+Skip:
+- Their purple/teal/pink consumer palette — we use teal but at #0d8a8a (deep + sophisticated, not light + bubbly).
+- Win-rate as headline KPI — Simpson's paradox, see `vocabulary.md` § 4.
+- Equity-curve as one line — use decomposition.
+- Gamification, achievements, streaks.
 
 ## 9. What to steal from TraderMakeMoney
 
-TraderMakeMoney is closer to us — already crypto-native. Adopt:
-
-1. **Risk-management violation indicator** — small yellow triangle (▲) in the row when a spread breached its `slippage_tolerance_bps` / `close_threshold_apr` / `max_gas_budget_usd`. Single visual cue, no popup, click for details.
-2. **Sticky filter state across navigations** — when the user returns to `/spreads`, their last filter set is restored. Map to our `saved_views` table.
-3. **Hedge-mode awareness** — Bybit supports hedge mode for short-term legs. Surface as a "hedge mode" tag on connections that have it enabled. Already in adapter scope.
-
-**Skip from TraderMakeMoney:**
-
-- Generally utilitarian / unbranded feel — they leave the design language unclaimed. We claim ours: Bloomberg-Terminal-density.
-- No spread / multi-leg concept. We have to invent the UI for multi-leg; TMM is not the reference for that.
+1. **Risk-management violation indicator** — small ⚠ chip in the row when a spread breached `slippage_tolerance_bps` / `close_threshold_apr` / `max_gas_budget_usd`. Click for details.
+2. **Sticky filter state** across navigations — maps to our `saved_views`.
+3. **Hedge-mode tag** on connections supporting it (Bybit).
 
 ---
 
-## 10. Reference apps to screenshot (mood board)
+## 10. References — the actual mood board
 
-Build a folder of 10–15 screenshots before opening Claude Design. Attach them to your prompts as visual anchors.
+**Top tier (study these closely):**
+- **Mercury** (mercury.com) — the closest aesthetic match. Light bg, sage accent, Inter, mono numbers, real shadows, generous space.
+- **Stripe Treasury / Stripe Atlas dashboards** (NOT the marketing site) — minimal, blue accent, real polish.
+- **Linear** (linear.app) the actual product, dark mode — sophisticated grey palette, Inter, beautiful subtle color.
+- **Plaid Dashboard** — B2B fintech done right.
+- **Ramp** dashboards — slightly more colorful but still mature.
+- **Brex Cash** dashboard — institutional, dense-but-readable.
 
-**Must-have references:**
-- Bloomberg Terminal — any screenshot, for density / mono / sparing color.
-- Hyperdash.com — closest crypto-native analog with the right aesthetic.
-- Deribit pro trading view — multi-panel custom layouts.
-- IBKR Trader Workstation — old-school dense.
-- Linear.app — non-finance but the cleanest example of monochrome + mono numbers + zero decoration.
-- TradeZella — your competitor; reference for journal patterns (steal logic, not skin).
+**Useful secondary:**
+- **Carta** — equity management, polished tables and charts.
+- **Pilot.com** — bookkeeping for startups, very Mercury-adjacent.
+- **GitHub Projects** (the new ones, not the old issues) — clean dark mode B2B.
+- **Vercel Dashboard** (yes, despite the anti-ref earlier — the *recent* Vercel dashboard is actually great fintech-pro). Borrow the spacing, skip the purple.
 
-**Nice-to-have:**
-- Velo.xyz, Coinalyze, Laevitas — crypto-derivatives dashboards.
-- Stripe Terminal SDK demo (NOT Stripe Dashboard — the Terminal demo specifically has the right vibe).
+**Skip / avoid:**
+- ~~Bloomberg Terminal~~ — we're not building a terminal.
+- ~~IBKR TWS~~ — old-school dense, wrong genre.
+- TradeZella marketing site (the *app* is fine to learn from).
+- DeFiLlama, Dune, OpenSea, Magic Eden — Web3 marketing aesthetic.
+- Default shadcn-with-no-customization landing pages — too generic.
+- Stripe Dashboard the *marketing demo* (not the actual logged-in dashboard) — too consumer-friendly.
 
 ---
 
-## 11. Prompt templates (copy-paste these into Claude Design)
+## 11. Prompt templates
 
 ### 11.1 First-prompt (set up project)
 
 ```
-Project: crypto-spread-journal — a private spread-specialist trading journal.
+Project: crypto-spread-journal — a premium private trading journal for
+spread-specialist crypto traders. Multi-leg trades are the atomic unit.
 
-Aesthetic: Bloomberg Terminal × Linear × Hyperdash. Dense, monochrome
-dark, monospace numbers (JetBrains Mono), zero decoration (no shadows,
-no rounded corners, no gradients, no illustrations, no emoji). Color is
-used only to convey state: #00ff88 for positive / open, #ff3b30 for
-negative / orphaned, #ffaa00 for warning / winding_down.
+Aesthetic: Modern fintech-pro. Like Mercury × Stripe Treasury × Linear.
+A product traders pay $500/month for. Light theme default, dark mode
+toggle. Inter for all text. JetBrains Mono ONLY for numeric values
+(prices, bps, APR, %, $, timestamps, instrument tickers). 8px card
+radius, subtle shadows, mature color palette.
 
-Read these three docs uploaded to this project:
-- docs/design-spec.md (this file — tokens, components, rules)
-- docs/vocabulary.md (state machine, metric definitions, card-headline-per-type)
-- docs/design-fixtures.json (realistic sample data — use as placeholder)
+Brand color: #0d8a8a teal (light) / #2dd4bf (dark). Use sparingly — it
+is the visual signature. State colors are forest green (#16a34a) for
+positive PnL, fire-engine red (#dc2626) for negative, amber (#d97706)
+for warnings, financial blue (#2563eb) for info.
 
-Anti-references: do NOT design like TradeZella's marketing site, Stripe
-Dashboard, generic Web3 marketing pages, or any consumer-SaaS aesthetic.
+Read these docs uploaded to this project:
+- docs/design-spec.md  (this file — tokens, components, rules)
+- docs/design-anti-references.md  (what to avoid)
+- docs/vocabulary.md  (state machine, metric definitions, headline-per-type)
+- docs/design-fixtures.json  (realistic sample data — use as placeholder)
+- docs/arb-brief.md  (domain primer)
 
-Output format: React components with Tailwind CSS, matching Next.js 16 +
-Tailwind v4 stack. All components must support empty / loading / error /
-long-text-overflow states.
+Component library: shadcn/ui primitives + Recharts for charts +
+Lucide icons (16px in body, 20px in headers).
+
+Anti-references: do NOT design like Bloomberg Terminal, do NOT use
+matrix-green on pure black, do NOT use all-caps mono section labels,
+do NOT use 0-radius brutalist styling, do NOT use 11-13px squint text.
+This is not a terminal. It's a premium fintech product.
+
+Output format: React + Tailwind components matching Next.js 16 +
+Tailwind v4. Use CSS variables for tokens (never hard-coded hex in
+components). Every screen must include default / empty / loading /
+error / overflow states.
 ```
 
 ### 11.2 Per-screen prompt
 
 ```
-Build the [spread list page / spread detail page / open-spread form / 
-post-trade review].
+Build the [spread list page / detail page / open-spread form / etc.].
 
-Use the design spec already loaded. Pull placeholder data from
-docs/design-fixtures.json — specifically [the 5 closed spreads for the
-list, OR the cash_carry funding-version detail for the detail page].
+Use the design spec and shadcn/ui primitives already loaded. Pull
+placeholder data from docs/design-fixtures.json — use the specific
+indices [list them].
 
-Reference: [Bloomberg + Hyperdash for list, IBKR position-detail for
-detail page, Deribit calendar entry form for open-spread form].
+Aesthetic anchor for this screen: [Mercury accounts list / Stripe
+Treasury transactions / Linear issue detail / etc.]. Light mode primary,
+dark mode toggle visible.
 
-Required states: default, empty, loading, error. For the spread list,
-also include an orphaned-status row variant with red outline + dot
-prefix per the spec.
+Required states: default, empty, loading, error.
 
-Show me 3 directional variations before refining the chosen one.
+Show me 3 directional variations before refining the chosen one. Each
+variation should explore a different LAYOUT approach (table vs cards,
+sidebar vs top-nav, single-column vs split-pane), not a different
+COLOR scheme — colors are locked.
 ```
 
 ### 11.3 Adversarial revise
@@ -360,34 +488,35 @@ Show me 3 directional variations before refining the chosen one.
 ```
 Critique this design against the spec. Specifically:
 
-1. Are all numbers using JetBrains Mono with tabular-nums?
-2. Are negative numbers using the proper minus sign U+2212, not hyphen?
-3. Is any color decorative (not conveying state)?
-4. Is notional shown anywhere? (It must not be — see vocabulary.md § 4.)
-5. Are all cards using border-radius 0 and 1px borders?
-6. Are status badges text-only (except orphaned which has outline+dot)?
-7. Does the headline metric switch on card_headline_format string, or 
-   on spread_type? (Must be format string — design must not branch on 
-   spread_type.)
+1. Is body text Inter 14px (not mono, not 11-13px)?
+2. Is JetBrains Mono used ONLY for numbers (not for labels, buttons, 
+   headings)?
+3. Is the background a sophisticated grey (#f7f8fa light / #0d1117 
+   dark), NOT pure black or pure white?
+4. Are accent colors mature (#0d8a8a teal, #16a34a green, #dc2626 red), 
+   NOT neon (#00ff88, #ff3b30, hot pink)?
+5. Do cards have 8px radius and subtle shadows (not 0-radius flat)?
+6. Are section headings sentence-case Inter medium, NOT all-caps mono?
+7. Is the brand teal used sparingly (1-2 places), not on every element?
+8. Are there real hover states (bg shift + shadow upgrade)?
+9. Are status badges proper pills with bg tint, not bare colored text?
+10. Is the headline metric switching on card_headline_format string, 
+    not on spread_type?
+11. Is notional shown anywhere? (It must not be.)
 
-Revise to fix every "no" answer. Don't change anything that's already 
-correct.
+Revise to fix every "no" answer. Don't change anything correct.
 ```
 
 ---
 
 ## 12. Handoff to Claude Code (me)
 
-When you've locked a screen in Claude Design, export the React component
-and drop it into `src/components/spreads/` (or wherever it belongs).
+Export each component as a `.tsx` file. Drop it into `src/components/`. Send me the file path or paste the code. I'll:
 
-What I need from each handoff:
-- The React component file (.tsx)
-- The list of prop types — I'll validate against `canonical.ts SpreadPnl`
-  and either align the design or extend the type
-- Any new Tailwind utility classes used (so I can add them to the
-  config if v4 doesn't have them built-in)
-- Notes on any interactive behavior that needs server actions
+- Validate prop types against `canonical.ts` (`SpreadPnl`, `Spread`, etc.)
+- Replace fixture data with real API calls
+- Wire to `/api/spreads`, `/api/spreads/[id]`
+- Flag backend gaps
+- Install any missing shadcn primitives via `pnpm dlx shadcn@latest add <component>`
 
-Use Claude Design's built-in "handoff bundle" feature when available — 
-it packages everything for me to consume.
+We commit per-screen, not per-app. History is preserved.
