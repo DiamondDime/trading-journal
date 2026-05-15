@@ -33,7 +33,7 @@ Private, invite-only spread-specialist crypto trading journal. The atomic unit i
 ### 1. Install dependencies
 ```bash
 pnpm install                          # Next.js side
-cd worker && uv sync && cd ..         # Python worker side
+cd worker && uv sync --extra dev && cd ..  # Python worker side (--extra dev pulls pytest/ruff/mypy)
 ```
 
 ### 2. Set up Supabase
@@ -107,7 +107,7 @@ crypto-spread-journal/
 
 ```bash
 pnpm test:run                         # Vitest (TS)
-cd worker && uv run pytest            # pytest (Python)
+cd worker && uv run python -m pytest  # pytest (Python) — use `python -m` so it runs in uv venv
 ```
 
 Current: 63 Python tests pass (35 adapters + 28 matcher). TS typecheck passes.
