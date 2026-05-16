@@ -808,11 +808,11 @@ export function getActivityHref(a: Activity): string {
     case "trade":
       return `/trades/${a.id}`;
     case "spread":
-      return "/spreads/demo";
+      return `/spreads/${a.id}`;
     case "sale":
-      return "/spreads/demo";
+      return `/sales/${a.id}`;
     case "airdrop":
-      return "/spreads/demo";
+      return `/airdrops/${a.id}`;
   }
 }
 

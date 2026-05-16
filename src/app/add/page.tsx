@@ -15,7 +15,7 @@ const OPTIONS: {
     title: "Spread",
     description:
       "A multi-leg, multi-venue position — your bread and butter. Cash-and-carry, calendar, funding capture, cross-exchange, DEX-CEX.",
-    href: "/add/spread",
+    href: "/add/spread/source",
     badge: "AUTO + MANUAL",
   },
   {
@@ -31,7 +31,7 @@ const OPTIONS: {
     title: "Sale",
     description:
       "A token allocation from an IDO, launchpad, premarket, or OTC desk. Track vesting and claims over time.",
-    href: "/add/sale",
+    href: "/add/sale/fields",
     badge: "MANUAL",
   },
   {
@@ -39,7 +39,7 @@ const OPTIONS: {
     title: "Airdrop",
     description:
       "Tokens received from a retro, loyalty, or criteria-based drop. Zero cost basis, full mark-to-market.",
-    href: "/add/airdrop",
+    href: "/add/airdrop/fields",
     badge: "MANUAL",
   },
 ];
