@@ -50,3 +50,7 @@ supabase/.temp
 
 # Local-only scratch
 .tmp-screenshots/
+
+# Playwright
+test-results/
+playwright-report/

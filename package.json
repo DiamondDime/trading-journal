@@ -11,6 +11,10 @@
     "test:run": "vitest run",
     "test:ui": "vitest --ui",
     "test:coverage": "vitest run --coverage",
+    "test:db:setup": "./scripts/setup-test-db.sh",
+    "e2e": "playwright test",
+    "e2e:headed": "playwright test --headed",
+    "e2e:ui": "playwright test --ui",
     "typecheck": "tsc --noEmit",
     "db:create": "createdb crypto_spread_journal",
     "db:drop": "dropdb --if-exists crypto_spread_journal",
@@ -40,6 +44,7 @@
     "zod": "^4.4.3"
   },
   "devDependencies": {
+    "@playwright/test": "^1.60.0",
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
     "@types/react": "^19",
