@@ -155,8 +155,14 @@ export const ListSpreadsQuery = z.object({
 // request bodies that touch the activity tables).
 // ============================================================================
 
-// Decimal-as-string primitive — accepts a non-empty numeric string.
-const DecimalSchema = z.string().min(1);
+// Decimal-as-string primitive. Accepts an optional sign, digits, and an
+// optional fractional part. Scientific notation is intentionally rejected
+// — values originating from postgres NUMERIC never use it, and accepting it
+// would let callers slip in NaN/Infinity-looking strings.
+const DecimalSchema = z.string().regex(
+  /^-?\d+(\.\d+)?$/,
+  'must be a decimal string (e.g. "1234.56" or "-0.01")',
+);
 
 export const ActivityTypeSchema = z.enum(['spread', 'trade', 'sale', 'airdrop']);
 
@@ -282,6 +288,8 @@ export const ActivitySaleSchema = z.object({
   claim_events:        z.array(ClaimEventSchema),
   total_claimed:       DecimalSchema,
   remaining_locked:    DecimalSchema.nullable(),
+  current_price_usd:   DecimalSchema.nullable(),
+  current_price_at:    z.string().datetime().nullable(),
 });
 
 // activity_airdrop subtype row.

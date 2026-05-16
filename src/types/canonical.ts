@@ -708,6 +708,9 @@ export interface ActivitySale {
   claim_events:        ClaimEvent[];
   total_claimed:       Decimal;
   remaining_locked:    Decimal | null;
+  /** Last-known token price in USD. Drives the MTM headline on v_activity_feed. */
+  current_price_usd:   Decimal | null;
+  current_price_at:    Iso8601 | null;
 }
 
 /**

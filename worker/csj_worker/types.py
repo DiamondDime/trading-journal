@@ -369,7 +369,7 @@ class TgePlusLinear(_VestingBase):
     """Vesting: `tge_pct` unlocked at TGE, remainder linear over `linear_days`."""
 
     kind: Literal["tge_plus_linear"] = "tge_plus_linear"
-    tge_pct: Decimal
+    tge_pct: float
     linear_days: int
 
 
@@ -382,7 +382,7 @@ class CliffPlusLinear(_VestingBase):
     kind: Literal["cliff_plus_linear"] = "cliff_plus_linear"
     cliff_days: int
     linear_days: int
-    tge_pct: Decimal | None = None
+    tge_pct: float | None = None
 
 
 class CustomVestingEntry(CanonicalBase):
@@ -456,15 +456,15 @@ class ActivitySpread(CanonicalBase):
     activity_id: str
     spread_type: SpreadType
     variant: SpreadVariant | None = None
-    origin: Literal["system", "user"]
-    primary_base: str | None = None
+    origin: Literal["auto_matched", "manual", "auto_confirmed"]
+    primary_base: str
     match_confidence: Decimal | None = None
-    funding_pnl_quote: Decimal | None = None
+    funding_pnl_quote: Decimal = Decimal("0")
     apr: Decimal | None = None
     exchanges: list[Exchange] = Field(default_factory=list)
-    leg_count: int | None = None
+    leg_count: int = 0
     hold_duration_ms: int | None = None
-    source: str | None = None
+    source: Literal["user", "system"] = "user"
     system_proposal_metadata: dict[str, Any] | None = None
     target_apr_at_open: Decimal | None = None
     expected_holding_days: int | None = None
@@ -522,6 +522,8 @@ class ActivitySale(CanonicalBase):
     claim_events: list[ClaimEvent] = Field(default_factory=list)
     total_claimed: Decimal = Decimal("0")
     remaining_locked: Decimal | None = None
+    current_price_usd: Decimal | None = None
+    current_price_at: datetime | None = None
 
 
 class ActivityAirdrop(CanonicalBase):

@@ -351,6 +351,11 @@ create table public.activity_sale (
   total_claimed        numeric(38, 18) not null default 0,
   remaining_locked     numeric(38, 18),
 
+  -- Live MTM snapshot. Trader updates current_price_usd manually (or worker via
+  -- a price source). headline_value in v_activity_feed reads this.
+  current_price_usd    numeric(38, 18),
+  current_price_at     timestamptz,
+
   constraint chk_sale_amounts check (usd_paid >= 0 and tokens_allocated >= 0)
 );
 
@@ -531,6 +536,16 @@ comment on view public.spread_pnl is
 -- 14. New cross-activity view -----------------------------------------------
 
 create view public.v_activity_feed as
+with days_held_cte as (
+  select
+    a.id,
+    case
+      when a.opened_at is null then null
+      else extract(epoch from (coalesce(a.closed_at, now()) - a.opened_at)) / 86400.0
+    end as days_held
+  from public.activity a
+  where a.deleted_at is null
+)
 select
   a.id, a.user_id, a.type, a.status, a.name,
   a.opened_at, a.closed_at,
@@ -539,12 +554,24 @@ select
   a.regime_tags, a.custom_tags,
 
   -- Polymorphic card headline value
+  -- - spread:  realized_apr computed live from net_pnl/capital/days_held
+  --   (asp.apr is a legacy cache field — empty until the worker writes it,
+  --   so we compute it here on demand)
+  -- - trade:   realized_apr from activity_trade (worker-computed)
+  -- - sale:    MTM multiplier (current_price * tokens / cost_basis)
+  -- - airdrop: MTM multiplier (current_price * qty / value_at_receipt)
   case a.type
-    when 'spread'  then asp.apr
+    when 'spread' then case
+      when a.capital_deployed_usd is null or a.capital_deployed_usd = 0 then null
+      when dh.days_held is null or dh.days_held = 0 then null
+      else (a.net_pnl_usd / a.capital_deployed_usd) * (365.0 / dh.days_held)
+    end
     when 'trade'   then att.realized_apr
     when 'sale'    then case
-      when ase.usd_paid > 0 and ase.tokens_allocated > 0
-        then (ase.tokens_allocated * coalesce(ase.effective_price_usd, 0)) / ase.usd_paid
+      when ase.usd_paid > 0
+       and ase.tokens_allocated > 0
+       and ase.current_price_usd is not null
+        then (ase.tokens_allocated * ase.current_price_usd) / ase.usd_paid
       else null
     end
     when 'airdrop' then case
@@ -571,6 +598,7 @@ select
 
   a.created_at, a.updated_at
 from public.activity a
+join days_held_cte dh on dh.id = a.id
 left join public.activity_spread  asp on asp.activity_id = a.id and a.type = 'spread'
 left join public.activity_trade   att on att.activity_id = a.id and a.type = 'trade'
 left join public.activity_sale    ase on ase.activity_id = a.id and a.type = 'sale'
@@ -578,7 +606,7 @@ left join public.activity_airdrop ada on ada.activity_id = a.id and a.type = 'ai
 where a.deleted_at is null;
 
 comment on view public.v_activity_feed is
-  'Polymorphic cross-activity feed. One row per activity. headline_value + headline_kind drive the activity-agnostic card rendering.';
+  'Polymorphic cross-activity feed. One row per activity. headline_value + headline_kind drive the activity-agnostic card rendering. Spread APR is computed live from activity.net_pnl_usd / capital / days_held — asp.apr is a worker-populated cache that may be NULL.';
 
 -- 15. RLS policies ---------------------------------------------------------
 
@@ -650,7 +678,77 @@ create policy activity_tags_owner_all on public.activity_tags
 -- spread_legs RLS policy survives (uses user_id which still exists)
 -- notes RLS policy survives (uses user_id which still exists)
 
--- 16. Grants ---------------------------------------------------------------
+-- 16. Subtype-existence enforcement (deferred) -----------------------------
+-- Every activity row must have a matching subtype row by transaction commit.
+-- DEFERRABLE INITIALLY DEFERRED lets the API insert activity first, then
+-- subtype, in the same transaction — the check runs at COMMIT, not at INSERT.
+
+create or replace function public.check_activity_subtype_exists()
+returns trigger language plpgsql as $$
+declare
+  hit boolean := false;
+begin
+  case NEW.type
+    when 'spread'  then select exists(select 1 from public.activity_spread  where activity_id = NEW.id) into hit;
+    when 'trade'   then select exists(select 1 from public.activity_trade   where activity_id = NEW.id) into hit;
+    when 'sale'    then select exists(select 1 from public.activity_sale    where activity_id = NEW.id) into hit;
+    when 'airdrop' then select exists(select 1 from public.activity_airdrop where activity_id = NEW.id) into hit;
+    else hit := false;
+  end case;
+  if not hit then
+    raise exception
+      'Activity % has type=% but no matching activity_% subtype row (orphan)',
+      NEW.id, NEW.type, NEW.type;
+  end if;
+  return NEW;
+end;
+$$;
+
+create constraint trigger activity_subtype_check
+  after insert or update on public.activity
+  deferrable initially deferred
+  for each row
+  execute function public.check_activity_subtype_exists();
+
+-- 17. updated_at on subtype tables ----------------------------------------
+-- The supertype activity has its own updated_at trigger; subtype tables need
+-- their own so list-sort by activity.updated_at reflects subtype-only edits.
+
+alter table public.activity_spread
+  add column if not exists updated_at timestamptz not null default now();
+alter table public.activity_trade
+  add column updated_at timestamptz not null default now();
+alter table public.activity_sale
+  add column updated_at timestamptz not null default now();
+alter table public.activity_airdrop
+  add column updated_at timestamptz not null default now();
+
+-- Bump parent activity.updated_at whenever a subtype row changes
+create or replace function public.bump_activity_updated_at()
+returns trigger language plpgsql as $$
+begin
+  update public.activity set updated_at = now() where id = NEW.activity_id;
+  return NEW;
+end;
+$$;
+
+create trigger activity_spread_bump_parent
+  after insert or update on public.activity_spread
+  for each row execute function public.bump_activity_updated_at();
+
+create trigger activity_trade_bump_parent
+  after insert or update on public.activity_trade
+  for each row execute function public.bump_activity_updated_at();
+
+create trigger activity_sale_bump_parent
+  after insert or update on public.activity_sale
+  for each row execute function public.bump_activity_updated_at();
+
+create trigger activity_airdrop_bump_parent
+  after insert or update on public.activity_airdrop
+  for each row execute function public.bump_activity_updated_at();
+
+-- 18. Grants ---------------------------------------------------------------
 
 grant select on public.spread_pnl      to authenticated;
 grant select on public.v_activity_feed to authenticated;

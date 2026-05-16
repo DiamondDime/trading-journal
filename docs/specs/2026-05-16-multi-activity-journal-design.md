@@ -40,7 +40,7 @@ A complete, well-designed trading journal that crypto traders actually want to u
 -- Base supertype
 create table activity (
   id                   uuid primary key default gen_random_uuid(),
-  user_id              uuid not null references profile(id),
+  user_id              uuid not null references auth.users(id) on delete cascade,
   type                 activity_type not null,       -- 'spread' | 'trade' | 'sale' | 'airdrop'
   status               activity_status not null,
   name                 text not null,
@@ -53,7 +53,10 @@ create table activity (
   net_pnl_usd          numeric,
   regime_tags          text[] default '{}',
   custom_tags          text[] default '{}',
-  notes_id             uuid references note(id) on delete set null,
+  -- Note is attached via inverse FK: `notes.activity_id` with UNIQUE(activity_id)
+  -- and ON DELETE CASCADE. This keeps note lifecycle bound to its parent
+  -- activity (delete activity → note dies). The activity table has no
+  -- notes_id column.
   created_at           timestamptz not null default now(),
   updated_at           timestamptz not null default now(),
   constraint chk_dates check (closed_at is null or opened_at is null or closed_at >= opened_at)
@@ -144,6 +147,10 @@ create table activity_airdrop (
 );
 ```
 
+Note: `activity_sale` also carries `current_price_usd` + `current_price_at` so
+the cross-activity feed's MTM multiplier can be computed for sales (current
+value of tokens allocated, divided by USD paid). Mirror of the airdrop pattern.
+
 ### Enums
 
 ```sql
@@ -189,7 +196,7 @@ select
     when 'spread'  then 'realized_apr'
     when 'trade'   then 'realized_apr'
     when 'sale'    then 'mtm_multiplier'
-    when 'airdrop' then 'mtm_pct'
+    when 'airdrop' then 'mtm_multiplier'
   end as headline_kind,
   a.created_at, a.updated_at
 from activity a
