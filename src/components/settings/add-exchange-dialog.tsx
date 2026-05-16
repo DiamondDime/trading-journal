@@ -171,7 +171,7 @@ export function AddExchangeDialog({ catalog, variant = "default" }: Props) {
           <DialogDescription>
             {step === "pick"
               ? "Choose which exchange you'd like to import fills from."
-              : "Paste an API key/secret. Read-only scope only — withdraw scope is rejected at connect."}
+              : "Paste an API key/secret. Use read-only scope only — keys with withdraw permission will be rejected on first sync."}
           </DialogDescription>
         </DialogHeader>
 
@@ -382,12 +382,14 @@ function CredentialsStep({
             Security
           </p>
           <p className="mt-1.5 font-serif text-[12px] italic leading-snug text-text-secondary">
-            Your keys are encrypted at rest with AES-256-GCM. Use a read-only
-            key (no withdraw permission) — keys with withdraw scope are
-            rejected at connection time. Connection will be verified on first
-            sync; use{" "}
+            Your keys are encrypted at rest with AES-256-GCM. We verify the key
+            against the exchange on the first sync — until then the connection
+            status stays{" "}
+            <span className="font-mono not-italic">pending</span>. Use a
+            read-only key; keys with withdraw permission will be rejected at
+            sync. Click{" "}
             <span className="font-mono not-italic">Sync now</span> after adding
-            to test.
+            to test the credentials.
           </p>
         </div>
 

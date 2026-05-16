@@ -33,12 +33,13 @@ export async function logAirdrop(formData: FormData): Promise<void> {
   const editRaw = formData.get("edit");
   const editId = typeof editRaw === "string" && UUID_RE.test(editRaw) ? editRaw : null;
 
-  let cleanedRaw: Record<string, string> = {};
+  // Capture cleaned form payload BEFORE the auth call so wizard errors keep
+  // the user's inputs around for the redirect-back round trip.
+  const cleanedRaw: Record<string, string> = Object.fromEntries(
+    stripNextInternals([...formData.entries()]).filter(([k]) => k !== "edit"),
+  ) as Record<string, string>;
   try {
     const { id: userId } = await requireUser();
-    cleanedRaw = Object.fromEntries(
-      stripNextInternals([...formData.entries()]).filter(([k]) => k !== "edit"),
-    ) as Record<string, string>;
     const input = CreateAirdropBody.parse(cleanedRaw);
 
     if (editId) {

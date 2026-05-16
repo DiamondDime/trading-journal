@@ -91,8 +91,8 @@ export function DeleteButton({
         <DialogHeader>
           <DialogTitle>Delete this {typeLabel}?</DialogTitle>
           <DialogDescription>
-            {idSuffix} will be removed from your journal. Notes attached to it
-            are also deleted (cascade). This can&apos;t be undone.
+            {idSuffix} will be hidden from your journal. Any attached note is
+            hidden alongside it.
           </DialogDescription>
         </DialogHeader>
         <DialogBody>
@@ -106,8 +106,9 @@ export function DeleteButton({
           )}
           {!error && (
             <p className="font-serif text-[13px] italic leading-snug text-text-secondary">
-              You can recover this record by re-entering it manually — there is
-              no undo.
+              This is a soft-delete: the row stays in the database with a
+              deleted_at stamp. Recovery from settings is planned for v2 — for
+              now, re-create the entry manually if you need it back.
             </p>
           )}
         </DialogBody>

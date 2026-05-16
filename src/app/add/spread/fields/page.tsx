@@ -403,6 +403,11 @@ export default async function SpreadFieldsPage(props: { searchParams: Search }) 
             </span>
           )}
         </p>
+        <p className="mt-2 font-serif text-[11px] italic leading-snug text-text-tertiary">
+          In v1, manual spreads store the aggregate numbers and your thesis
+          below. Individual leg rows are auto-populated when the worker matches
+          real exchange fills (Phase 7).
+        </p>
       </section>
 
       {/* ── Form ──────────────────────────────────────────────────────────── */}

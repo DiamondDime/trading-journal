@@ -75,13 +75,18 @@ export async function getNoteForActivity(
   activityId: string,
 ): Promise<NoteRow | null> {
   if (!UUID_RE.test(activityId)) return null;
+  // JOIN to activity so soft-deleted parents hide their notes — otherwise
+  // the detail page for a deleted activity (which 404s via getActivity)
+  // would still surface the note on any other page that loaded by activity_id.
   const rows = await sql<NoteRow[]>`
-    SELECT id, user_id, activity_id, body, entry_rationale, exit_conclusion,
-           created_at, updated_at, deleted_at
-    FROM public.notes
-    WHERE activity_id = ${activityId}::uuid
-      AND user_id     = ${userId}::uuid
-      AND deleted_at IS NULL
+    SELECT n.id, n.user_id, n.activity_id, n.body, n.entry_rationale, n.exit_conclusion,
+           n.created_at, n.updated_at, n.deleted_at
+    FROM public.notes n
+    JOIN public.activity a ON a.id = n.activity_id
+    WHERE n.activity_id = ${activityId}::uuid
+      AND n.user_id     = ${userId}::uuid
+      AND n.deleted_at IS NULL
+      AND a.deleted_at IS NULL
     LIMIT 1
   `;
   return rows[0] ? normalizeNote(rows[0]) : null;
@@ -141,6 +146,18 @@ export class NoteVersionConflict extends Error {
 }
 
 /**
+ * Thrown when the activity referenced by a note write doesn't exist, isn't
+ * owned by the caller, or has been soft-deleted. API route handlers catch
+ * this and surface a 404 so we never leak existence of other users' rows.
+ */
+export class NoteOwnershipError extends Error {
+  constructor(message = 'Activity not found or not owned by you') {
+    super(message);
+    this.name = 'NoteOwnershipError';
+  }
+}
+
+/**
  * Create or update the note for an activity.
  *
  * - If no note exists → INSERT and return the new row.
@@ -176,7 +193,7 @@ export async function upsertNote(
     LIMIT 1
   `;
   if (owner.length === 0) {
-    throw new Error('Activity not found or not owned by you');
+    throw new NoteOwnershipError();
   }
 
   // Probe existing note for the activity.

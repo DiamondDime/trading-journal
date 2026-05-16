@@ -62,17 +62,19 @@ export async function logSpread(formData: FormData): Promise<void> {
   let activityId: string | null = null;
   let isEdit = false;
   let redirectError: string | null = null;
-  let cleanedRaw: Record<string, string> = {};
 
   const editRaw = formData.get("edit");
   const editId = typeof editRaw === "string" && UUID_RE.test(editRaw) ? editRaw : null;
 
+  // Capture cleaned form payload BEFORE the auth call so wizard errors keep
+  // the user's inputs around for the redirect-back round trip.
+  const cleanedRaw: Record<string, string> = Object.fromEntries(
+    stripNextInternals([...formData.entries()]).filter(([k]) => k !== "edit"),
+  ) as Record<string, string>;
+
   try {
     const { id: userId } = await requireUser();
-    const raw = Object.fromEntries(
-      stripNextInternals([...formData.entries()]).filter(([k]) => k !== "edit"),
-    ) as Record<string, string>;
-    cleanedRaw = raw;
+    const raw = cleanedRaw;
 
     const name = (raw.name ?? "").trim();
     const rawVariant = (raw.variant ?? "").trim();

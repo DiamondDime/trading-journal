@@ -236,6 +236,7 @@ export default async function AirdropDetailPage({
                 activityId={activity.id}
                 initialBody={note?.body ?? ""}
                 initialVersion={note?.updatedAt ?? null}
+                initialNoteId={note?.id ?? null}
               />
             </div>
           </section>

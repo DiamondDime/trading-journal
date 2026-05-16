@@ -6,8 +6,12 @@ import { withAuth } from '@/lib/api/handler';
 import { ok, errors } from '@/lib/api/response';
 import { sql } from '@/lib/db/client';
 
+// UUID guard — keep non-UUID input from reaching postgres-side type coercion.
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 export const POST = withAuth(async (_req, { params, userId }) => {
   const { id } = await params;
+  if (!UUID_RE.test(id)) return errors.notFound();
 
   const active = await sql<{ id: string }[]>`
     SELECT id FROM public.sync_jobs
@@ -31,6 +35,7 @@ export const POST = withAuth(async (_req, { params, userId }) => {
 
 export const GET = withAuth(async (_req, { params, userId }) => {
   const { id } = await params;
+  if (!UUID_RE.test(id)) return errors.notFound();
 
   const [current, recent] = await Promise.all([
     sql`

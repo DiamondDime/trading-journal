@@ -49,13 +49,19 @@ and a "Just saved" banner.
 - [ ] **Spread** — `/add` → Spread → Source → pick imported fills →
       pick type → fill → Review → land on `/spreads/<uuid>?from=wizard`.
 
-## 4. Edit & delete (Wave 6 — verify when landed)
+## 4. Edit & delete (Wave 6)
 
-- [ ] Trade detail Edit button → wizard pre-fills → save → "Updated"
-      banner on the same trade URL.
-- [ ] Trade detail Delete button → confirm modal → row gone from list,
-      direct deep-link returns 404.
-- [ ] Repeat Edit + Delete for Sale, Airdrop, Spread.
+E2E coverage: three flows in `e2e/edit-delete.spec.ts` exercise the trade
+edit / trade delete / edit-cancel paths automatically. Sale, Airdrop, and
+Spread edit/delete are smoke-checked manually below.
+
+- [ ] `pnpm e2e --project chromium e2e/edit-delete.spec.ts` — all 3 specs
+      green.
+- [ ] Manually: Trade detail Edit button → wizard pre-fills → save →
+      "Updated" banner on the same trade URL. (Automated.)
+- [ ] Manually: Trade detail Delete button → confirm modal → row gone
+      from list, direct deep-link returns 404. (Automated.)
+- [ ] Manually: Repeat Edit + Delete for Sale, Airdrop, Spread.
 - [ ] After delete, `pnpm db:psql` shows `deleted_at IS NOT NULL` on the
       activity row (soft delete, not hard).
 

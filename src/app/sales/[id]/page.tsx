@@ -277,6 +277,7 @@ export default async function SaleDetailPage({
                 activityId={activity.id}
                 initialBody={note?.body ?? ""}
                 initialVersion={note?.updatedAt ?? null}
+                initialNoteId={note?.id ?? null}
               />
             </div>
           </section>

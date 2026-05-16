@@ -281,6 +281,49 @@ export interface SeedSpreadOpts {
   status?: 'closed' | 'open' | 'expired';
 }
 
+/**
+ * Insert a note attached to an existing activity. Returns { id, updatedAt }
+ * so tests can supply expectedVersion to upsertNote.
+ */
+export async function seedNoteForActivity(
+  userId: string,
+  activityId: string,
+  body: string,
+): Promise<{ id: string; updatedAt: string }> {
+  const [row] = await sql<{ id: string; updatedAt: unknown }[]>`
+    INSERT INTO public.notes (user_id, activity_id, body)
+    VALUES (${userId}::uuid, ${activityId}::uuid, ${body})
+    RETURNING id, updated_at
+  `;
+  // postgres.js returns timestamptz as Date by default — normalize to ISO so
+  // tests can pass the value straight back to upsertNote(expectedVersion).
+  const u = row.updatedAt;
+  const updatedAt = u instanceof Date ? u.toISOString() : String(u);
+  return { id: row.id, updatedAt };
+}
+
+/**
+ * Seed a trade activity *and* a note attached to it in one shot. Useful for
+ * tests that need both fixtures (Wave 6 soft-delete cascade, etc.).
+ */
+export async function seedActivityWithNote(opts: {
+  userId?: string;
+  connectionId: string;
+  noteBody?: string;
+}): Promise<{ activityId: string; noteId: string; noteUpdatedAt: string }> {
+  const userId = opts.userId ?? TEST_USER_ID;
+  const activityId = await seedTradeActivity({
+    userId,
+    connectionId: opts.connectionId,
+  });
+  const { id: noteId, updatedAt: noteUpdatedAt } = await seedNoteForActivity(
+    userId,
+    activityId,
+    opts.noteBody ?? 'seeded note body',
+  );
+  return { activityId, noteId, noteUpdatedAt };
+}
+
 export async function seedSpreadActivity(opts: SeedSpreadOpts = {}): Promise<string> {
   const userId = opts.userId ?? TEST_USER_ID;
   const name = opts.name ?? 'BTC cash-and-carry';

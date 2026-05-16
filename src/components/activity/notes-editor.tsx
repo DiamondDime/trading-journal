@@ -10,6 +10,10 @@ interface NotesEditorProps {
   /** Server's `updated_at` for the note — used as the version token. Pass
    *  null when no note exists yet (the first save creates it). */
   initialVersion: string | null;
+  /** Server-side note id when one already exists for this activity. Pass
+   *  null when no note exists yet — the first save POSTs and the response
+   *  promotes the editor into the "edit existing" state machine. */
+  initialNoteId: string | null;
 }
 
 type Status = "idle" | "dirty" | "saving" | "saved" | "error";
@@ -19,23 +23,36 @@ type Status = "idle" | "dirty" | "saving" | "saved" | "error";
  *
  * - Textarea below the "Notes" section heading, full-width, serif body.
  * - Autosaves 1500ms after the user stops typing.
- * - Manual "Save" button calls the same POST path.
+ * - Manual "Save" button calls the same save path.
  * - Shows "Last saved at <relative time>" once a save has landed.
- * - Optimistic-concurrency: when the API returns 409 NOTE_VERSION_CONFLICT
+ * - First save (when no note id yet) POSTs /api/notes which inserts the
+ *   row and returns { id, updatedAt, ... }. The editor adopts that id and
+ *   version, then switches into PATCH-per-edit mode using the returned id.
+ * - Subsequent saves PATCH /api/notes/[id] with the current version token.
+ *   The server bumps `updated_at` (the version) and returns the fresh row.
+ * - Optimistic-concurrency: when PATCH returns 409 NOTE_VERSION_CONFLICT,
  *   the editor pins an inline warning and refuses further autosaves until
- *   the user explicitly reloads — single-user v1 means this should never
- *   fire, but the surface is here so multi-device usage doesn't silently
+ *   the user explicitly reloads. Single-user v1 should never trip this,
+ *   but the surface is here so multi-device usage doesn't silently
  *   trample edits.
  *
- * The component is stateful but tiny: body, version (server's last
+ * The component is stateful but tiny: body, noteId, version (server's last
  * updated_at), and a status enum drive the entire render.
  */
 export function NotesEditor({
   activityId,
   initialBody,
   initialVersion,
+  initialNoteId,
 }: NotesEditorProps) {
   const [body, setBody] = React.useState(initialBody);
+  // noteId + version live in refs because they're set server-side after each
+  // save; capturing them in the `save` closure via useState would risk a stale
+  // POST being dispatched if a save races with the previous response. Refs
+  // also keep `save`'s useCallback identity stable across renders.
+  const noteIdRef = React.useRef<string | null>(initialNoteId);
+  const versionRef = React.useRef<string | null>(initialVersion);
+  // Mirror noteId into state for the data-testid below (and any debug surface).
   const [version, setVersion] = React.useState<string | null>(initialVersion);
   const [status, setStatus] = React.useState<Status>("idle");
   const [lastSavedAt, setLastSavedAt] = React.useState<number | null>(
@@ -65,24 +82,49 @@ export function NotesEditor({
     }
     setStatus("saving");
     setErrorMsg(null);
+
+    // Snapshot the body we're saving — if the user types more while this
+    // request is in flight, the next debounce will dispatch a fresh save
+    // for the newer body.
+    const bodySnapshot = body;
+    const currentNoteId = noteIdRef.current;
+    const currentVersion = versionRef.current;
+
     try {
-      // First save creates the row; subsequent saves go through the version-
-      // checked PATCH-by-note-id path. We resolve the note's id lazily —
-      // the simplest path is to always POST /api/notes (upsert). That
-      // endpoint runs its own ownership + body checks.
-      const res = await fetch(`/api/notes`, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ activity_id: activityId, body }),
-      });
+      let res: Response;
+      if (currentNoteId === null) {
+        // First save — POST creates the row.
+        res = await fetch(`/api/notes`, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ activity_id: activityId, body: bodySnapshot }),
+        });
+      } else {
+        // Subsequent saves — PATCH with optimistic-concurrency token.
+        res = await fetch(`/api/notes/${currentNoteId}`, {
+          method: "PATCH",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            body: bodySnapshot,
+            ...(currentVersion ? { version: currentVersion } : {}),
+          }),
+        });
+      }
+
       if (res.status === 409) {
         const json = await res.json().catch(() => null);
         setConflict(true);
         setStatus("error");
         setErrorMsg(
           json?.error?.message ??
-            "This note was edited elsewhere. Reload to see the latest.",
+            "This note was edited elsewhere — reload to see the latest.",
         );
+        return;
+      }
+      if (res.status === 404) {
+        // Parent activity was deleted out from under us.
+        setStatus("error");
+        setErrorMsg("This activity no longer exists. Your text is safe in the textarea.");
         return;
       }
       if (!res.ok) {
@@ -92,9 +134,11 @@ export function NotesEditor({
         return;
       }
       const json = (await res.json()) as {
-        data: { updatedAt: string; body: string };
+        data: { id: string; updatedAt: string; body: string };
       };
       lastSavedBodyRef.current = json.data.body;
+      noteIdRef.current = json.data.id;
+      versionRef.current = json.data.updatedAt;
       setVersion(json.data.updatedAt);
       setLastSavedAt(new Date(json.data.updatedAt).getTime());
       setStatus("saved");

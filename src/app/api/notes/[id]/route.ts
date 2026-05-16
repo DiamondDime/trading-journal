@@ -14,6 +14,7 @@ import {
   upsertNote,
   deleteNote,
   NoteVersionConflict,
+  NoteOwnershipError,
 } from '@/lib/db/notes';
 import { UpdateNoteBody } from '@/lib/db/zod-schemas';
 
@@ -46,6 +47,12 @@ export const PATCH = withAuth(async (req, { params, userId }) => {
         'Note was edited elsewhere',
         { current: e.current },
       );
+    }
+    // Parent activity was soft-deleted (or otherwise vanished) between the
+    // ownership probe above and the upsertNote call. Return 404 instead of
+    // bubbling up to a 500 — the row genuinely doesn't exist anymore.
+    if (e instanceof NoteOwnershipError) {
+      return errors.notFound();
     }
     throw e;
   }

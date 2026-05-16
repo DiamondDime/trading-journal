@@ -56,12 +56,16 @@ export async function logTrade(formData: FormData): Promise<void> {
   const editRaw = formData.get("edit");
   const editId = typeof editRaw === "string" && UUID_RE.test(editRaw) ? editRaw : null;
 
-  let cleanedRaw: Record<string, string> = {};
+  // Capture the cleaned FormData payload BEFORE the auth call so that an
+  // auth error (or any other unexpected throw) still has the form fields
+  // available to round-trip via the redirect query string. Without this,
+  // a failure in requireUser() would surface the wizard back at /review
+  // with all inputs blanked out.
+  const cleanedRaw: Record<string, string> = Object.fromEntries(
+    stripNextInternals([...formData.entries()]).filter(([k]) => k !== "edit"),
+  ) as Record<string, string>;
   try {
     const { id: userId } = await requireUser();
-    cleanedRaw = Object.fromEntries(
-      stripNextInternals([...formData.entries()]).filter(([k]) => k !== "edit"),
-    ) as Record<string, string>;
     const input = CreateTradeBody.parse(cleanedRaw);
 
     if (editId) {

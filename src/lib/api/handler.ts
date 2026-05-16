@@ -45,7 +45,13 @@ function handleError(e: unknown): Response {
   if (e instanceof ZodError) {
     return errors.badRequest('VALIDATION', 'Invalid input', e.issues);
   }
-  console.error('[api] unhandled', e);
+  // Log only the safe fields. postgres.js errors stringify with parameter
+  // values + statement text, which we don't want to dump into server logs
+  // (potentially leaking credentials/secrets passed to write paths).
+  console.error('[api] unhandled', {
+    name: e instanceof Error ? e.name : 'Unknown',
+    message: e instanceof Error ? e.message : String(e),
+  });
   return errors.internal();
 }
 

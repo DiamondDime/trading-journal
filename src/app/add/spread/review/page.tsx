@@ -273,6 +273,11 @@ export default async function SpreadReviewPage(props: { searchParams: Search }) 
         <h2 className="mb-2 font-serif text-[11px] font-semibold uppercase tracking-[0.18em] text-text-tertiary">
           Legs ({legs.length})
         </h2>
+        <p className="mb-3 font-serif text-[11px] italic leading-snug text-text-tertiary">
+          In v1, manual spreads store the aggregate numbers and thesis only —
+          this leg breakdown is for your reference. Individual leg rows are
+          auto-populated when the worker matches exchange fills (Phase 7).
+        </p>
         <div className="overflow-hidden rounded-md border border-border bg-surface">
           <Table>
             <TableHeader>

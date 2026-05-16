@@ -795,8 +795,10 @@ export async function updateSaleActivity(
     if (parentPatch.regimeTags !== undefined) parentPatches.regime_tags = parentPatch.regimeTags;
     if (parentPatch.customTags !== undefined) parentPatches.custom_tags = parentPatch.customTags;
     if (parentPatch.openedAt !== undefined) parentPatches.opened_at = parentPatch.openedAt;
+    if (parentPatch.closedAt !== undefined) parentPatches.closed_at = parentPatch.closedAt;
     if (parentPatch.capitalDeployedUsd !== undefined) parentPatches.capital_deployed_usd = parentPatch.capitalDeployedUsd;
     if (parentPatch.realizedPnlUsd !== undefined) parentPatches.realized_pnl_usd = parentPatch.realizedPnlUsd;
+    if (parentPatch.feesUsd !== undefined) parentPatches.fees_usd = parentPatch.feesUsd;
     if (parentPatch.netPnlUsd !== undefined) parentPatches.net_pnl_usd = parentPatch.netPnlUsd;
 
     if (Object.keys(parentPatches).length > 0) {

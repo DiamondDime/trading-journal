@@ -13,6 +13,7 @@ import {
   getNoteForActivity,
   upsertNote,
   NoteVersionConflict,
+  NoteOwnershipError,
 } from '@/lib/db/notes';
 import { CreateNoteBody, ListNotesQuery } from '@/lib/db/zod-schemas';
 
@@ -43,7 +44,7 @@ export const POST = withAuth(async (req, { userId }) => {
         { current: e.current },
       );
     }
-    if (e instanceof Error && /not owned/.test(e.message)) {
+    if (e instanceof NoteOwnershipError) {
       return errors.notFound();
     }
     throw e;
