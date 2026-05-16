@@ -55,8 +55,7 @@ const sections: { label: string; items: NavItem[] }[] = [
       {
         icon: Plug,
         label: "Exchanges",
-        href: "#",
-        count: 3,
+        href: "/settings/exchanges",
       },
     ],
   },
@@ -208,7 +207,7 @@ export function Sidebar() {
             Log activity
           </Link>
           <Link
-            href="#"
+            href="/settings/exchanges"
             className="flex items-center gap-2.5 rounded-md px-2.5 py-1.5 text-[13px] text-text-secondary hover:bg-subtle hover:text-text transition-colors"
           >
             <Plus className="h-3.5 w-3.5" />
@@ -254,12 +253,13 @@ function SidebarFooter() {
               <Moon className="h-3.5 w-3.5" />
             )}
           </button>
-          <button
+          <Link
+            href="/settings"
             aria-label="Settings"
             className="h-7 w-7 flex items-center justify-center rounded-md text-text-secondary hover:bg-subtle hover:text-text transition-colors"
           >
             <Settings className="h-3.5 w-3.5" />
-          </button>
+          </Link>
         </div>
       </div>
     </div>
