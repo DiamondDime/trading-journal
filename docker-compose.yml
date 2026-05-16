@@ -1,0 +1,62 @@
+name: crypto-journal
+
+networks:
+  internal:
+
+volumes:
+  postgres_data:
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: crypto_journal
+      POSTGRES_USER: crypto_journal
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - internal
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U crypto_journal -d crypto_journal"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile.web
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: ${DATABASE_URL:-postgresql://crypto_journal:${POSTGRES_PASSWORD}@postgres:5432/crypto_journal}
+      CREDENTIALS_MASTER_KEY: ${CREDENTIALS_MASTER_KEY:?CREDENTIALS_MASTER_KEY is required}
+      APP_USER_ID: ${APP_USER_ID:?APP_USER_ID is required}
+      NEXT_PUBLIC_APP_URL: ${NEXT_PUBLIC_APP_URL:-http://localhost:3000}
+      NODE_ENV: production
+    ports:
+      - "3000:3000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - internal
+
+  worker:
+    build:
+      context: ./worker
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: ${DATABASE_URL:-postgresql://crypto_journal:${POSTGRES_PASSWORD}@postgres:5432/crypto_journal}
+      CREDENTIALS_MASTER_KEY: ${CREDENTIALS_MASTER_KEY:?CREDENTIALS_MASTER_KEY is required}
+      APP_USER_ID: ${APP_USER_ID:?APP_USER_ID is required}
+      WORKER_LOG_LEVEL: ${WORKER_LOG_LEVEL:-INFO}
+      WORKER_SYNC_INTERVAL_SECONDS: ${WORKER_SYNC_INTERVAL_SECONDS:-300}
+      WORKER_MAX_CONCURRENT_SYNCS: ${WORKER_MAX_CONCURRENT_SYNCS:-4}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - internal

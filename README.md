@@ -1,132 +1,98 @@
-# Crypto Spread Journal
+# crypto-journal
 
-Private, single-user spread-specialist crypto trading journal. The atomic unit is a **SPREAD** — a multi-leg, often multi-venue trade. Runs locally against your own Postgres.
+An editorial trading journal for serious crypto traders. Self-hosted, exchange-aware, never sells your data.
 
-## What's built
+![Dashboard screenshot — TODO: capture and commit to docs/screenshots/dashboard.png](docs/screenshots/dashboard.png)
 
-### Backend
-- **9 Postgres migrations** — exchange catalog, profiles, encrypted credentials, fills/funding, positions, spreads, tags, notes, RLS policies, computed views (`spread_pnl`, daily PnL materialized view)
-- **3 exchange adapters** (Python + ccxt + custom httpx): Binance, Bybit, Hyperliquid — 35 tests
-- **Leg matcher** with 5 spread-type rules (TDD, 28 tests) + dedup engine
-- **Canonical models** in TypeScript (branded IDs, `Decimal = string`) + Python (Pydantic v2)
-- **API routes** (Next.js App Router): exchanges, spreads, candidates accept/reject, admin allowlist
-- **App-layer AES-256-GCM** credential encryption (Node `crypto` + Python `cryptography`)
-
-### What's NOT built yet
-- Worker orchestrator (polls connections, runs adapters, writes fills, runs matcher) — Phase 5
-- Position-builder (folds fills into positions) — Phase 5
-- Live PnL / WebSocket — v2
-- Tax export — v2
-- Notes/media upload endpoints — Phase 9 (schema exists; endpoints not wired)
-- Integration tests (E2E) — Phase 10
+> Status: pre-release. Schema and APIs are still moving. Not yet recommended for production journaling without backups.
 
 ## Quick start
 
-### Prerequisites
-- macOS with Homebrew (or any Linux with postgresql 14+)
-- `postgresql@14` running (`brew services start postgresql@14`)
-- pnpm 10+
-- Python 3.12+
-- uv (Python package manager)
+The fastest path is Docker Compose.
 
-### 1. Install dependencies
+```bash
+git clone https://github.com/<owner>/crypto-journal.git
+cd crypto-journal
+cp .env.example .env
+# Generate a master key for credential encryption:
+echo "CREDENTIALS_MASTER_KEY=$(openssl rand -base64 32)" >> .env
+docker compose up -d
+# Open http://localhost:3000
+```
+
+On first boot the `web` container waits for Postgres to report healthy, runs `pnpm db:migrate`, then starts. The `worker` container starts in parallel and idles until you connect an exchange.
+
+## Architecture
+
+Three services, one Postgres.
+
+- **web** — Next.js 16 (App Router, React 19). Renders the journal, exposes `/api/*` for activity CRUD and exchange connection management. Single-user-per-instance by default (`APP_USER_ID` env var).
+- **worker** — Python 3.12 ingestion service. Connects to exchanges via [ccxt] (CEX) and custom httpx clients (Hyperliquid), normalises fills into a canonical schema, folds fills into positions, and runs the leg matcher that proposes spread candidates.
+- **postgres** — schema lives in `supabase/migrations/`. The supabase/ path is retained for stability; the project no longer depends on Supabase services.
+
+The data model is a multi-activity journal. The atomic unit is an `activity` (supertype) with four subtypes: **Spread** (multi-leg, often cross-venue), **Trade** (single venue, single position), **Sale** (token allocation event — IDO, premarket, OTC), **Airdrop** (token receipt event). See `docs/specs/2026-05-16-multi-activity-journal-design.md` for the full design.
+
+[ccxt]: https://github.com/ccxt/ccxt
+
+## Supported exchanges
+
+Currently implemented:
+
+| Exchange | Kind | Auth | Adapter |
+|---|---|---|---|
+| Binance | CEX | api_key | `worker/csj_worker/adapters/binance.py` |
+| Bybit | CEX | api_key | `worker/csj_worker/adapters/bybit.py` |
+| Hyperliquid | DEX | wallet_address | `worker/csj_worker/adapters/hyperliquid.py` |
+
+Planned (declared in `src/types/canonical.ts` `Exchange` enum, no adapter yet):
+OKX, Deribit, OKX DEX, Aster, Phemex, Bitget, MEXC, KuCoin, Kraken, Gate, BingX. PRs welcome — see [CONTRIBUTING.md](CONTRIBUTING.md#adding-a-new-exchange-adapter).
+
+## Security
+
+Exchange API keys are encrypted at rest with **AES-256-GCM** before they ever touch Postgres. The master key is supplied via the `CREDENTIALS_MASTER_KEY` env var (32 random bytes, base64-encoded — generate with `openssl rand -base64 32`). Encryption is implemented in `src/lib/crypto/credentials.ts` (Node) and mirrored byte-for-byte in `worker/csj_worker/crypto.py` (Python) so the web app and the worker can read the same ciphertext.
+
+Plaintext credentials never appear in API responses, never get written to logs, and never leave the request handler in clear form. Adapters reject any API key that grants withdraw permission at `connect()` — this is enforced in the adapter ABC contract, not just a UI hint. If you lose `CREDENTIALS_MASTER_KEY` you lose access to every stored API key on that instance, so keep it backed up out-of-band. See [SECURITY.md](SECURITY.md) for the threat model and disclosure process.
+
+## Local development
+
 ```bash
 pnpm install
 cd worker && uv sync --extra dev && cd ..
-```
 
-### 2. Create + migrate the database
-```bash
-pnpm db:create     # createdb crypto_spread_journal
-pnpm db:migrate    # apply all SQL files in supabase/migrations/ in order
-```
+# Database (assumes postgres@14+ running locally)
+pnpm db:create
+pnpm db:migrate
+# or: pnpm db:reset   (drop + create + migrate in one shot)
 
-`db:reset` drops + recreates + remigrates in one shot if you want to start clean.
-
-### 3. Configure env
-```bash
 cp .env.example .env.local
-# DATABASE_URL — connection string (default: postgresql://$USER@localhost:5432/crypto_spread_journal)
-# CREDENTIALS_MASTER_KEY — `openssl rand -base64 32`
-# APP_USER_ID — filled in step 4
+# Edit DATABASE_URL, CREDENTIALS_MASTER_KEY, APP_USER_ID
+
+pnpm dev                       # http://localhost:3000
+pnpm typecheck                 # tsc --noEmit
+pnpm test:run                  # Vitest run-once
+cd worker && uv run pytest     # Python worker tests
 ```
 
-Copy the same `DATABASE_URL`, `CREDENTIALS_MASTER_KEY` and `APP_USER_ID` into `worker/.env`.
+The full set of pnpm scripts:
 
-### 4. Seed yourself
-```sql
--- pnpm db:psql
-INSERT INTO public.allowlist (email, role) VALUES ('you@example.com', 'admin');
-INSERT INTO auth.users (email) VALUES ('you@example.com') RETURNING id;
--- copy that UUID into .env.local as APP_USER_ID
-```
+| Script | Purpose |
+|---|---|
+| `pnpm dev` | Next.js dev server with HMR |
+| `pnpm build` | Production build (standalone output) |
+| `pnpm start` | Run the production build |
+| `pnpm typecheck` | `tsc --noEmit` over the whole tree |
+| `pnpm test` / `pnpm test:run` | Vitest watch / run-once |
+| `pnpm test:coverage` | Vitest with v8 coverage |
+| `pnpm db:create` / `db:drop` / `db:reset` | Postgres lifecycle |
+| `pnpm db:migrate` | Apply `supabase/migrations/*.sql` in order |
+| `pnpm db:psql` | Interactive psql shell |
+| `pnpm worker:dev` | Run the Python worker against your local DB |
+| `pnpm worker:test` | pytest in `worker/` |
 
-The `auth.users` insert fires the `handle_new_user` trigger that creates the matching `profiles` row.
+## Contributing
 
-### 5. Run
-```bash
-pnpm dev                       # http://localhost:3000/spreads
-cd worker && uv run pytest     # worker tests
-```
-
-## Project layout
-
-```
-crypto-spread-journal/
-├── src/
-│   ├── app/
-│   │   ├── api/                      # exchanges, spreads, candidates, admin/allowlist
-│   │   └── spreads/                  # server-rendered spread list
-│   ├── lib/
-│   │   ├── api/                      # response envelope + withAuth/withAdmin wrappers
-│   │   ├── auth/                     # APP_USER_ID-based v1 auth
-│   │   ├── crypto/                   # AES-256-GCM credential helpers
-│   │   └── db/                       # postgres.js singleton + Zod schemas
-│   └── types/
-│       └── canonical.ts              # source of truth at app layer
-├── worker/                           # Python ingestion service
-│   ├── csj_worker/
-│   │   ├── adapters/                 # Binance, Bybit, Hyperliquid + base ABC
-│   │   ├── matcher/                  # leg matcher (5 rules + engine)
-│   │   ├── crypto.py                 # AESGCM mirror of src/lib/crypto
-│   │   └── types.py                  # Pydantic mirror of canonical.ts
-│   └── tests/                        # 63 pytest cases
-├── supabase/migrations/              # 10 numbered SQL files (kept under supabase/ for path stability)
-│   └── 20260515000000_local_postgres_shim.sql  # creates auth schema + auth.uid() locally
-└── docs/specs/2026-05-15-architecture.md
-```
-
-## Auth model (v1)
-
-Single-user, local-only. There is no login UI. Every request acts as the user whose UUID is `APP_USER_ID` in `.env.local`. The `auth` schema and `auth.uid()` function are simulated locally by `20260515000000_local_postgres_shim.sql`; `auth.uid()` reads `app.current_user_id` from the connection setting, which the API handler wrapper sets per-request.
-
-When v2 invite-mode lands, the shim gets dropped and a real provider plugs in.
-
-## Tests
-
-```bash
-pnpm test:run                         # Vitest
-cd worker && uv run python -m pytest  # pytest (use `python -m` so it runs in uv venv)
-pnpm typecheck                        # tsc --noEmit
-```
-
-Current: 63 Python tests pass (35 adapters + 28 matcher). TS typecheck clean.
-
-## Security defaults
-
-1. **Credentials encrypted with AES-256-GCM** before write — see `src/lib/crypto/credentials.ts` and `worker/csj_worker/crypto.py`.
-2. **`CREDENTIALS_MASTER_KEY` never logged or returned.** Lose it = lose all stored keys.
-3. **Read-only adapter enforcement** — every adapter rejects `withdraw` permission at `connect()`.
-4. **RLS policies** still on every user-data table (bypassed locally as superuser; useful if you later expose the DB to a less-trusted role).
-5. **No password auth in v1** — local-only product, single user.
-
-## Adding a new exchange (~2–5 days)
-
-1. Add row to `exchange_catalog` (new migration).
-2. Create `worker/csj_worker/adapters/<exchange>.py` extending `ExchangeAdapter`.
-3. Implement `connect`, `validate_credentials`, `fetch_fills`, `fetch_funding_events`, `fetch_open_positions`.
-4. Write fixture-based tests in `worker/tests/adapters/test_<exchange>.py`.
-5. Register adapter in `worker/csj_worker/adapters/__init__.py` and worker bootstrap.
+See [CONTRIBUTING.md](CONTRIBUTING.md) — covers issue templates, feature proposals, adding a new exchange adapter, and the commit conventions used in this repo.
 
 ## License
-Private. No license granted.
+
+[MIT](LICENSE). Copyright 2026 Andrew Shvoev and crypto-journal contributors.
