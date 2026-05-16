@@ -1,26 +1,215 @@
 @import "tailwindcss";
+@import "tw-animate-css";
 
+@custom-variant dark (&:is(.dark *));
+
+/* ============================================================================
+   Light mode — paper white
+   ============================================================================ */
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  /* Surfaces */
+  --bg-app:        #f7f8fa;
+  --bg-surface:    #ffffff;
+  --bg-elevated:   #ffffff;
+  --bg-subtle:     #f2f4f7;
+  --bg-inset:      #f9fafb;
+
+  /* Borders */
+  --border-color:        #e5e7eb;
+  --border-strong:       #d1d5db;
+  --border-subtle:       #f0f2f5;
+
+  /* Text */
+  --text-primary:   #1a1d23;
+  --text-secondary: #4b5563;
+  --text-tertiary:  #6b7280;
+  --text-disabled:  #9ca3af;
+
+  /* Accents */
+  --accent-signature:    #b8860b;   /* OLD GOLD — used ONCE per screen */
+  --accent-signature-bg: #fdf6e3;
+  --accent-brand:        #0d8a8a;   /* teal — secondary */
+  --accent-brand-bg:     #e6f4f4;
+  --accent-up:           #16a34a;
+  --accent-up-bg:        #ecfdf5;
+  --accent-down:         #dc2626;
+  --accent-down-bg:      #fef2f2;
+  --accent-warn:         #d97706;
+  --accent-warn-bg:      #fffbeb;
+  --accent-info:         #2563eb;
+  --accent-info-bg:      #eff6ff;
+
+  /* shadcn token shims — mapped to our palette so primitives inherit */
+  --background:           var(--bg-app);
+  --foreground:           var(--text-primary);
+  --card:                 var(--bg-surface);
+  --card-foreground:      var(--text-primary);
+  --popover:              var(--bg-elevated);
+  --popover-foreground:   var(--text-primary);
+  --primary:              var(--accent-brand);
+  --primary-foreground:   #ffffff;
+  --secondary:            var(--bg-subtle);
+  --secondary-foreground: var(--text-primary);
+  --muted:                var(--bg-subtle);
+  --muted-foreground:     var(--text-tertiary);
+  --accent:               var(--bg-subtle);
+  --accent-foreground:    var(--text-primary);
+  --destructive:          var(--accent-down);
+  --destructive-foreground: #ffffff;
+  --border:               var(--border-color);
+  --input:                var(--border-color);
+  --ring:                 var(--accent-brand);
+  --radius:               0.5rem;
 }
 
+.dark {
+  /* Surfaces — refined off-black */
+  --bg-app:      #0d1117;
+  --bg-surface:  #161b22;
+  --bg-elevated: #1c2128;
+  --bg-subtle:   #21262d;
+  --bg-inset:    #0d1117;
+
+  --border-color:  #30363d;
+  --border-strong: #484f58;
+  --border-subtle: #21262d;
+
+  --text-primary:   #f0f3f7;
+  --text-secondary: #c9d1d9;
+  --text-tertiary:  #8b949e;
+  --text-disabled:  #6e7681;
+
+  --accent-signature:    #d4a017;   /* brighter for dark contrast */
+  --accent-signature-bg: rgba(212, 160, 23, 0.12);
+  --accent-brand:        #2dd4bf;
+  --accent-brand-bg:     rgba(45, 212, 191, 0.12);
+  --accent-up:           #3fb950;
+  --accent-up-bg:        rgba(63, 185, 80, 0.15);
+  --accent-down:         #f85149;
+  --accent-down-bg:      rgba(248, 81, 73, 0.15);
+  --accent-warn:         #fb923c;
+  --accent-warn-bg:      rgba(251, 146, 60, 0.15);
+  --accent-info:         #58a6ff;
+  --accent-info-bg:      rgba(88, 166, 255, 0.15);
+
+  --background:           var(--bg-app);
+  --foreground:           var(--text-primary);
+  --card:                 var(--bg-surface);
+  --card-foreground:      var(--text-primary);
+  --popover:              var(--bg-elevated);
+  --popover-foreground:   var(--text-primary);
+  --primary:              var(--accent-brand);
+  --primary-foreground:   #0a0a0a;
+  --secondary:            var(--bg-subtle);
+  --secondary-foreground: var(--text-primary);
+  --muted:                var(--bg-subtle);
+  --muted-foreground:     var(--text-tertiary);
+  --accent:               var(--bg-subtle);
+  --accent-foreground:    var(--text-primary);
+  --destructive:          var(--accent-down);
+  --destructive-foreground: #ffffff;
+  --border:               var(--border-color);
+  --input:                var(--border-color);
+  --ring:                 var(--accent-brand);
+}
+
+/* ============================================================================
+   Tailwind v4 theme bridge — expose tokens as utility classes
+   ============================================================================ */
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --font-sans:  var(--font-inter);
+  --font-serif: var(--font-source-serif);
+  --font-mono:  var(--font-jetbrains);
+
+  --color-background:   var(--background);
+  --color-foreground:   var(--foreground);
+  --color-card:         var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover:      var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary:      var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary:    var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted:        var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent:       var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive:  var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border:       var(--border);
+  --color-input:        var(--input);
+  --color-ring:         var(--ring);
+
+  /* Our editorial palette as utilities */
+  --color-app:           var(--bg-app);
+  --color-surface:       var(--bg-surface);
+  --color-elevated:      var(--bg-elevated);
+  --color-subtle:        var(--bg-subtle);
+  --color-inset:         var(--bg-inset);
+
+  --color-text:          var(--text-primary);
+  --color-text-secondary: var(--text-secondary);
+  --color-text-tertiary: var(--text-tertiary);
+  --color-text-disabled: var(--text-disabled);
+
+  --color-signature:     var(--accent-signature);
+  --color-signature-bg:  var(--accent-signature-bg);
+  --color-brand:         var(--accent-brand);
+  --color-brand-bg:      var(--accent-brand-bg);
+  --color-up:            var(--accent-up);
+  --color-up-bg:         var(--accent-up-bg);
+  --color-down:          var(--accent-down);
+  --color-down-bg:       var(--accent-down-bg);
+  --color-warn:          var(--accent-warn);
+  --color-warn-bg:       var(--accent-warn-bg);
+  --color-info:          var(--accent-info);
+  --color-info-bg:       var(--accent-info-bg);
+
+  --color-border-strong: var(--border-strong);
+  --color-border-subtle: var(--border-subtle);
+
+  --radius-sm: 0.25rem;
+  --radius:    0.375rem;
+  --radius-md: 0.5rem;
+  --radius-lg: 0.5rem;
+  --radius-xl: 0.75rem;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+/* ============================================================================
+   Base
+   ============================================================================ */
+* {
+  border-color: var(--border-color);
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background-color: var(--bg-app);
+  color: var(--text-primary);
+  font-family: var(--font-inter), system-ui, sans-serif;
+  font-feature-settings: "cv11", "ss01", "ss03"; /* Inter stylistic sets — refined "I", curved "r" */
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+/* Tabular nums for monospace by default */
+.font-mono, [class*="font-mono"] {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum", "zero", "ss01";
+}
+
+/* Source Serif small caps utility */
+.smcp {
+  font-feature-settings: "smcp";
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+/* Suppress flash of unstyled content during theme hydration */
+html.dark {
+  color-scheme: dark;
+}
+html:not(.dark) {
+  color-scheme: light;
 }
