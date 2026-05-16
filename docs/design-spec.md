@@ -54,13 +54,15 @@ Two complete palettes. App ships with a theme toggle; light is default.
 --text-tertiary:    #6b7280;   /* metadata, hints */
 --text-disabled:    #9ca3af;   /* disabled inputs, placeholders */
 
-/* Accents — mature, not neon */
---accent-brand:     #0d8a8a;   /* PRIMARY brand color — teal. Used for primary CTA, brand mark, key emphasis. */
---accent-brand-bg:  #e6f4f4;   /* tint background for brand chips */
+/* Accents — mature, with a signature */
+--accent-signature: #b8860b;   /* SIGNATURE amber/old-gold. Use EXACTLY ONCE per screen on the most important element. See design-inspiration.md § 2.2. */
+--accent-signature-bg: #fdf6e3; /* signature tint for the rare amber pill */
+--accent-brand:     #0d8a8a;   /* Secondary brand — teal. Used for category, info chips, primary CTA. */
+--accent-brand-bg:  #e6f4f4;
 --accent-up:        #16a34a;   /* positive PnL — forest green, not matrix green */
---accent-up-bg:     #ecfdf5;   /* up tag bg */
+--accent-up-bg:     #ecfdf5;
 --accent-down:      #dc2626;   /* negative PnL — fire-engine red */
---accent-down-bg:   #fef2f2;   /* down tag bg */
+--accent-down-bg:   #fef2f2;
 --accent-warn:      #d97706;   /* warning state (winding_down, threshold breach) — amber */
 --accent-warn-bg:   #fffbeb;
 --accent-info:      #2563eb;   /* financial-blue for informational accents */
@@ -89,6 +91,8 @@ Two complete palettes. App ships with a theme toggle; light is default.
 --text-disabled:    #6e7681;
 
 /* Accents — slightly brighter than light-mode for contrast */
+--accent-signature: #d4a017;   /* SIGNATURE amber — calibrated brighter for dark bg */
+--accent-signature-bg: rgba(212, 160, 23, 0.12);
 --accent-brand:     #2dd4bf;   /* teal — lighter for dark mode */
 --accent-brand-bg:  rgba(45, 212, 191, 0.12);
 --accent-up:        #3fb950;   /* GitHub-success green */
@@ -110,11 +114,14 @@ Two complete palettes. App ships with a theme toggle; light is default.
 
 ---
 
-## 2. Typography
+## 2. Typography — three-typeface system
+
+The signature move. **Source Serif 4 for editorial display + Inter for body + JetBrains Mono for numbers.** See `docs/design-inspiration.md` § 2 signature move #1.
 
 ```css
---font-sans: 'Inter', 'SF Pro Text', -apple-system, system-ui, sans-serif;
---font-mono: 'JetBrains Mono', 'SF Mono', 'Menlo', ui-monospace, monospace;
+--font-serif: 'Source Serif 4', 'IBM Plex Serif', 'Georgia', 'Times New Roman', serif;
+--font-sans:  'Inter', 'SF Pro Text', -apple-system, system-ui, sans-serif;
+--font-mono:  'JetBrains Mono', 'SF Mono', 'Menlo', ui-monospace, monospace;
 ```
 
 Import in HTML head (Claude Design needs explicit links):
@@ -122,38 +129,60 @@ Import in HTML head (Claude Design needs explicit links):
 ```html
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:opsz,wght@8..60,400;8..60,500;8..60,600&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 ```
 
 ### Font-usage rules — strict
 
-- **Default**: Inter. Body text, headings, labels, buttons, prose, navigation, form inputs — all Inter.
-- **JetBrains Mono is ONLY for**:
-  - Currency amounts: `$47,300.00`
+- **Serif** (`--font-serif`) — editorial display only:
+  - Page hero metric on the spread detail page (72px, the centerpiece)
+  - Spread name on the detail page (36-44px)
+  - Spread name on list-view index cards (18-22px)
+  - Pull quotes from operator notes (italic, 18-20px)
+  - Display headings on the dashboard ("Book overview", "The archive")
+  - "THESIS / DECOMPOSITION / EXECUTION / POSTMORTEM" section labels (small caps tracked, 12px, weight 500)
+  - **Never** on buttons, form labels, table headers, navigation, body prose
+
+- **Sans** (`--font-sans`, Inter) — the default:
+  - Body text, table cells, form inputs, buttons, navigation, labels, sentence-case section headings
+  - Anything not explicitly serif or mono
+
+- **Mono** (`--font-mono`) — tabular numbers only:
+  - Currency: `$47,300.00`
   - Basis points: `+11.6 bps`
   - APR/percentage: `14.0%`
   - Instrument tickers in tables: `BTC-PERP`
-  - Timestamps when shown precisely: `2026-03-28T08:14:22Z`
-  - Crypto addresses, transaction hashes, UUIDs (when shown for debugging)
-- **Never** put mono on a button label, a page title, a section heading, or a sentence of prose.
+  - Precise timestamps when shown: `2026-03-28T08:14:22Z`
+  - Serial numbers: `#032`
+  - **Never** on button labels, page titles, prose
 
 ### Type scale
 
-| Token | Size / Line-height | Weight | Use |
+| Token | Size / Line-height | Family · Weight | Use |
 |---|---|---|---|
-| `text-display` | 36px / 44px | 600 Inter | Page hero stat ("$1,314.40") — rare, max once per screen |
-| `text-h1`      | 24px / 32px | 600 Inter | Page titles |
-| `text-h2`      | 18px / 28px | 600 Inter | Section headings ("Open spreads", "Filters") |
-| `text-h3`      | 16px / 24px | 500 Inter | Subsection headings |
-| `text-body-lg` | 16px / 24px | 400 Inter | Lede paragraphs, key descriptions |
-| `text-body`    | 14px / 22px | 400 Inter | Default body, table cells, form inputs |
-| `text-small`   | 13px / 20px | 400 Inter | Secondary text, metadata, helper text |
-| `text-xs`      | 12px / 16px | 500 Inter | Labels, chip text, badge text |
-| `num-hero`     | 36px / 44px | 500 Mono | Page hero numeric stat |
-| `num-display`  | 28px / 36px | 500 Mono | Detail-page numeric stats |
-| `num-headline` | 18px / 24px | 500 Mono | Card-headline metric |
-| `num-body`     | 14px / 22px | 400 Mono | Table numeric cells |
-| `num-small`    | 13px / 20px | 400 Mono | Inline numeric (in prose) |
+| `serif-hero`     | 72px / 80px | Source Serif 4 · 400 | THE spread-detail hero metric. Once per page max. |
+| `serif-display`  | 44px / 52px | Source Serif 4 · 500 | Spread name on detail page; dashboard hero title |
+| `serif-h1`       | 32px / 40px | Source Serif 4 · 500 | Page titles ("Book overview", "The archive") |
+| `serif-h2`       | 22px / 32px | Source Serif 4 · 500 | Detail-page subsection titles ("Postmortem") |
+| `serif-card`     | 20px / 28px | Source Serif 4 · 500 | Spread name on list-view index cards |
+| `serif-quote`    | 18px / 28px | Source Serif 4 italic · 400 | Pull quotes from operator notes |
+| `serif-section`  | 12px / 16px | Source Serif 4 · 500 + small-caps + 0.08em tracking | "THESIS / EXECUTION" section labels |
+| `text-h1`        | 24px / 32px | Inter · 600 | Generic page titles (forms, settings) |
+| `text-h2`        | 18px / 28px | Inter · 600 | Section headings in tables, lists |
+| `text-h3`        | 16px / 24px | Inter · 500 | Subsection headings |
+| `text-body-lg`   | 16px / 24px | Inter · 400 | Lede paragraphs, key descriptions |
+| `text-body`      | 14px / 22px | Inter · 400 | Default body, table cells, form inputs |
+| `text-small`     | 13px / 20px | Inter · 400 | Secondary text, metadata, helper text |
+| `text-xs`        | 12px / 16px | Inter · 500 | Labels, chip text, badge text |
+| `num-hero`       | 72px / 80px | Source Serif 4 · 400 (signature amber) | Spread-detail hero — pair with `serif-hero` |
+| `num-display`    | 36px / 44px | JetBrains Mono · 500 | Detail-page numeric stats (decomposition totals) |
+| `num-card`       | 32px / 40px | Source Serif 4 · 400 | Card-headline metric on list view (when in serif treatment) |
+| `num-headline`   | 18px / 24px | JetBrains Mono · 500 | Table-headline metric / inline stats |
+| `num-body`       | 14px / 22px | JetBrains Mono · 400 | Table numeric cells |
+| `num-small`      | 13px / 20px | JetBrains Mono · 400 | Inline numeric (in prose) |
+| `num-tiny`       | 12px / 16px | JetBrains Mono · 400 | Serial numbers, fine print |
+
+**The hero metric is the ONE design element that separates us from every dashboard ever made.** It's a serif numeral, not a mono numeral. 72px Source Serif 4 in signature amber. Render `+14.0%` like an FT Weekend front-page stat — display weight, serif body, with the unit (`APR`) inset slightly smaller. That single typographic choice does 40% of the work of making the product feel premium.
 
 **Body text is 14px** (not 11–13px squint-mode). Density comes from hierarchy + whitespace discipline, not from miniaturization.
 
