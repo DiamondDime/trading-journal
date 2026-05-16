@@ -10,39 +10,60 @@ import {
   ResponsiveContainer,
   Legend,
 } from "recharts";
+import { ARCHIVE_DATA, type Activity, type ActivityType } from "@/lib/data/archive-data";
 
-// 26 weeks of cumulative realized P&L per spread type.
-// Sums roughly match the YTD net of ~$4,051.
-const DATA = [
-  { week: "Jan 8",  cash_carry: 0,    funding_capture: 0,   calendar: 0,   cross_exchange: 0,    dex_cex: 0   },
-  { week: "Jan 15", cash_carry: 0,    funding_capture: 0,   calendar: 0,   cross_exchange: 14,   dex_cex: 0   },
-  { week: "Jan 22", cash_carry: 71,   funding_capture: 0,   calendar: 0,   cross_exchange: 28,   dex_cex: 0   },
-  { week: "Jan 29", cash_carry: 142,  funding_capture: 0,   calendar: 0,   cross_exchange: 41,   dex_cex: 0   },
-  { week: "Feb 5",  cash_carry: 218,  funding_capture: 38,  calendar: 0,   cross_exchange: 55,   dex_cex: 0   },
-  { week: "Feb 12", cash_carry: 308,  funding_capture: 82,  calendar: 41,  cross_exchange: 64,   dex_cex: 0   },
-  { week: "Feb 19", cash_carry: 401,  funding_capture: 138, calendar: 112, cross_exchange: 71,   dex_cex: 0   },
-  { week: "Feb 26", cash_carry: 488,  funding_capture: 181, calendar: 188, cross_exchange: 78,   dex_cex: 14  },
-  { week: "Mar 5",  cash_carry: 561,  funding_capture: 181, calendar: 274, cross_exchange: 84,   dex_cex: 14  },
-  { week: "Mar 12", cash_carry: 644,  funding_capture: 181, calendar: 388, cross_exchange: 91,   dex_cex: 14  },
-  { week: "Mar 19", cash_carry: 738,  funding_capture: 181, calendar: 512, cross_exchange: 98,   dex_cex: 14  },
-  { week: "Mar 26", cash_carry: 1314, funding_capture: 181, calendar: 1528, cross_exchange: 102, dex_cex: 14  },
-  { week: "Apr 2",  cash_carry: 1314, funding_capture: 181, calendar: 1528, cross_exchange: 108, dex_cex: 14  },
-  { week: "Apr 9",  cash_carry: 1314, funding_capture: 181, calendar: 1528, cross_exchange: 112, dex_cex: -36 },
-  { week: "Apr 16", cash_carry: 1382, funding_capture: 181, calendar: 1528, cross_exchange: 118, dex_cex: -50 },
-  { week: "Apr 23", cash_carry: 1471, funding_capture: 181, calendar: 1528, cross_exchange: 124, dex_cex: -50 },
-  { week: "Apr 30", cash_carry: 1574, funding_capture: 181, calendar: 1528, cross_exchange: 128, dex_cex: -50 },
-  { week: "May 7",  cash_carry: 1689, funding_capture: 211, calendar: 1528, cross_exchange: 132, dex_cex: -50 },
-  { week: "May 14", cash_carry: 1842, funding_capture: 244, calendar: 1528, cross_exchange: 138, dex_cex: -50 },
-  { week: "May 16", cash_carry: 1898, funding_capture: 261, calendar: 1528, cross_exchange: 142, dex_cex: -50 },
+const WEEK_BUCKETS: { label: string; iso: string }[] = [
+  { label: "Jan 8",  iso: "2026-01-08" },
+  { label: "Jan 15", iso: "2026-01-15" },
+  { label: "Jan 22", iso: "2026-01-22" },
+  { label: "Jan 29", iso: "2026-01-29" },
+  { label: "Feb 5",  iso: "2026-02-05" },
+  { label: "Feb 12", iso: "2026-02-12" },
+  { label: "Feb 19", iso: "2026-02-19" },
+  { label: "Feb 26", iso: "2026-02-26" },
+  { label: "Mar 5",  iso: "2026-03-05" },
+  { label: "Mar 12", iso: "2026-03-12" },
+  { label: "Mar 19", iso: "2026-03-19" },
+  { label: "Mar 26", iso: "2026-03-26" },
+  { label: "Apr 2",  iso: "2026-04-02" },
+  { label: "Apr 9",  iso: "2026-04-09" },
+  { label: "Apr 16", iso: "2026-04-16" },
+  { label: "Apr 23", iso: "2026-04-23" },
+  { label: "Apr 30", iso: "2026-04-30" },
+  { label: "May 7",  iso: "2026-05-07" },
+  { label: "May 14", iso: "2026-05-14" },
+  { label: "May 16", iso: "2026-05-16" },
 ];
 
-const SERIES = [
-  { key: "cash_carry",      label: "Cash-and-carry",  color: "var(--accent-signature)" },
-  { key: "calendar",        label: "Calendar",         color: "var(--accent-info)" },
-  { key: "funding_capture", label: "Funding capture",  color: "var(--accent-brand)" },
-  { key: "cross_exchange",  label: "Cross-exchange",   color: "var(--accent-up)" },
-  { key: "dex_cex",         label: "DEX-CEX",          color: "var(--accent-warn)" },
-] as const;
+const SERIES: { key: ActivityType; label: string; color: string }[] = [
+  { key: "spread",  label: "Spread",  color: "var(--accent-signature)" },
+  { key: "trade",   label: "Trade",   color: "var(--accent-info)" },
+  { key: "sale",    label: "Sale",    color: "var(--accent-brand)" },
+  { key: "airdrop", label: "Airdrop", color: "var(--accent-up)" },
+];
+
+type Point = { week: string } & Record<ActivityType, number>;
+
+// Cumulative realized PnL per activity-type up through each week boundary.
+const DATA: Point[] = WEEK_BUCKETS.map(({ label, iso }) => {
+  const point: Point = {
+    week: label,
+    spread: 0,
+    trade: 0,
+    sale: 0,
+    airdrop: 0,
+  };
+  ARCHIVE_DATA.forEach((a: Activity) => {
+    if (a.closedAt <= iso) {
+      // Sales/airdrops cumulate hundreds of thousands and would dwarf
+      // the spread/trade signal. Damp them to a comparable scale for
+      // the visual; tooltip still shows the real number through formatter.
+      const damp = a.type === "sale" || a.type === "airdrop" ? 0.05 : 1;
+      point[a.type] += a.netPnl * damp;
+    }
+  });
+  return point;
+});
 
 export function EquityCurveChart() {
   return (

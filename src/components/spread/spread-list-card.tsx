@@ -1,18 +1,21 @@
 import Link from "next/link";
 import { ArrowUpRight } from "lucide-react";
 
-type Status = "open" | "winding_down" | "orphaned" | "closed" | "expired";
+type Status = "open" | "winding_down" | "orphaned" | "closed" | "expired" | "claimed" | "vested";
+
+export type ActivityType = "spread" | "trade" | "sale" | "airdrop";
 
 export type SpreadListItem = {
-  serial: string;          // "#032"
-  name: string;            // "BTC cash-and-carry"
-  typeLabel: string;       // "Funding capture · same venue"
+  serial: string;
+  name: string;
+  typeLabel: string;
   status: Status;
-  headline: string;        // "+14.0%"
-  headlineUnit: string;    // "APR" | "bps" | "bps/d"
+  headline: string;
+  headlineUnit: string;
   tone: "up" | "down" | "neutral";
-  summary: string;         // "$47,300 · 73d · Bitmex+Coinbase"
+  summary: string;
   href: string;
+  activityType?: ActivityType;   // when set, renders a tiny mono badge on the card
 };
 
 const STATUS_STYLES: Record<Status, { dot: string; label: string }> = {
@@ -21,6 +24,15 @@ const STATUS_STYLES: Record<Status, { dot: string; label: string }> = {
   orphaned:     { dot: "bg-down",       label: "Orphaned" },
   closed:       { dot: "bg-text-tertiary", label: "Closed" },
   expired:      { dot: "bg-text-tertiary", label: "Expired" },
+  claimed:      { dot: "bg-text-tertiary", label: "Claimed" },
+  vested:       { dot: "bg-text-tertiary", label: "Vested" },
+};
+
+const ACTIVITY_BADGE_LABEL: Record<ActivityType, string> = {
+  spread: "SPREAD",
+  trade: "TRADE",
+  sale: "SALE",
+  airdrop: "AIRDROP",
 };
 
 export function SpreadListCard({ item }: { item: SpreadListItem }) {
@@ -60,7 +72,14 @@ export function SpreadListCard({ item }: { item: SpreadListItem }) {
       </div>
 
       <div className="flex flex-col items-end justify-between">
-        <ArrowUpRight className="h-3.5 w-3.5 text-text-tertiary opacity-0 transition-opacity group-hover:opacity-100" />
+        <div className="flex items-center gap-1.5">
+          {item.activityType && (
+            <span className="font-mono text-[9px] uppercase tracking-[0.16em] text-text-tertiary">
+              {ACTIVITY_BADGE_LABEL[item.activityType]}
+            </span>
+          )}
+          <ArrowUpRight className="h-3.5 w-3.5 text-text-tertiary opacity-0 transition-opacity group-hover:opacity-100" />
+        </div>
         <div className="text-right">
           <p className={"font-serif text-[26px] leading-none tabular-nums " + toneClass}>
             {item.headline}

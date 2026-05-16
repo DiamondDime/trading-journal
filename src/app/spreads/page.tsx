@@ -9,13 +9,16 @@ import {
 import { EquityCurveChart } from "@/components/spread/equity-curve-chart";
 import { FundingTicker } from "@/components/spread/funding-ticker";
 import { NotesFeed } from "@/components/spread/notes-feed";
-import { StrategyMix } from "@/components/spread/strategy-mix";
+import { ActivityMix } from "@/components/spread/activity-mix";
 import {
   fmtCapital,
   fmtUsd,
+  getActivityTypeCounts,
   getRecentCloses,
   getTotals,
+  ACTIVITY_TYPE_LABELS,
   SPREAD_TYPE_LABELS,
+  type Activity,
 } from "@/lib/data/archive-data";
 
 export const dynamic = "force-static";
@@ -24,17 +27,42 @@ const RECENT_COUNT = 8;
 const recentRows = getRecentCloses(RECENT_COUNT);
 const recentNetSum = recentRows.reduce((s, r) => s + r.netPnl, 0);
 const totals = getTotals();
+const typeCounts = getActivityTypeCounts();
+
+function describeActivity(a: Activity): string {
+  switch (a.type) {
+    case "spread":
+      return `${a.variant} · ${a.venues}`;
+    case "trade":
+      return `${a.exchange} · ${a.instrument} · ${a.side}`;
+    case "sale":
+      return `${a.saleKind.toUpperCase()} · ${a.venue}`;
+    case "airdrop":
+      return `${a.protocol} · retro drop`;
+  }
+}
+
+function bestDelta(a: Activity): string {
+  if (a.type === "spread") {
+    return `${a.serial} · ${SPREAD_TYPE_LABELS[a.spreadType].toLowerCase()} · ${a.daysLabel}`;
+  }
+  return `${a.serial} · ${ACTIVITY_TYPE_LABELS[a.type].toLowerCase()} · ${a.daysLabel}`;
+}
 
 const recentCloses: SpreadListItem[] = recentRows.map((r) => ({
   serial: r.serial,
   name: r.name,
-  typeLabel: `${r.variant} · ${r.venues}`,
+  typeLabel: describeActivity(r),
   status: r.status,
   headline: r.headlineLabel,
-  headlineUnit: r.headlineUnit,
+  headlineUnit: r.headlineKind,
   tone: r.tone,
-  summary: `${fmtCapital(r.capital)} · ${r.daysLabel} · ${r.note}`,
+  summary:
+    r.type === "airdrop"
+      ? `${r.daysLabel} · ${r.note}`
+      : `${fmtCapital(r.capital)} · ${r.daysLabel} · ${r.note}`,
   href: r.href,
+  activityType: r.type,
 }));
 
 export default function SpreadsPage() {
@@ -47,7 +75,7 @@ export default function SpreadsPage() {
             The book
           </h1>
           <p className="mt-2 font-serif text-sm italic text-text-tertiary">
-            {totals.count} spreads archived · since Jan 12, 2026 · last close 2d ago
+            {totals.count} activities · {typeCounts.spread} spreads · {typeCounts.trade} trades · {typeCounts.sale} sales · {typeCounts.airdrop} airdrops · since Jan 12, 2026
           </p>
         </div>
 
@@ -69,18 +97,18 @@ export default function SpreadsPage() {
       </header>
 
       <div className="px-8 py-8 lg:px-12">
-        {/* ── KPI row · 6 closed-only cards ─────────────────────────────── */}
+        {/* ── KPI row · 6 cross-activity cards ─────────────────────────── */}
         <section className="mb-8 grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-6">
           <KpiCard
             variant="hero"
             label="Net P&L · YTD"
             value={fmtUsd(totals.net, true)}
-            delta="↑ 7.2% vs Q1 · 18 weeks"
+            delta={`across ${totals.count} activities`}
           />
           <KpiCard
-            label="Trades closed"
+            label="Activities closed"
             value={`${totals.count}`}
-            delta="across 5 spread types"
+            delta="4 activity types"
           />
           <KpiCard
             label="Win rate"
@@ -89,26 +117,26 @@ export default function SpreadsPage() {
             delta={`${totals.winners} winners · ${totals.losers} losers`}
           />
           <KpiCard
-            label="Weighted APR"
-            value="9.8%"
-            tone="up"
+            label="Weighted return"
+            value={`${totals.weightedReturnPct.toFixed(1)}%`}
+            tone={totals.weightedReturnPct >= 0 ? "up" : "down"}
             delta="realized · capital-weighted"
           />
           <KpiCard
-            label="Best trade"
+            label="Best activity"
             value={fmtUsd(totals.best.netPnl, true)}
             tone="up"
-            delta={`${totals.best.serial} · ${SPREAD_TYPE_LABELS[totals.best.type].toLowerCase()} · ${totals.best.daysLabel}`}
+            delta={bestDelta(totals.best)}
           />
           <KpiCard
-            label="Worst trade"
+            label="Worst activity"
             value={fmtUsd(totals.worst.netPnl, true)}
             tone="down"
-            delta={`${totals.worst.serial} · ${SPREAD_TYPE_LABELS[totals.worst.type].toLowerCase()} · ${totals.worst.note}`}
+            delta={bestDelta(totals.worst)}
           />
         </section>
 
-        {/* ── heatmap (60%) + funding ticker (40%) ──────────────────────── */}
+        {/* ── heatmap + funding ticker ──────────────────────────────────── */}
         <section className="mb-8 grid grid-cols-1 gap-6 xl:grid-cols-[1.6fr_1fr]">
           <div className="rounded-md border border-border bg-surface">
             <div className="flex items-center justify-between border-b border-border px-5 py-3">
@@ -163,7 +191,7 @@ export default function SpreadsPage() {
                 Equity curve · cumulative realized
               </h3>
               <p className="mt-1 font-serif text-[12px] italic text-text-tertiary">
-                Stacked by spread type · hover for breakdown
+                Stacked by activity type · sale/airdrop dampened for scale
               </p>
             </div>
             <span className="font-mono text-[11px] text-text-tertiary">
@@ -173,16 +201,16 @@ export default function SpreadsPage() {
           <EquityCurveChart />
         </section>
 
-        {/* ── notes feed + strategy mix ─────────────────────────────────── */}
+        {/* ── notes feed + activity mix ─────────────────────────────────── */}
         <section className="mb-10 grid grid-cols-1 gap-6 xl:grid-cols-[1fr_1.6fr]">
           <NotesFeed />
-          <StrategyMix />
+          <ActivityMix />
         </section>
 
         {/* ── footer ────────────────────────────────────────────────────── */}
         <footer className="mt-8 flex items-center justify-between border-t border-border pt-5 font-mono text-[10px] uppercase tracking-[0.18em] text-text-tertiary">
-          <span>spread journal · v0.1 · since Jan 12, 2026</span>
-          <span>3 exchanges connected · {totals.count} trades archived</span>
+          <span>crypto journal · v0.1 · since Jan 12, 2026</span>
+          <span>3 exchanges connected · {totals.count} activities archived</span>
         </footer>
       </div>
     </div>

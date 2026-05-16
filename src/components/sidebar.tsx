@@ -35,7 +35,7 @@ const sections: { label: string; items: NavItem[] }[] = [
     label: "Book",
     items: [
       { icon: BookOpen, label: "Overview", href: "/spreads" },
-      { icon: Archive, label: "The archive", href: "/spreads/archive", count: 16 },
+      { icon: Archive, label: "The archive", href: "/spreads/archive", count: 27 },
       { icon: CalendarDays, label: "Calendar view", href: "#" },
     ],
   },
@@ -43,7 +43,7 @@ const sections: { label: string; items: NavItem[] }[] = [
     label: "Analytics",
     items: [
       { icon: TrendingUp, label: "Track record", href: "#" },
-      { icon: PieChart, label: "Strategy mix", href: "#" },
+      { icon: PieChart, label: "Activity mix", href: "#" },
       { icon: Activity, label: "Regime distribution", href: "#" },
     ],
   },
@@ -51,7 +51,7 @@ const sections: { label: string; items: NavItem[] }[] = [
     label: "Workshop",
     items: [
       { icon: FileText, label: "Notes & marginalia", href: "#", count: 47 },
-      { icon: Bookmark, label: "Saved views", href: "#", count: 7 },
+      { icon: Bookmark, label: "Saved views", href: "#", count: 11 },
       {
         icon: Plug,
         label: "Exchanges",
@@ -63,14 +63,18 @@ const sections: { label: string; items: NavItem[] }[] = [
 ];
 
 const savedViews: { label: string; href: string; count: number; tone?: "up" | "down" }[] = [
-  { label: "All closed", href: "/spreads/archive", count: 16 },
-  { label: "Winners", href: "/spreads/archive?outcome=winners", count: 14, tone: "up" },
-  { label: "Losers", href: "/spreads/archive?outcome=losers", count: 2, tone: "down" },
-  { label: "Cash-and-carry", href: "/spreads/archive?type=cash_carry", count: 5 },
-  { label: "Funding captures", href: "/spreads/archive?type=funding", count: 5 },
-  { label: "Cross-exchange", href: "/spreads/archive?type=cross_exchange", count: 3 },
-  { label: "Calendar spreads", href: "/spreads/archive?type=calendar", count: 2 },
-  { label: "DEX-CEX", href: "/spreads/archive?type=dex_cex", count: 1 },
+  { label: "All activity",     href: "/spreads/archive",                       count: 27 },
+  { label: "Spreads",          href: "/spreads/archive?activity=spread",        count: 16 },
+  { label: "Trades",           href: "/spreads/archive?activity=trade",         count: 5  },
+  { label: "Sales",            href: "/spreads/archive?activity=sale",          count: 3  },
+  { label: "Airdrops",         href: "/spreads/archive?activity=airdrop",       count: 3  },
+  { label: "Winners",          href: "/spreads/archive?outcome=winners",        count: 22, tone: "up" },
+  { label: "Losers",           href: "/spreads/archive?outcome=losers",         count: 5,  tone: "down" },
+  { label: "Cash-and-carry",   href: "/spreads/archive?activity=spread&type=cash_carry",      count: 5 },
+  { label: "Funding captures", href: "/spreads/archive?activity=spread&type=funding",         count: 5 },
+  { label: "Cross-exchange",   href: "/spreads/archive?activity=spread&type=cross_exchange",  count: 3 },
+  { label: "Calendar spreads", href: "/spreads/archive?activity=spread&type=calendar",        count: 2 },
+  { label: "DEX-CEX",          href: "/spreads/archive?activity=spread&type=dex_cex",         count: 1 },
 ];
 
 export function Sidebar() {
@@ -87,10 +91,10 @@ export function Sidebar() {
         </div>
         <div className="flex flex-col leading-tight">
           <span className="font-serif text-[13px] italic font-medium text-text">
-            Spread Journal
+            Crypto Journal
           </span>
           <span className="font-mono text-[9px] uppercase tracking-[0.22em] text-text-tertiary">
-            csj · v0.1
+            journal · v0.1
           </span>
         </div>
       </div>

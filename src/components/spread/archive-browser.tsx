@@ -25,10 +25,13 @@ import {
 } from "@/components/ui/table";
 import { SpreadListCard, type SpreadListItem } from "./spread-list-card";
 import {
-  type ArchiveRow,
+  type Activity,
+  type ActivityType,
+  type ActivityStatus,
   type Asset,
-  type SpreadStatus,
   type SpreadType,
+  type SpreadRow,
+  ACTIVITY_TYPE_LABELS,
   SPREAD_TYPE_LABELS,
   STATUS_STYLES,
   fmtCapital,
@@ -47,6 +50,8 @@ type ViewMode = "table" | "cards";
 
 type OutcomeFilter = "all" | "winners" | "losers";
 
+const ACTIVITY_TYPE_ORDER: ActivityType[] = ["spread", "trade", "sale", "airdrop"];
+
 const TYPE_ORDER: SpreadType[] = [
   "cash_carry",
   "calendar",
@@ -55,21 +60,41 @@ const TYPE_ORDER: SpreadType[] = [
   "dex_cex",
 ];
 
-const ASSET_ORDER: Asset[] = ["BTC", "ETH", "SOL", "PEPE"];
+const ASSET_ORDER: Asset[] = [
+  "BTC", "ETH", "SOL", "PEPE",
+  "EIGEN", "W", "ZETA", "JUP", "ARB", "PYTH",
+];
 
-const STATUS_ORDER: SpreadStatus[] = ["closed", "expired"];
+const STATUS_ORDER: ActivityStatus[] = ["closed", "expired", "claimed", "vested"];
 
-function rowToListItem(r: ArchiveRow): SpreadListItem {
+function describeActivity(a: Activity): string {
+  switch (a.type) {
+    case "spread":
+      return `${SPREAD_TYPE_LABELS[a.spreadType]} · ${a.venues}`;
+    case "trade":
+      return `${a.exchange} · ${a.instrument} · ${a.side}`;
+    case "sale":
+      return `${a.saleKind.toUpperCase()} · ${a.venue}`;
+    case "airdrop":
+      return `${a.protocol} · retro drop`;
+  }
+}
+
+function rowToListItem(r: Activity): SpreadListItem {
   return {
     serial: r.serial,
     name: r.name,
-    typeLabel: `${SPREAD_TYPE_LABELS[r.type]} · ${r.venues}`,
+    typeLabel: describeActivity(r),
     status: r.status,
     headline: r.headlineLabel,
-    headlineUnit: r.headlineUnit,
+    headlineUnit: r.headlineKind,
     tone: r.tone,
-    summary: `${fmtCapital(r.capital)} · ${r.daysLabel} · ${r.note}`,
+    summary:
+      r.type === "airdrop"
+        ? `${r.daysLabel} · ${r.note}`
+        : `${fmtCapital(r.capital)} · ${r.daysLabel} · ${r.note}`,
     href: r.href,
+    activityType: r.type,
   };
 }
 
@@ -80,11 +105,36 @@ function toggleSetValue<T>(set: Set<T>, value: T): Set<T> {
   return next;
 }
 
-export function ArchiveBrowser({ data }: { data: ArchiveRow[] }) {
+function rowAsset(a: Activity): Asset | null {
+  if (a.type === "spread" || a.type === "trade" || a.type === "sale" || a.type === "airdrop") {
+    return a.asset;
+  }
+  return null;
+}
+
+function rowSearchHaystack(a: Activity): string {
+  const parts: string[] = [a.name, a.serial, describeActivity(a), a.note];
+  if (a.type === "spread") parts.push(a.variant, a.venues);
+  if (a.type === "trade") parts.push(a.symbol, a.exchange);
+  if (a.type === "sale") parts.push(a.venue, a.saleKind);
+  if (a.type === "airdrop") parts.push(a.protocol);
+  return parts.join(" ").toLowerCase();
+}
+
+export function ArchiveBrowser({ data }: { data: Activity[] }) {
   const searchParams = useSearchParams();
 
-  // Seed filters from URL params so saved-view links work.
-  const initialTypes = React.useMemo(() => {
+  const initialActivityTypes = React.useMemo(() => {
+    const a = searchParams.get("activity");
+    if (!a) return new Set<ActivityType>();
+    return new Set(
+      a.split(",").filter((x): x is ActivityType =>
+        ACTIVITY_TYPE_ORDER.includes(x as ActivityType)
+      )
+    );
+  }, [searchParams]);
+
+  const initialSpreadTypes = React.useMemo(() => {
     const t = searchParams.get("type");
     if (!t) return new Set<SpreadType>();
     return new Set(
@@ -100,12 +150,12 @@ export function ArchiveBrowser({ data }: { data: ArchiveRow[] }) {
     return "all";
   }, [searchParams]);
 
-  const [typeFilters, setTypeFilters] =
-    React.useState<Set<SpreadType>>(initialTypes);
-  const [assetFilters, setAssetFilters] = React.useState<Set<Asset>>(
-    new Set()
-  );
-  const [statusFilters, setStatusFilters] = React.useState<Set<SpreadStatus>>(
+  const [activityFilters, setActivityFilters] =
+    React.useState<Set<ActivityType>>(initialActivityTypes);
+  const [spreadTypeFilters, setSpreadTypeFilters] =
+    React.useState<Set<SpreadType>>(initialSpreadTypes);
+  const [assetFilters, setAssetFilters] = React.useState<Set<Asset>>(new Set());
+  const [statusFilters, setStatusFilters] = React.useState<Set<ActivityStatus>>(
     new Set()
   );
   const [outcome, setOutcome] =
@@ -117,37 +167,44 @@ export function ArchiveBrowser({ data }: { data: ArchiveRow[] }) {
   const [view, setView] = React.useState<ViewMode>("table");
 
   const clearAll = () => {
-    setTypeFilters(new Set());
+    setActivityFilters(new Set());
+    setSpreadTypeFilters(new Set());
     setAssetFilters(new Set());
     setStatusFilters(new Set());
     setOutcome("all");
     setSearch("");
   };
 
+  // Spread-subtype chips only apply when Spread is the (or only) active
+  // activity scope — they're meaningless for Trades / Sales / Airdrops.
+  const spreadSubtypeApplicable =
+    activityFilters.size === 0 || activityFilters.has("spread");
+
   const filtered = React.useMemo(() => {
     let rows = data;
-    if (typeFilters.size > 0)
-      rows = rows.filter((r) => typeFilters.has(r.type));
-    if (assetFilters.size > 0)
-      rows = rows.filter((r) => assetFilters.has(r.asset));
+    if (activityFilters.size > 0)
+      rows = rows.filter((r) => activityFilters.has(r.type));
+    if (spreadSubtypeApplicable && spreadTypeFilters.size > 0) {
+      rows = rows.filter(
+        (r) => r.type !== "spread" || spreadTypeFilters.has(r.spreadType)
+      );
+    }
+    if (assetFilters.size > 0) {
+      rows = rows.filter((r) => {
+        const a = rowAsset(r);
+        return a !== null && assetFilters.has(a);
+      });
+    }
     if (statusFilters.size > 0)
       rows = rows.filter((r) => statusFilters.has(r.status));
     if (outcome === "winners") rows = rows.filter((r) => r.netPnl > 0);
     if (outcome === "losers") rows = rows.filter((r) => r.netPnl < 0);
     const q = search.trim().toLowerCase();
     if (q) {
-      rows = rows.filter(
-        (r) =>
-          r.name.toLowerCase().includes(q) ||
-          r.serial.toLowerCase().includes(q) ||
-          r.venues.toLowerCase().includes(q) ||
-          SPREAD_TYPE_LABELS[r.type].toLowerCase().includes(q) ||
-          r.variant.toLowerCase().includes(q) ||
-          r.note.toLowerCase().includes(q)
-      );
+      rows = rows.filter((r) => rowSearchHaystack(r).includes(q));
     }
     return rows;
-  }, [data, typeFilters, assetFilters, statusFilters, outcome, search]);
+  }, [data, activityFilters, spreadTypeFilters, spreadSubtypeApplicable, assetFilters, statusFilters, outcome, search]);
 
   const sorted = React.useMemo(() => {
     const dir = sort.dir === "asc" ? 1 : -1;
@@ -176,32 +233,37 @@ export function ArchiveBrowser({ data }: { data: ArchiveRow[] }) {
     const winRate = sorted.length ? (winners / sorted.length) * 100 : 0;
     const cap = sorted.reduce((s, r) => s + r.capital, 0);
     const avgPerTrade = sorted.length ? net / sorted.length : 0;
-    return {
-      count: sorted.length,
-      net,
-      winners,
-      losers,
-      winRate,
-      cap,
-      avgPerTrade,
-    };
+    return { count: sorted.length, net, winners, losers, winRate, cap, avgPerTrade };
   }, [sorted]);
 
-  // Totals across the WHOLE dataset for filter-chip counts.
-  const typeCounts = React.useMemo(() => {
-    const counts = new Map<SpreadType, number>();
+  const activityCounts = React.useMemo(() => {
+    const counts = new Map<ActivityType, number>();
     data.forEach((r) => counts.set(r.type, (counts.get(r.type) ?? 0) + 1));
+    return counts;
+  }, [data]);
+
+  const spreadSubtypeCounts = React.useMemo(() => {
+    const counts = new Map<SpreadType, number>();
+    data.forEach((r) => {
+      if (r.type === "spread") {
+        const s = (r as SpreadRow).spreadType;
+        counts.set(s, (counts.get(s) ?? 0) + 1);
+      }
+    });
     return counts;
   }, [data]);
 
   const assetCounts = React.useMemo(() => {
     const counts = new Map<Asset, number>();
-    data.forEach((r) => counts.set(r.asset, (counts.get(r.asset) ?? 0) + 1));
+    data.forEach((r) => {
+      const a = rowAsset(r);
+      if (a) counts.set(a, (counts.get(a) ?? 0) + 1);
+    });
     return counts;
   }, [data]);
 
   const statusCounts = React.useMemo(() => {
-    const counts = new Map<SpreadStatus, number>();
+    const counts = new Map<ActivityStatus, number>();
     data.forEach((r) =>
       counts.set(r.status, (counts.get(r.status) ?? 0) + 1)
     );
@@ -217,7 +279,8 @@ export function ArchiveBrowser({ data }: { data: ArchiveRow[] }) {
   );
 
   const filtersActive =
-    typeFilters.size > 0 ||
+    activityFilters.size > 0 ||
+    spreadTypeFilters.size > 0 ||
     assetFilters.size > 0 ||
     statusFilters.size > 0 ||
     outcome !== "all" ||
@@ -240,7 +303,7 @@ export function ArchiveBrowser({ data }: { data: ArchiveRow[] }) {
             The archive
           </h1>
           <p className="mt-2 font-serif text-sm italic text-text-tertiary">
-            {data.length} spreads · Jan 12 → May 14, 2026 · every trade ever
+            {data.length} activities · {activityCounts.get("spread") ?? 0} spreads · {activityCounts.get("trade") ?? 0} trades · {activityCounts.get("sale") ?? 0} sales · {activityCounts.get("airdrop") ?? 0} airdrops
           </p>
         </div>
 
@@ -250,7 +313,7 @@ export function ArchiveBrowser({ data }: { data: ArchiveRow[] }) {
             <input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search trade, venue, note…"
+              placeholder="Search activity, venue, note…"
               className="w-56 bg-transparent text-[12px] text-text placeholder:text-text-tertiary focus:outline-none"
             />
             {search && (
@@ -302,16 +365,31 @@ export function ArchiveBrowser({ data }: { data: ArchiveRow[] }) {
       <section className="border-b border-border bg-surface/60 px-8 py-4 lg:px-12">
         <div className="flex flex-col gap-3">
           <FilterRow
-            label="Type"
-            chips={TYPE_ORDER.map((t) => ({
+            label="Activity"
+            chips={ACTIVITY_TYPE_ORDER.filter(
+              (t) => (activityCounts.get(t) ?? 0) > 0
+            ).map((t) => ({
               key: t,
-              label: SPREAD_TYPE_LABELS[t],
-              count: typeCounts.get(t) ?? 0,
-              active: typeFilters.has(t),
+              label: ACTIVITY_TYPE_LABELS[t],
+              count: activityCounts.get(t) ?? 0,
+              active: activityFilters.has(t),
               onClick: () =>
-                setTypeFilters((s) => toggleSetValue(s, t)),
-            })).filter((c) => c.count > 0)}
+                setActivityFilters((s) => toggleSetValue(s, t)),
+            }))}
           />
+          {spreadSubtypeApplicable && (
+            <FilterRow
+              label="Type"
+              chips={TYPE_ORDER.map((t) => ({
+                key: t,
+                label: SPREAD_TYPE_LABELS[t],
+                count: spreadSubtypeCounts.get(t) ?? 0,
+                active: spreadTypeFilters.has(t),
+                onClick: () =>
+                  setSpreadTypeFilters((s) => toggleSetValue(s, t)),
+              })).filter((c) => c.count > 0)}
+            />
+          )}
           <FilterRow
             label="Asset"
             chips={ASSET_ORDER.filter(
@@ -378,7 +456,7 @@ export function ArchiveBrowser({ data }: { data: ArchiveRow[] }) {
         <StatCell
           label="Results"
           value={`${stats.count}`}
-          sub={`of ${data.length} spreads`}
+          sub={`of ${data.length} activities`}
         />
         <StatCell
           label="Net P&L"
@@ -392,7 +470,7 @@ export function ArchiveBrowser({ data }: { data: ArchiveRow[] }) {
         />
         <StatCell label="Capital used" value={fmtCapital(stats.cap)} />
         <StatCell
-          label="Avg / trade"
+          label="Avg / activity"
           value={fmtUsd(stats.avgPerTrade, true)}
           tone={stats.avgPerTrade >= 0 ? "up" : "down"}
         />
@@ -407,7 +485,7 @@ export function ArchiveBrowser({ data }: { data: ArchiveRow[] }) {
         ) : (
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
             {sorted.map((r) => (
-              <SpreadListCard key={r.serial} item={rowToListItem(r)} />
+              <SpreadListCard key={r.id} item={rowToListItem(r)} />
             ))}
           </div>
         )}
@@ -422,7 +500,7 @@ export function ArchiveBrowser({ data }: { data: ArchiveRow[] }) {
           <Link href="/spreads" className="hover:text-text">
             ← back to The book
           </Link>
-          <span>spread journal · v0.1 · since Jan 12, 2026</span>
+          <span>crypto journal · v0.1 · since Jan 12, 2026</span>
         </footer>
       </section>
     </div>
@@ -555,7 +633,7 @@ function ArchiveTable({
   sort,
   onSort,
 }: {
-  rows: ArchiveRow[];
+  rows: Activity[];
   sort: { key: SortKey; dir: "asc" | "desc" };
   onSort: (key: SortKey) => void;
 }) {
@@ -568,7 +646,7 @@ function ArchiveTable({
               #
             </SortableHeader>
             <TableHead className="font-serif text-[10px] font-semibold uppercase tracking-[0.16em] text-text-tertiary">
-              Trade
+              Activity
             </TableHead>
             <TableHead className="font-serif text-[10px] font-semibold uppercase tracking-[0.16em] text-text-tertiary">
               Status
@@ -597,7 +675,7 @@ function ArchiveTable({
         </TableHeader>
         <TableBody>
           {rows.map((r) => (
-            <ArchiveTableRow key={r.serial} row={r} />
+            <ArchiveTableRow key={r.id} row={r} />
           ))}
         </TableBody>
       </Table>
@@ -643,10 +721,11 @@ function SortableHeader({
   );
 }
 
-function ArchiveTableRow({ row }: { row: ArchiveRow }) {
+function ArchiveTableRow({ row }: { row: Activity }) {
   const router = useRouter();
   const status = STATUS_STYLES[row.status];
   const toneClass = row.tone === "up" ? "text-up" : "text-down";
+  const subtitle = describeActivity(row);
 
   return (
     <TableRow
@@ -674,7 +753,7 @@ function ArchiveTableRow({ row }: { row: ArchiveRow }) {
             {row.name}
           </Link>
           <span className="font-mono text-[10px] text-text-tertiary">
-            {SPREAD_TYPE_LABELS[row.type]} · {row.variant} · {row.venues}
+            <span className="mr-1.5 text-text-tertiary/70">{row.type.toUpperCase()}</span>· {subtitle}
           </span>
         </div>
       </TableCell>
@@ -687,7 +766,7 @@ function ArchiveTableRow({ row }: { row: ArchiveRow }) {
         </span>
       </TableCell>
       <TableCell className="text-right font-mono tabular-nums text-[12px] text-text">
-        {fmtCapital(row.capital)}
+        {row.capital > 0 ? fmtCapital(row.capital) : "—"}
       </TableCell>
       <TableCell className="text-right font-mono tabular-nums text-[12px] text-text-secondary">
         {row.daysLabel}
@@ -701,7 +780,7 @@ function ArchiveTableRow({ row }: { row: ArchiveRow }) {
             {row.headlineLabel}
           </span>
           <span className="mt-0.5 font-mono text-[9px] uppercase tracking-[0.14em] text-text-tertiary">
-            {row.headlineUnit}
+            {row.headlineKind}
           </span>
         </div>
       </TableCell>
