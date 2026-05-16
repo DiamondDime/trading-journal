@@ -1,0 +1,259 @@
+"use client";
+
+import * as React from "react";
+import Link from "next/link";
+import { ArrowRight, Plug } from "lucide-react";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import type { ImportedTradeFill } from "@/lib/data/exchange-fills-mock";
+import { cn } from "@/lib/utils";
+
+interface ManualBuilderProps {
+  fills: ImportedTradeFill[];
+}
+
+function fmtPrice(n: number) {
+  if (n < 1) return n.toLocaleString("en-US", { maximumSignificantDigits: 4 });
+  return n.toLocaleString("en-US", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+}
+
+function fmtQty(n: number) {
+  if (n >= 1_000_000) return n.toExponential(2);
+  if (n >= 1000) return n.toLocaleString("en-US", { maximumFractionDigits: 0 });
+  if (n < 1) return n.toLocaleString("en-US", { maximumSignificantDigits: 4 });
+  return n.toLocaleString("en-US", { maximumFractionDigits: 4 });
+}
+
+function fmtUsd(n: number, signed = false) {
+  const abs = Math.abs(n).toLocaleString("en-US", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+  const sign = signed ? (n >= 0 ? "+" : "−") : n < 0 ? "−" : "";
+  return `${sign}$${abs}`;
+}
+
+/**
+ * Right-pane builder. Renders a multi-select table of imported fills; the
+ * sticky bottom CTA enables once ≥2 legs are checked and navigates to the
+ * type-picker step with the selection encoded in `?legs=`.
+ *
+ * Client component because the row checkboxes need React state — every other
+ * surface in this wizard is server-rendered.
+ */
+export function ManualBuilder({ fills }: ManualBuilderProps) {
+  const [selected, setSelected] = React.useState<Set<string>>(new Set());
+
+  const toggle = React.useCallback((id: string) => {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }, []);
+
+  const count = selected.size;
+  const canContinue = count >= 2;
+  const params = new URLSearchParams();
+  // Preserve insertion order for nicer URLs in the next step.
+  for (const id of selected) params.append("legs", id);
+  params.set("matcher", "manual");
+  const continueHref = `/add/spread/type?${params.toString()}`;
+
+  return (
+    <div className="flex h-full flex-col">
+      <header className="mb-3 flex items-baseline justify-between">
+        <div>
+          <h3 className="font-serif text-[15px] font-medium text-text">
+            Build it yourself
+          </h3>
+          <p className="mt-0.5 font-serif text-[12px] italic text-text-tertiary">
+            Tick two or more fills to compose them into a spread.
+          </p>
+        </div>
+        <span
+          aria-live="polite"
+          className="font-mono text-[10px] uppercase tracking-[0.14em] text-text-tertiary"
+        >
+          {count} selected
+        </span>
+      </header>
+
+      <div className="overflow-hidden rounded-md border border-border bg-surface">
+        <Table>
+          <TableHeader>
+            <TableRow className="hover:bg-transparent">
+              <TableHead
+                scope="col"
+                className="w-8 font-serif text-[10px] font-semibold uppercase tracking-[0.16em] text-text-tertiary"
+              >
+                <span className="sr-only">Selected</span>
+              </TableHead>
+              <TableHead
+                scope="col"
+                className="font-serif text-[10px] font-semibold uppercase tracking-[0.16em] text-text-tertiary"
+              >
+                Symbol
+              </TableHead>
+              <TableHead
+                scope="col"
+                className="font-serif text-[10px] font-semibold uppercase tracking-[0.16em] text-text-tertiary"
+              >
+                Side
+              </TableHead>
+              <TableHead
+                scope="col"
+                className="text-right font-serif text-[10px] font-semibold uppercase tracking-[0.16em] text-text-tertiary"
+              >
+                Qty
+              </TableHead>
+              <TableHead
+                scope="col"
+                className="text-right font-serif text-[10px] font-semibold uppercase tracking-[0.16em] text-text-tertiary"
+              >
+                Entry → Exit
+              </TableHead>
+              <TableHead
+                scope="col"
+                className="font-serif text-[10px] font-semibold uppercase tracking-[0.16em] text-text-tertiary"
+              >
+                Closed
+              </TableHead>
+              <TableHead
+                scope="col"
+                className="text-right font-serif text-[10px] font-semibold uppercase tracking-[0.16em] text-text-tertiary"
+              >
+                P&amp;L
+              </TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {fills.map((f) => {
+              const checked = selected.has(f.id);
+              const rowId = `manual-fill-${f.id}`;
+              return (
+                <TableRow
+                  key={f.id}
+                  className={cn(
+                    "cursor-pointer transition-colors",
+                    checked ? "bg-subtle hover:bg-subtle" : "hover:bg-subtle/60"
+                  )}
+                  onClick={() => toggle(f.id)}
+                  aria-selected={checked}
+                >
+                  <TableCell className="py-2">
+                    <input
+                      id={rowId}
+                      type="checkbox"
+                      checked={checked}
+                      onChange={() => toggle(f.id)}
+                      onClick={(e) => e.stopPropagation()}
+                      aria-label={`Select ${f.symbol} ${f.side} on ${f.exchange}`}
+                      className="h-3.5 w-3.5 rounded border-border accent-signature"
+                    />
+                  </TableCell>
+                  <TableCell className="py-2">
+                    <label
+                      htmlFor={rowId}
+                      className="flex cursor-pointer flex-col gap-0.5"
+                    >
+                      <span className="font-serif text-[13px] font-medium text-text">
+                        {f.symbol}
+                      </span>
+                      <span className="font-mono text-[9px] uppercase tracking-[0.12em] text-text-tertiary">
+                        {f.exchange} · {f.instrument}
+                        {f.expiry ? ` · ${f.expiry}` : ""}
+                      </span>
+                    </label>
+                  </TableCell>
+                  <TableCell className="py-2">
+                    <span
+                      className={cn(
+                        "font-mono text-[10px] uppercase tracking-[0.14em]",
+                        f.side === "long" ? "text-up" : "text-down"
+                      )}
+                    >
+                      {f.side}
+                    </span>
+                  </TableCell>
+                  <TableCell className="py-2 text-right font-mono text-[11px] tabular-nums text-text-secondary">
+                    {fmtQty(f.qty)}
+                  </TableCell>
+                  <TableCell className="py-2 text-right">
+                    <span className="font-mono text-[11px] tabular-nums text-text">
+                      {fmtPrice(f.entryPrice)}
+                    </span>
+                    <span className="mx-1 text-text-tertiary">→</span>
+                    <span className="font-mono text-[11px] tabular-nums text-text-secondary">
+                      {fmtPrice(f.exitPrice)}
+                    </span>
+                  </TableCell>
+                  <TableCell className="py-2 font-serif text-[12px] italic text-text-secondary">
+                    {f.closedLabel}
+                  </TableCell>
+                  <TableCell className="py-2 text-right">
+                    <span
+                      className={cn(
+                        "font-mono text-[11px] font-medium tabular-nums",
+                        f.tone === "up" ? "text-up" : "text-down"
+                      )}
+                    >
+                      {fmtUsd(f.netPnl, true)}
+                    </span>
+                  </TableCell>
+                </TableRow>
+              );
+            })}
+          </TableBody>
+        </Table>
+      </div>
+
+      {/* Sticky CTA — shown once anything is selected, becomes active at ≥2. */}
+      <div
+        className={cn(
+          "sticky bottom-0 mt-4 rounded-md border border-border bg-surface/95 p-3 backdrop-blur transition-opacity",
+          count === 0 && "opacity-0 pointer-events-none"
+        )}
+        aria-hidden={count === 0}
+      >
+        <div className="flex items-center justify-between gap-3">
+          <p
+            className="font-mono text-[10px] uppercase tracking-[0.16em] text-text-tertiary"
+            aria-live="polite"
+          >
+            {count} {count === 1 ? "leg" : "legs"} selected
+            {count < 2 && (
+              <span className="ml-2 text-text-disabled">
+                · select at least one more
+              </span>
+            )}
+          </p>
+          {canContinue ? (
+            <Link
+              href={continueHref}
+              className="inline-flex items-center gap-2 rounded-md border border-text bg-text px-4 py-2 font-mono text-[11px] uppercase tracking-[0.16em] text-app transition-colors hover:bg-text-secondary"
+            >
+              Use selected legs
+              <ArrowRight className="h-3 w-3" />
+            </Link>
+          ) : (
+            <span className="inline-flex items-center gap-2 rounded-md border border-border bg-subtle px-4 py-2 font-mono text-[11px] uppercase tracking-[0.16em] text-text-disabled">
+              <Plug className="h-3 w-3" />
+              Need ≥2 legs
+            </span>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
