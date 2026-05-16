@@ -22,6 +22,17 @@ export type SyncJobId          = string & { readonly __brand: 'SyncJobId' };
 export type ExternalTradeId    = string & { readonly __brand: 'ExternalTradeId' };
 export type ExternalOrderId    = string & { readonly __brand: 'ExternalOrderId' };
 
+// ---------- Activity (v2) branded IDs ----------
+// The supertype `activity` row's id. Each subtype table (activity_spread,
+// activity_trade, activity_sale, activity_airdrop) uses the SAME UUID as its
+// primary key — there's a strict 1:1 between activity and its subtype row.
+// So the subtype IDs are type aliases for ActivityId rather than distinct brands.
+export type ActivityId         = string & { readonly __brand: 'ActivityId' };
+export type ActivitySpreadId   = ActivityId;
+export type ActivityTradeId    = ActivityId;
+export type ActivitySaleId     = ActivityId;
+export type ActivityAirdropId  = ActivityId;
+
 // ---------- Money / quantity primitives ----------
 /** Arbitrary-precision decimal as string. f64 silently rounds at 15-16 sig digits. */
 export type Decimal = string;
@@ -164,6 +175,56 @@ export type FeeKind = typeof FeeKind[keyof typeof FeeKind];
 
 export const FundingDirection = { RECEIVED: 'received', PAID: 'paid' } as const;
 export type FundingDirection = typeof FundingDirection[keyof typeof FundingDirection];
+
+// ---------- Activity (v2) enums ----------
+// Top-level discriminator. Each activity row joins to exactly one subtype table
+// (activity_spread / activity_trade / activity_sale / activity_airdrop) based
+// on this value.
+export const ActivityType = {
+  SPREAD:  'spread',
+  TRADE:   'trade',
+  SALE:    'sale',
+  AIRDROP: 'airdrop',
+} as const;
+export type ActivityType = typeof ActivityType[keyof typeof ActivityType];
+
+// Shared lifecycle state space across all activity types. Each subtype uses a
+// subset — see the chk_activity_status_by_type CHECK constraint in the SQL.
+//   spread:  open | winding_down | orphaned | expired | closed
+//   trade:   open | liquidated | closed
+//   sale:    pending | vesting | closed
+//   airdrop: pending | claimed | closed
+export const ActivityStatus = {
+  PENDING:      'pending',       // sale: allocation paid pre-TGE; airdrop: eligible not claimed
+  OPEN:         'open',          // trade: position active; spread: legs open
+  WINDING_DOWN: 'winding_down',  // spread: some legs closed
+  ORPHANED:     'orphaned',      // spread: one leg open with no hedge (alert state)
+  VESTING:      'vesting',       // sale: some claimed, more to vest
+  CLAIMED:      'claimed',       // airdrop: tokens received
+  LIQUIDATED:   'liquidated',    // trade: position was liquidated
+  EXPIRED:      'expired',       // spread: dated future settled
+  CLOSED:       'closed',        // terminal: fully done
+} as const;
+export type ActivityStatus = typeof ActivityStatus[keyof typeof ActivityStatus];
+
+// Sub-discriminator for activity_sale.sale_kind.
+export const SaleKind = {
+  IDO:       'ido',
+  LAUNCHPAD: 'launchpad',
+  PREMARKET: 'premarket',
+  OTC:       'otc',
+} as const;
+export type SaleKind = typeof SaleKind[keyof typeof SaleKind];
+
+// Drives the unified-feed card headline. v_activity_feed emits one of these per
+// row to tell the renderer how to format the headline_value column.
+//   realized_apr     → spread, trade
+//   mtm_multiplier   → sale, airdrop (current_value / cost_basis)
+export const HeadlineKind = {
+  REALIZED_APR:    'realized_apr',
+  MTM_MULTIPLIER:  'mtm_multiplier',
+} as const;
+export type HeadlineKind = typeof HeadlineKind[keyof typeof HeadlineKind];
 
 // ---------- Instrument descriptor ----------
 export interface Instrument {
@@ -521,6 +582,180 @@ export interface AllowlistEntry {
   invited_at:  Iso8601;
   redeemed_at: Iso8601 | null;
   notes:       string | null;
+}
+
+// ---------- Activity (v2) JSON shapes ----------
+
+/**
+ * activity_sale.vesting_schedule (jsonb). Discriminated by `kind`.
+ * - all_at_tge:         100% unlocked at TGE.
+ * - tge_plus_linear:    tge_pct unlocked at TGE, remainder linear over linear_days.
+ * - cliff_plus_linear:  optional tge_pct at TGE, then cliff_days no unlock, then linear over linear_days.
+ * - custom:             explicit unlock schedule as date/pct entries.
+ */
+export type VestingSchedule =
+  | { kind: 'all_at_tge' }
+  | { kind: 'tge_plus_linear'; tge_pct: number; linear_days: number }
+  | { kind: 'cliff_plus_linear'; cliff_days: number; linear_days: number; tge_pct?: number }
+  | { kind: 'custom'; entries: Array<{ date: Iso8601; pct: number }> };
+
+/**
+ * One entry in activity_sale.claim_events (jsonb array). Records a vesting
+ * claim transaction. tx_hash is optional for off-chain venues.
+ */
+export interface ClaimEvent {
+  date:     Iso8601;
+  qty:      Decimal;
+  tx_hash?: string;
+}
+
+// ---------- Activity (v2) interfaces ----------
+
+/**
+ * Supertype for all journaled activities. Joins to exactly one of
+ * activity_spread / activity_trade / activity_sale / activity_airdrop based on
+ * `type`. Holds shared lifecycle + denormalized aggregate columns.
+ */
+export interface Activity {
+  id:                   ActivityId;
+  user_id:              UserId;
+  type:                 ActivityType;
+  status:               ActivityStatus;
+  name:                 string;
+  opened_at:            Iso8601 | null;
+  closed_at:            Iso8601 | null;
+  capital_deployed_usd: Decimal | null;
+  realized_pnl_usd:     Decimal | null;
+  unrealized_pnl_usd:   Decimal | null;
+  fees_usd:             Decimal;
+  net_pnl_usd:          Decimal | null;
+  regime_tags:          string[];
+  custom_tags:          string[];
+  created_at:           Iso8601;
+  updated_at:           Iso8601;
+  deleted_at:           Iso8601 | null;
+}
+
+/**
+ * Spread subtype columns. JOIN to Activity for shared fields (status, name,
+ * opened_at, closed_at, capital, PnL aggregates, tags, timestamps). All
+ * spread-specific fields live here.
+ */
+export interface ActivitySpread {
+  activity_id:                     ActivitySpreadId;
+  spread_type:                     SpreadType;
+  variant:                         SpreadVariant | null;
+  origin:                          SpreadOrigin;
+  primary_base:                    string;
+  match_confidence:                number | null;
+  funding_pnl_quote:               Decimal;
+  apr:                             Decimal | null;
+  exchanges:                       Exchange[];
+  leg_count:                       number;
+  hold_duration_ms:                number | null;
+  source:                          'user' | 'system';
+  system_proposal_metadata:        Record<string, unknown> | null;
+  // Open-intent fields (trader's expectations at open; used in post-trade review)
+  target_apr_at_open:              Decimal | null;
+  expected_holding_days:           number  | null;
+  expected_basis_convergence_date: Iso8601 | null;
+  exit_plan:                       string  | null;
+  borrow_cost_assumed_bps:         Decimal | null;
+  close_threshold_apr:             Decimal | null;
+  close_threshold_periods:         number  | null;
+  max_gas_budget_usd:              Decimal | null;
+  slippage_tolerance_bps:          Decimal | null;
+}
+
+/**
+ * Trade subtype columns. A journaled Position promoted to a Trade activity
+ * with thesis/exit-plan notes. position_id is 1:1 with the underlying Position.
+ */
+export interface ActivityTrade {
+  activity_id:     ActivityTradeId;
+  position_id:     PositionId;
+  symbol:          string;
+  exchange:        Exchange;
+  instrument_kind: InstrumentKind;
+  side:            PositionSide;
+  entry_thesis:    string | null;
+  exit_plan:       string | null;
+  target_price:    Decimal | null;
+  stop_price:      Decimal | null;
+  qty:             Decimal;
+  avg_entry_price: Decimal;
+  avg_exit_price:  Decimal | null;
+  realized_apr:    Decimal | null;
+}
+
+/**
+ * Sale subtype columns. IDO / launchpad / premarket / OTC token sale.
+ * Always manually entered. effective_price_usd is a generated column
+ * (usd_paid / tokens_allocated). vesting_schedule + claim_events are jsonb.
+ */
+export interface ActivitySale {
+  activity_id:         ActivitySaleId;
+  token_symbol:        string;
+  token_name:          string | null;
+  token_chain:         string | null;
+  sale_kind:           SaleKind;
+  sale_venue:          string | null;
+  sale_date:           Iso8601;
+  usd_paid:            Decimal;
+  tokens_allocated:    Decimal;
+  effective_price_usd: Decimal | null;
+  vesting_schedule:    VestingSchedule | null;
+  claim_events:        ClaimEvent[];
+  total_claimed:       Decimal;
+  remaining_locked:    Decimal | null;
+}
+
+/**
+ * Airdrop subtype columns. Tokens received from a protocol drop.
+ * Always manually entered. current_price_usd + current_price_at are refreshed
+ * over time so the MTM multiplier on v_activity_feed stays current.
+ */
+export interface ActivityAirdrop {
+  activity_id:          ActivityAirdropId;
+  token_symbol:         string;
+  token_name:           string | null;
+  token_chain:          string | null;
+  protocol:             string;
+  snapshot_date:        Iso8601 | null;
+  eligibility_reason:   string | null;
+  qty_received:         Decimal;
+  claim_date:           Iso8601 | null;
+  claim_tx_hash:        string | null;
+  value_at_receipt_usd: Decimal | null;
+  current_price_usd:    Decimal | null;
+  current_price_at:     Iso8601 | null;
+}
+
+/**
+ * Output shape of the v_activity_feed view. One row per non-deleted activity
+ * with polymorphic headline_value + headline_kind columns driving the unified
+ * feed's activity-agnostic card rendering, plus a primary_symbol hint.
+ */
+export interface ActivityFeedRow {
+  id:                   ActivityId;
+  user_id:              UserId;
+  type:                 ActivityType;
+  status:               ActivityStatus;
+  name:                 string;
+  opened_at:            Iso8601 | null;
+  closed_at:            Iso8601 | null;
+  capital_deployed_usd: Decimal | null;
+  realized_pnl_usd:     Decimal | null;
+  unrealized_pnl_usd:   Decimal | null;
+  fees_usd:             Decimal;
+  net_pnl_usd:          Decimal | null;
+  regime_tags:          string[];
+  custom_tags:          string[];
+  headline_value:       Decimal | null;
+  headline_kind:        HeadlineKind;
+  primary_symbol:       string | null;
+  created_at:           Iso8601;
+  updated_at:           Iso8601;
 }
 
 // ---------- Casting helpers ----------

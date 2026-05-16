@@ -9,7 +9,7 @@ from __future__ import annotations
 from datetime import datetime
 from decimal import Decimal
 from enum import Enum
-from typing import Any, Literal
+from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -293,3 +293,287 @@ class RetryPolicy(CanonicalBase):
             AdapterErrorCode.UNKNOWN,
         ]
     )
+
+
+# ---------------------------------------------------------------------------
+# v2 — Activity supertype + per-type subtypes
+# (mirrors supabase/migrations/20260516120000_v2_activity_supertype.sql)
+# ---------------------------------------------------------------------------
+
+
+class ActivityType(str, Enum):
+    """Top-level discriminator for a journaled activity.
+
+    Joins to exactly one of activity_spread / activity_trade / activity_sale /
+    activity_airdrop based on this value.
+    """
+
+    SPREAD = "spread"
+    TRADE = "trade"
+    SALE = "sale"
+    AIRDROP = "airdrop"
+
+
+class ActivityStatus(str, Enum):
+    """Shared lifecycle states across all activity types.
+
+    Each activity type uses a subset (see chk_activity_status_by_type in the
+    migration). The DB enforces the valid (type, status) pairs.
+    """
+
+    PENDING = "pending"              # sale: paid pre-TGE; airdrop: eligible not claimed
+    OPEN = "open"                    # trade: active; spread: legs open
+    WINDING_DOWN = "winding_down"    # spread: some legs closed
+    ORPHANED = "orphaned"            # spread: one leg open with no hedge
+    VESTING = "vesting"              # sale: some claimed, more to vest
+    CLAIMED = "claimed"              # airdrop: tokens received
+    LIQUIDATED = "liquidated"        # trade: position liquidated
+    EXPIRED = "expired"              # spread: dated future settled
+    CLOSED = "closed"                # terminal: fully done
+
+
+class SaleKind(str, Enum):
+    """Kind of token sale event captured by an activity_sale row."""
+
+    IDO = "ido"
+    LAUNCHPAD = "launchpad"
+    PREMARKET = "premarket"
+    OTC = "otc"
+
+
+class HeadlineKind(str, Enum):
+    """Discriminator for v_activity_feed.headline_value.
+
+    Drives activity-agnostic card rendering: realized_apr is a fraction
+    (e.g. 0.25 = 25% APR); mtm_multiplier is a ratio (e.g. 2.0 = 2x).
+    """
+
+    REALIZED_APR = "realized_apr"
+    MTM_MULTIPLIER = "mtm_multiplier"
+
+
+# --- Vesting schedule (discriminated union) --------------------------------
+
+
+class _VestingBase(CanonicalBase):
+    """Base for all vesting-schedule variants. Discriminated on `kind`."""
+
+
+class AllAtTge(_VestingBase):
+    """Vesting: 100% unlocked at TGE (no cliff, no linear)."""
+
+    kind: Literal["all_at_tge"] = "all_at_tge"
+
+
+class TgePlusLinear(_VestingBase):
+    """Vesting: `tge_pct` unlocked at TGE, remainder linear over `linear_days`."""
+
+    kind: Literal["tge_plus_linear"] = "tge_plus_linear"
+    tge_pct: Decimal
+    linear_days: int
+
+
+class CliffPlusLinear(_VestingBase):
+    """Vesting: nothing for `cliff_days`, then linear over `linear_days`.
+
+    `tge_pct` optionally unlocks a slice at TGE before the cliff begins.
+    """
+
+    kind: Literal["cliff_plus_linear"] = "cliff_plus_linear"
+    cliff_days: int
+    linear_days: int
+    tge_pct: Decimal | None = None
+
+
+class CustomVestingEntry(CanonicalBase):
+    """One step of a hand-crafted vesting schedule: a date and a fraction."""
+
+    date: datetime
+    pct: Decimal
+
+
+class CustomVesting(_VestingBase):
+    """Vesting: an explicit list of (date, pct) unlock steps."""
+
+    kind: Literal["custom"] = "custom"
+    entries: list[CustomVestingEntry]
+
+
+VestingSchedule = Annotated[
+    AllAtTge | TgePlusLinear | CliffPlusLinear | CustomVesting,
+    Field(discriminator="kind"),
+]
+
+
+class ClaimEvent(CanonicalBase):
+    """A single token-claim event recorded against an activity_sale."""
+
+    date: datetime
+    qty: Decimal
+    tx_hash: str | None = None
+
+
+# --- Supertype --------------------------------------------------------------
+
+
+class Activity(CanonicalBase):
+    """Supertype row from `public.activity`.
+
+    Holds the shared fields (type, status, lifecycle dates, denormalized PnL
+    aggregates, tags). Joins 1:1 with exactly one subtype table based on
+    `type`.
+    """
+
+    id: str
+    user_id: str
+    type: ActivityType
+    status: ActivityStatus
+    name: str
+    opened_at: datetime | None = None
+    closed_at: datetime | None = None
+    capital_deployed_usd: Decimal | None = None
+    realized_pnl_usd: Decimal | None = None
+    unrealized_pnl_usd: Decimal | None = None
+    fees_usd: Decimal = Decimal("0")
+    net_pnl_usd: Decimal | None = None
+    regime_tags: list[str] = Field(default_factory=list)
+    custom_tags: list[str] = Field(default_factory=list)
+    created_at: datetime
+    updated_at: datetime
+    deleted_at: datetime | None = None
+
+
+# --- Subtypes ---------------------------------------------------------------
+
+
+class ActivitySpread(CanonicalBase):
+    """Spread-specific columns from `public.activity_spread`.
+
+    Subtype-only fields; the shared columns (status, name, opened_at, PnL,
+    tags, etc.) live on the `Activity` row referenced by `activity_id`.
+    """
+
+    activity_id: str
+    spread_type: SpreadType
+    variant: SpreadVariant | None = None
+    origin: Literal["system", "user"]
+    primary_base: str | None = None
+    match_confidence: Decimal | None = None
+    funding_pnl_quote: Decimal | None = None
+    apr: Decimal | None = None
+    exchanges: list[Exchange] = Field(default_factory=list)
+    leg_count: int | None = None
+    hold_duration_ms: int | None = None
+    source: str | None = None
+    system_proposal_metadata: dict[str, Any] | None = None
+    target_apr_at_open: Decimal | None = None
+    expected_holding_days: int | None = None
+    expected_basis_convergence_date: datetime | None = None
+    exit_plan: str | None = None
+    borrow_cost_assumed_bps: Decimal | None = None
+    close_threshold_apr: Decimal | None = None
+    close_threshold_periods: int | None = None
+    max_gas_budget_usd: Decimal | None = None
+    slippage_tolerance_bps: Decimal | None = None
+
+
+class ActivityTrade(CanonicalBase):
+    """Trade-specific columns from `public.activity_trade`.
+
+    A journaled Position: pick an existing Position and promote it to a Trade
+    with entry thesis, exit plan, target/stop prices, and realized APR.
+    """
+
+    activity_id: str
+    position_id: str
+    symbol: str
+    exchange: Exchange
+    instrument_kind: InstrumentKind
+    side: PositionSide
+    entry_thesis: str | None = None
+    exit_plan: str | None = None
+    target_price: Decimal | None = None
+    stop_price: Decimal | None = None
+    qty: Decimal
+    avg_entry_price: Decimal
+    avg_exit_price: Decimal | None = None
+    realized_apr: Decimal | None = None
+
+
+class ActivitySale(CanonicalBase):
+    """Sale-specific columns from `public.activity_sale`.
+
+    IDO / launchpad / premarket / OTC token sale. `effective_price_usd` is a
+    DB-generated column. `vesting_schedule` and `claim_events` are JSONB with
+    app-layer validation (see VestingSchedule, ClaimEvent).
+    """
+
+    activity_id: str
+    token_symbol: str
+    token_name: str | None = None
+    token_chain: str | None = None
+    sale_kind: SaleKind
+    sale_venue: str | None = None
+    sale_date: datetime
+    usd_paid: Decimal
+    tokens_allocated: Decimal
+    effective_price_usd: Decimal | None = None
+    vesting_schedule: VestingSchedule | None = None
+    claim_events: list[ClaimEvent] = Field(default_factory=list)
+    total_claimed: Decimal = Decimal("0")
+    remaining_locked: Decimal | None = None
+
+
+class ActivityAirdrop(CanonicalBase):
+    """Airdrop-specific columns from `public.activity_airdrop`.
+
+    Tokens received from a protocol. `current_price_usd` / `current_price_at`
+    are updated by the price-tracker so the MTM multiplier on the feed stays
+    fresh.
+    """
+
+    activity_id: str
+    token_symbol: str
+    token_name: str | None = None
+    token_chain: str | None = None
+    protocol: str
+    snapshot_date: datetime | None = None
+    eligibility_reason: str | None = None
+    qty_received: Decimal
+    claim_date: datetime | None = None
+    claim_tx_hash: str | None = None
+    value_at_receipt_usd: Decimal | None = None
+    current_price_usd: Decimal | None = None
+    current_price_at: datetime | None = None
+
+
+# --- Feed view -------------------------------------------------------------
+
+
+class ActivityFeedRow(CanonicalBase):
+    """One row from `public.v_activity_feed`.
+
+    Polymorphic cross-activity feed: shared activity columns plus a per-type
+    `headline_value` (interpreted via `headline_kind`) and a `primary_symbol`
+    hint pulled from whichever subtype matches `type`.
+    """
+
+    id: str
+    user_id: str
+    type: ActivityType
+    status: ActivityStatus
+    name: str
+    opened_at: datetime | None = None
+    closed_at: datetime | None = None
+    capital_deployed_usd: Decimal | None = None
+    realized_pnl_usd: Decimal | None = None
+    unrealized_pnl_usd: Decimal | None = None
+    fees_usd: Decimal
+    net_pnl_usd: Decimal | None = None
+    regime_tags: list[str] = Field(default_factory=list)
+    custom_tags: list[str] = Field(default_factory=list)
+    headline_value: Decimal | None = None
+    headline_kind: HeadlineKind
+    primary_symbol: str | None = None
+    created_at: datetime
+    updated_at: datetime

@@ -147,3 +147,179 @@ export const ListSpreadsQuery = z.object({
   limit: z.coerce.number().int().min(1).max(200).default(50),
   cursor: z.string().optional(),
 });
+
+// ============================================================================
+// Activity (v2) schemas
+// Mirror src/types/canonical.ts Activity-family interfaces 1:1 for runtime
+// validation at API boundaries (parsing rows from postgres.js + validating
+// request bodies that touch the activity tables).
+// ============================================================================
+
+// Decimal-as-string primitive — accepts a non-empty numeric string.
+const DecimalSchema = z.string().min(1);
+
+export const ActivityTypeSchema = z.enum(['spread', 'trade', 'sale', 'airdrop']);
+
+export const ActivityStatusSchema = z.enum([
+  'pending', 'open', 'winding_down', 'orphaned',
+  'vesting', 'claimed', 'liquidated', 'expired', 'closed',
+]);
+
+export const SaleKindSchema = z.enum(['ido', 'launchpad', 'premarket', 'otc']);
+
+export const HeadlineKindSchema = z.enum(['realized_apr', 'mtm_multiplier']);
+
+export const InstrumentKindSchema = z.enum(['spot', 'perp', 'dated_future', 'option']);
+
+// activity_sale.vesting_schedule (jsonb). Discriminated by `kind`.
+export const VestingScheduleSchema = z.discriminatedUnion('kind', [
+  z.object({ kind: z.literal('all_at_tge') }),
+  z.object({
+    kind:        z.literal('tge_plus_linear'),
+    tge_pct:     z.number().min(0).max(100),
+    linear_days: z.number().int().nonnegative(),
+  }),
+  z.object({
+    kind:        z.literal('cliff_plus_linear'),
+    cliff_days:  z.number().int().nonnegative(),
+    linear_days: z.number().int().nonnegative(),
+    tge_pct:     z.number().min(0).max(100).optional(),
+  }),
+  z.object({
+    kind:    z.literal('custom'),
+    entries: z.array(z.object({
+      date: z.string().datetime(),
+      pct:  z.number().min(0).max(100),
+    })),
+  }),
+]);
+
+// One element of activity_sale.claim_events (jsonb array).
+export const ClaimEventSchema = z.object({
+  date:    z.string().datetime(),
+  qty:     DecimalSchema,
+  tx_hash: z.string().optional(),
+});
+
+// activity supertype row.
+export const ActivitySchema = z.object({
+  id:                   z.string().uuid(),
+  user_id:              z.string().uuid(),
+  type:                 ActivityTypeSchema,
+  status:               ActivityStatusSchema,
+  name:                 z.string(),
+  opened_at:            z.string().datetime().nullable(),
+  closed_at:            z.string().datetime().nullable(),
+  capital_deployed_usd: DecimalSchema.nullable(),
+  realized_pnl_usd:     DecimalSchema.nullable(),
+  unrealized_pnl_usd:   DecimalSchema.nullable(),
+  fees_usd:             DecimalSchema,
+  net_pnl_usd:          DecimalSchema.nullable(),
+  regime_tags:          z.array(z.string()),
+  custom_tags:          z.array(z.string()),
+  created_at:           z.string().datetime(),
+  updated_at:           z.string().datetime(),
+  deleted_at:           z.string().datetime().nullable(),
+});
+
+// activity_spread subtype row (JOIN to activity for shared cols).
+export const ActivitySpreadSchema = z.object({
+  activity_id:                     z.string().uuid(),
+  spread_type:                     SpreadType,
+  variant:                         SpreadVariant.nullable(),
+  origin:                          z.enum(['auto_matched', 'manual', 'auto_confirmed']),
+  primary_base:                    z.string(),
+  match_confidence:                z.number().min(0).max(1).nullable(),
+  funding_pnl_quote:               DecimalSchema,
+  apr:                             DecimalSchema.nullable(),
+  exchanges:                       z.array(ExchangeCode),
+  leg_count:                       z.number().int().nonnegative(),
+  hold_duration_ms:                z.number().int().nonnegative().nullable(),
+  source:                          z.enum(['user', 'system']),
+  system_proposal_metadata:        z.record(z.string(), z.unknown()).nullable(),
+  target_apr_at_open:              DecimalSchema.nullable(),
+  expected_holding_days:           z.number().int().nullable(),
+  expected_basis_convergence_date: z.string().datetime().nullable(),
+  exit_plan:                       z.string().nullable(),
+  borrow_cost_assumed_bps:         DecimalSchema.nullable(),
+  close_threshold_apr:             DecimalSchema.nullable(),
+  close_threshold_periods:         z.number().int().nullable(),
+  max_gas_budget_usd:              DecimalSchema.nullable(),
+  slippage_tolerance_bps:          DecimalSchema.nullable(),
+});
+
+// activity_trade subtype row.
+export const ActivityTradeSchema = z.object({
+  activity_id:     z.string().uuid(),
+  position_id:     z.string().uuid(),
+  symbol:          z.string(),
+  exchange:        ExchangeCode,
+  instrument_kind: InstrumentKindSchema,
+  side:            PositionSide,
+  entry_thesis:    z.string().nullable(),
+  exit_plan:       z.string().nullable(),
+  target_price:    DecimalSchema.nullable(),
+  stop_price:      DecimalSchema.nullable(),
+  qty:             DecimalSchema,
+  avg_entry_price: DecimalSchema,
+  avg_exit_price:  DecimalSchema.nullable(),
+  realized_apr:    DecimalSchema.nullable(),
+});
+
+// activity_sale subtype row.
+export const ActivitySaleSchema = z.object({
+  activity_id:         z.string().uuid(),
+  token_symbol:        z.string(),
+  token_name:          z.string().nullable(),
+  token_chain:         z.string().nullable(),
+  sale_kind:           SaleKindSchema,
+  sale_venue:          z.string().nullable(),
+  sale_date:           z.string().datetime(),
+  usd_paid:            DecimalSchema,
+  tokens_allocated:    DecimalSchema,
+  effective_price_usd: DecimalSchema.nullable(),
+  vesting_schedule:    VestingScheduleSchema.nullable(),
+  claim_events:        z.array(ClaimEventSchema),
+  total_claimed:       DecimalSchema,
+  remaining_locked:    DecimalSchema.nullable(),
+});
+
+// activity_airdrop subtype row.
+export const ActivityAirdropSchema = z.object({
+  activity_id:          z.string().uuid(),
+  token_symbol:         z.string(),
+  token_name:           z.string().nullable(),
+  token_chain:          z.string().nullable(),
+  protocol:             z.string(),
+  snapshot_date:        z.string().datetime().nullable(),
+  eligibility_reason:   z.string().nullable(),
+  qty_received:         DecimalSchema,
+  claim_date:           z.string().datetime().nullable(),
+  claim_tx_hash:        z.string().nullable(),
+  value_at_receipt_usd: DecimalSchema.nullable(),
+  current_price_usd:    DecimalSchema.nullable(),
+  current_price_at:     z.string().datetime().nullable(),
+});
+
+// v_activity_feed view row.
+export const ActivityFeedRowSchema = z.object({
+  id:                   z.string().uuid(),
+  user_id:              z.string().uuid(),
+  type:                 ActivityTypeSchema,
+  status:               ActivityStatusSchema,
+  name:                 z.string(),
+  opened_at:            z.string().datetime().nullable(),
+  closed_at:            z.string().datetime().nullable(),
+  capital_deployed_usd: DecimalSchema.nullable(),
+  realized_pnl_usd:     DecimalSchema.nullable(),
+  unrealized_pnl_usd:   DecimalSchema.nullable(),
+  fees_usd:             DecimalSchema,
+  net_pnl_usd:          DecimalSchema.nullable(),
+  regime_tags:          z.array(z.string()),
+  custom_tags:          z.array(z.string()),
+  headline_value:       DecimalSchema.nullable(),
+  headline_kind:        HeadlineKindSchema,
+  primary_symbol:       z.string().nullable(),
+  created_at:           z.string().datetime(),
+  updated_at:           z.string().datetime(),
+});

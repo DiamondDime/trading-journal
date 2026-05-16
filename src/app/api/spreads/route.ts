@@ -59,57 +59,76 @@ export const POST = withAuth(async (req, { userId }) => {
     );
   }
 
-  const earliestOpened = positions
-    .map((p) => p.openedAt)
-    .sort()[0];
+  const earliestOpened = positions.map((p) => p.openedAt).sort()[0];
   const primary_base = positions[0].instrument.base;
 
-  const spreads = await sql`
-    INSERT INTO public.spreads (
-      user_id, spread_type, variant, status, origin, source, name, primary_base,
-      opened_at, capital_deployed_usd,
-      regime_tags, custom_tags, leg_count,
-      target_apr_at_open, expected_holding_days, expected_basis_convergence_date,
-      exit_plan, borrow_cost_assumed_bps,
-      close_threshold_apr, close_threshold_periods,
-      max_gas_budget_usd, slippage_tolerance_bps
-    ) VALUES (
-      ${userId}::uuid, ${body.spread_type}, ${body.variant ?? null},
-      'open', 'manual', 'user',
-      ${body.name ?? `Manual ${body.spread_type} — ${primary_base}`},
-      ${primary_base}, ${earliestOpened}::timestamptz,
-      ${body.capital_deployed_usd ?? null},
-      ${body.regime_tags ?? []}, ${body.custom_tags ?? []}, ${body.legs.length},
-      ${body.target_apr_at_open ?? null},
-      ${body.expected_holding_days ?? null},
-      ${body.expected_basis_convergence_date ?? null}::date,
-      ${body.exit_plan ?? null},
-      ${body.borrow_cost_assumed_bps ?? null},
-      ${body.close_threshold_apr ?? null},
-      ${body.close_threshold_periods ?? null},
-      ${body.max_gas_budget_usd ?? null},
-      ${body.slippage_tolerance_bps ?? null}
-    )
-    RETURNING *
-  `;
-  const spreadId = spreads[0].id;
+  // After the activity supertype migration: a spread is one row in `activity`
+  // (the common columns) joined to one row in `activity_spread` (subtype) plus
+  // N rows in `spread_legs`. Insert all three in a single transaction.
+  const activityId = await sql.begin(async (tx) => {
+    const [activityRow] = await tx<{ id: string }[]>`
+      INSERT INTO public.activity (
+        user_id, type, status, name,
+        opened_at, capital_deployed_usd,
+        regime_tags, custom_tags
+      ) VALUES (
+        ${userId}::uuid, 'spread', 'open',
+        ${body.name ?? `Manual ${body.spread_type} — ${primary_base}`},
+        ${earliestOpened}::timestamptz,
+        ${body.capital_deployed_usd ?? null},
+        ${body.regime_tags ?? []}, ${body.custom_tags ?? []}
+      )
+      RETURNING id
+    `;
 
-  for (let i = 0; i < body.legs.length; i++) {
-    const leg = body.legs[i];
-    for (const positionId of leg.position_ids) {
-      await sql`
-        INSERT INTO public.spread_legs (
-          spread_id, user_id, position_id, role, leg_index,
-          intended_price, intended_price_set_at
-        )
-        VALUES (
-          ${spreadId}::uuid, ${userId}::uuid, ${positionId}::uuid, ${leg.role}, ${i},
-          ${leg.intended_price ?? null},
-          ${leg.intended_price ? sql`now()` : null}
-        )
-      `;
+    await tx`
+      INSERT INTO public.activity_spread (
+        activity_id, spread_type, variant, origin, source, primary_base, leg_count,
+        target_apr_at_open, expected_holding_days, expected_basis_convergence_date,
+        exit_plan, borrow_cost_assumed_bps,
+        close_threshold_apr, close_threshold_periods,
+        max_gas_budget_usd, slippage_tolerance_bps
+      ) VALUES (
+        ${activityRow.id}::uuid, ${body.spread_type}, ${body.variant ?? null},
+        'manual', 'user', ${primary_base}, ${body.legs.length},
+        ${body.target_apr_at_open ?? null},
+        ${body.expected_holding_days ?? null},
+        ${body.expected_basis_convergence_date ?? null}::date,
+        ${body.exit_plan ?? null},
+        ${body.borrow_cost_assumed_bps ?? null},
+        ${body.close_threshold_apr ?? null},
+        ${body.close_threshold_periods ?? null},
+        ${body.max_gas_budget_usd ?? null},
+        ${body.slippage_tolerance_bps ?? null}
+      )
+    `;
+
+    for (let i = 0; i < body.legs.length; i++) {
+      const leg = body.legs[i];
+      for (const positionId of leg.position_ids) {
+        await tx`
+          INSERT INTO public.spread_legs (
+            activity_id, user_id, position_id, role, leg_index,
+            intended_price, intended_price_set_at
+          )
+          VALUES (
+            ${activityRow.id}::uuid, ${userId}::uuid, ${positionId}::uuid, ${leg.role}, ${i},
+            ${leg.intended_price ?? null},
+            ${leg.intended_price ? sql`now()` : null}
+          )
+        `;
+      }
     }
-  }
 
-  return created(spreads[0]);
+    return activityRow.id;
+  });
+
+  // Read back through the spread_pnl view so we return the same shape clients
+  // already consume on GET.
+  const [pnlRow] = await sql`
+    SELECT * FROM public.spread_pnl
+    WHERE spread_id = ${activityId}::uuid AND user_id = ${userId}::uuid
+    LIMIT 1
+  `;
+  return created(pnlRow);
 });

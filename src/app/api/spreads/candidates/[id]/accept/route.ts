@@ -35,26 +35,35 @@ export const POST = withAuth(async (req, { params, userId }) => {
     `${candidate.suggestedType} — ${candidate.primaryBase}`;
   const spreadType = body.overrides?.spread_type ?? candidate.suggestedType;
 
-  const inserted = await sql.begin(async (tx) => {
-    const spread = await tx`
-      INSERT INTO public.spreads (
-        user_id, spread_type, status, origin, source, name, primary_base,
-        opened_at, match_confidence, leg_count
+  const activityId = await sql.begin(async (tx) => {
+    const [activityRow] = await tx<{ id: string }[]>`
+      INSERT INTO public.activity (
+        user_id, type, status, name,
+        opened_at
       ) VALUES (
-        ${userId}::uuid, ${spreadType}, 'open', 'auto_matched', 'system',
-        ${name}, ${candidate.primaryBase}, ${candidate.earliestFillAt}::timestamptz,
-        ${candidate.matchConfidence}, ${candidate.proposedLegs.length}
+        ${userId}::uuid, 'spread', 'open',
+        ${name}, ${candidate.earliestFillAt}::timestamptz
       )
-      RETURNING *
+      RETURNING id
+    `;
+
+    await tx`
+      INSERT INTO public.activity_spread (
+        activity_id, spread_type, origin, source, primary_base,
+        match_confidence, leg_count
+      ) VALUES (
+        ${activityRow.id}::uuid, ${spreadType}, 'auto_matched', 'system',
+        ${candidate.primaryBase}, ${candidate.matchConfidence}, ${candidate.proposedLegs.length}
+      )
     `;
 
     for (let i = 0; i < candidate.proposedLegs.length; i++) {
       const leg = candidate.proposedLegs[i];
       for (const positionId of leg.position_ids ?? []) {
         await tx`
-          INSERT INTO public.spread_legs (spread_id, user_id, position_id, role, leg_index)
+          INSERT INTO public.spread_legs (activity_id, user_id, position_id, role, leg_index)
           VALUES (
-            ${spread[0].id}::uuid, ${userId}::uuid, ${positionId}::uuid,
+            ${activityRow.id}::uuid, ${userId}::uuid, ${positionId}::uuid,
             ${leg.side === 'long' ? 'long_leg' : 'short_leg'}, ${i}
           )
         `;
@@ -64,12 +73,18 @@ export const POST = withAuth(async (req, { params, userId }) => {
     await tx`
       UPDATE public.spread_candidates
       SET state = 'accepted', decided_at = now(), decided_by = ${userId}::uuid,
-          resulting_spread_id = ${spread[0].id}::uuid
+          resulting_activity_id = ${activityRow.id}::uuid
       WHERE id = ${id}::uuid
     `;
 
-    return spread[0];
+    return activityRow.id;
   });
 
-  return created(inserted);
+  // Read back through the view so the response matches GET shape.
+  const [pnlRow] = await sql`
+    SELECT * FROM public.spread_pnl
+    WHERE spread_id = ${activityId}::uuid AND user_id = ${userId}::uuid
+    LIMIT 1
+  `;
+  return created(pnlRow);
 });
