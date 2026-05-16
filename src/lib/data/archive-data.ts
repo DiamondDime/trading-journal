@@ -799,12 +799,33 @@ const AIRDROPS: AirdropRow[] = [
   },
 ];
 
+// Compute the destination route per activity type. Each row's stored `href`
+// is patched through this so detail-page routing is the single source of truth.
+// Spreads still point at the editorial demo template until their own dynamic
+// route lands in a later chunk.
+export function getActivityHref(a: Activity): string {
+  switch (a.type) {
+    case "trade":
+      return `/trades/${a.id}`;
+    case "spread":
+      return "/spreads/demo";
+    case "sale":
+      return "/spreads/demo";
+    case "airdrop":
+      return "/spreads/demo";
+  }
+}
+
 export const ARCHIVE_DATA: Activity[] = [
   ...SPREADS,
   ...TRADES,
   ...SALES,
   ...AIRDROPS,
-];
+].map((a) => ({ ...a, href: getActivityHref(a) } as Activity));
+
+export function getActivityById(id: string): Activity | undefined {
+  return ARCHIVE_DATA.find((a) => a.id === id);
+}
 
 // ─── Formatting helpers ────────────────────────────────────────────────────────
 
