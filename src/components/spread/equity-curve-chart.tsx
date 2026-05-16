@@ -10,8 +10,11 @@ import {
   ResponsiveContainer,
   Legend,
 } from "recharts";
-import { ARCHIVE_DATA, type Activity, type ActivityType } from "@/lib/data/archive-data";
+import type { Activity, ActivityType } from "@/lib/data/archive-data";
 
+// Static week-end markers so the curve has consistent buckets even when the
+// user only has a handful of activities. Picks every Sunday + the present
+// day; the dashboard plugs current activity rows into these buckets.
 const WEEK_BUCKETS: { label: string; iso: string }[] = [
   { label: "Jan 8",  iso: "2026-01-08" },
   { label: "Jan 15", iso: "2026-01-15" },
@@ -35,10 +38,6 @@ const WEEK_BUCKETS: { label: string; iso: string }[] = [
   { label: "May 16", iso: "2026-05-16" },
 ];
 
-// Series colors are chosen so none compete with the dashboard's signature
-// amber. The Spread series uses a neutral slate (`--chart-spread`) instead
-// of `--accent-signature` so the only amber on /spreads remains the Net P&L
-// hero KPI (and the brand "J" mark, which is a brand exception).
 const SERIES: { key: ActivityType; label: string; color: string }[] = [
   { key: "spread",  label: "Spread",  color: "var(--chart-spread)" },
   { key: "trade",   label: "Trade",   color: "var(--accent-info)" },
@@ -48,35 +47,28 @@ const SERIES: { key: ActivityType; label: string; color: string }[] = [
 
 type Point = { week: string } & Record<ActivityType, number>;
 
-// Cumulative realized PnL per activity-type up through each week boundary.
-const DATA: Point[] = WEEK_BUCKETS.map(({ label, iso }) => {
-  const point: Point = {
-    week: label,
-    spread: 0,
-    trade: 0,
-    sale: 0,
-    airdrop: 0,
-  };
-  ARCHIVE_DATA.forEach((a: Activity) => {
-    if (a.closedAt <= iso) {
-      // Sales/airdrops cumulate hundreds of thousands and would dwarf
-      // the spread/trade signal. Damp them to a comparable scale for
-      // the visual; tooltip still shows the real number through formatter.
-      const damp = a.type === "sale" || a.type === "airdrop" ? 0.05 : 1;
-      point[a.type] += a.netPnl * damp;
-    }
+function buildPoints(data: Activity[]): Point[] {
+  return WEEK_BUCKETS.map(({ label, iso }) => {
+    const point: Point = { week: label, spread: 0, trade: 0, sale: 0, airdrop: 0 };
+    data.forEach((a: Activity) => {
+      if (a.closedAt <= iso) {
+        // Sales/airdrops can cumulate hundreds of thousands and would dwarf
+        // the spread/trade signal. Damp them on the chart; tooltip restores
+        // the real number.
+        const damp = a.type === "sale" || a.type === "airdrop" ? 0.05 : 1;
+        point[a.type] += a.netPnl * damp;
+      }
+    });
+    return point;
   });
-  return point;
-});
+}
 
-export function EquityCurveChart() {
+export function EquityCurveChart({ data = [] }: { data?: Activity[] }) {
+  const points = buildPoints(data);
   return (
     <div className="h-[260px] w-full">
       <ResponsiveContainer width="100%" height="100%">
-        <AreaChart
-          data={DATA}
-          margin={{ top: 12, right: 12, left: 12, bottom: 4 }}
-        >
+        <AreaChart data={points} margin={{ top: 12, right: 12, left: 12, bottom: 4 }}>
           <defs>
             {SERIES.map((s) => (
               <linearGradient key={s.key} id={`fill-${s.key}`} x1="0" y1="0" x2="0" y2="1">
@@ -85,30 +77,18 @@ export function EquityCurveChart() {
               </linearGradient>
             ))}
           </defs>
-          <CartesianGrid
-            stroke="var(--border-subtle)"
-            strokeDasharray="0"
-            vertical={false}
-          />
+          <CartesianGrid stroke="var(--border-subtle)" strokeDasharray="0" vertical={false} />
           <XAxis
             dataKey="week"
             tickLine={false}
             axisLine={false}
-            tick={{
-              fontSize: 10,
-              fill: "var(--text-tertiary)",
-              fontFamily: "var(--font-jetbrains)",
-            }}
+            tick={{ fontSize: 10, fill: "var(--text-tertiary)", fontFamily: "var(--font-jetbrains)" }}
             interval={2}
           />
           <YAxis
             tickLine={false}
             axisLine={false}
-            tick={{
-              fontSize: 10,
-              fill: "var(--text-tertiary)",
-              fontFamily: "var(--font-jetbrains)",
-            }}
+            tick={{ fontSize: 10, fill: "var(--text-tertiary)", fontFamily: "var(--font-jetbrains)" }}
             tickFormatter={(v) => `$${v}`}
             width={48}
           />
@@ -134,10 +114,7 @@ export function EquityCurveChart() {
               const v = Number(value);
               const sign = v >= 0 ? "+" : "−";
               const series = SERIES.find((s) => s.key === name);
-              return [
-                `${sign}$${Math.abs(v).toFixed(0)}`,
-                series?.label ?? String(name),
-              ];
+              return [`${sign}$${Math.abs(v).toFixed(0)}`, series?.label ?? String(name)];
             }}
           />
           <Legend

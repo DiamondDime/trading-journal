@@ -20,6 +20,7 @@ import {
 } from "@/lib/matcher/spread-matcher";
 import { cn } from "@/lib/utils";
 import { logSpread } from "../actions";
+import { WizardErrorBanner } from "@/components/wizard/wizard-error-banner";
 
 const STEP_LABELS = ["Source", "Pick legs", "Type", "Fields", "Review"] as const;
 
@@ -182,6 +183,7 @@ export default async function SpreadReviewPage(props: { searchParams: Search }) 
       title="Look it over"
       subtitle="One last pass before this hits your journal. Edit any row to bounce back to the fields step."
     >
+      <WizardErrorBanner error={getStr(sp, "error") || undefined} />
       {/* ── Hero preview (signature amber) ────────────────────────────────── */}
       <section className="border-y border-border py-10">
         <div className="flex flex-col gap-2">

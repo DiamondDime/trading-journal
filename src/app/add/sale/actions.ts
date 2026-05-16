@@ -1,24 +1,44 @@
 "use server";
 
 import { redirect } from "next/navigation";
+import { requireUser } from "@/lib/auth/server";
+import { createSale } from "@/lib/db/activity";
+import { CreateSaleBody } from "@/lib/db/zod-schemas";
+
+function stripNextInternals(entries: [string, FormDataEntryValue][]): [string, FormDataEntryValue][] {
+  return entries.filter(([k]) => !k.startsWith("$ACTION_"));
+}
 
 /**
- * Stub server action for v1. Logs the payload to the server console and
- * redirects to the freshly-created sale's detail page. Real persistence
- * lives in Chunk 5+ when API routes go through `activity_sale`.
+ * Server action for the sale wizard's final submit.
  *
- * The redirect target uses the placeholder id `sa-003` (the most recent
- * fixture sale) so the detail page renders meaningfully. When the real
- * DB write lands, this becomes the new row's UUID.
+ * Path: /add/sale/review → submits hidden form whose action targets this.
+ * Validates the FormData payload via CreateSaleBody, inserts activity +
+ * activity_sale (with vesting_schedule jsonb built from cliff + linear inputs),
+ * then redirects to /sales/<new-uuid>?from=wizard.
  */
 export async function logSale(formData: FormData): Promise<void> {
-  const payload = Object.fromEntries(formData.entries());
-  // eslint-disable-next-line no-console
-  console.log("[logSale] would persist:", payload);
+  let activityId: string | null = null;
+  let redirectError: string | null = null;
 
-  // Fixtures have ids sa-001..sa-003. Reuse the most recent one so the
-  // detail page renders real data on success. When persistence is wired,
-  // this becomes the new row's UUID.
-  const newSaleId = "sa-003";
-  redirect(`/sales/${newSaleId}?from=wizard`);
+  let cleanedRaw: Record<string, string> = {};
+  try {
+    const { id: userId } = await requireUser();
+    cleanedRaw = Object.fromEntries(stripNextInternals([...formData.entries()])) as Record<string, string>;
+    const input = CreateSaleBody.parse(cleanedRaw);
+    const { id } = await createSale(userId, input);
+    activityId = id;
+  } catch (e) {
+    redirectError = e instanceof Error ? e.message : String(e);
+  }
+
+  if (activityId) {
+    redirect(`/sales/${activityId}?from=wizard`);
+  } else {
+    const qs = new URLSearchParams({
+      error: redirectError ?? "Unknown error logging sale",
+      ...cleanedRaw,
+    }).toString();
+    redirect(`/add/sale/review?${qs}`);
+  }
 }

@@ -1,8 +1,8 @@
 import { TrendingDown, TrendingUp } from "lucide-react";
 import {
   ACTIVITY_TYPE_LABELS,
-  ARCHIVE_DATA,
   SPREAD_TYPE_LABELS,
+  type Activity,
   type ActivityType,
   type SpreadRow,
   type SpreadType,
@@ -27,9 +27,9 @@ const SPREAD_SUBTYPE_ORDER: SpreadType[] = [
   "dex_cex",
 ];
 
-function buildActivitySlices(): Slice[] {
+function buildActivitySlices(data: Activity[]): Slice[] {
   const slices: Slice[] = ACTIVITY_TYPE_ORDER.map((t) => {
-    const rows = ARCHIVE_DATA.filter((r) => r.type === t);
+    const rows = data.filter((r) => r.type === t);
     const net = rows.reduce((s, r) => s + r.netPnl, 0);
     const capital = rows.reduce((s, r) => s + r.capital, 0);
     return {
@@ -48,8 +48,8 @@ function buildActivitySlices(): Slice[] {
   }));
 }
 
-function buildSpreadSubtypeSlices(): Slice[] {
-  const spreads = ARCHIVE_DATA.filter((r): r is SpreadRow => r.type === "spread");
+function buildSpreadSubtypeSlices(data: Activity[]): Slice[] {
+  const spreads = data.filter((r): r is SpreadRow => r.type === "spread");
   const slices: Slice[] = SPREAD_SUBTYPE_ORDER.map((t) => {
     const rows = spreads.filter((s) => s.spreadType === t);
     const net = rows.reduce((sum, r) => sum + r.netPnl, 0);
@@ -72,10 +72,16 @@ function buildSpreadSubtypeSlices(): Slice[] {
     }));
 }
 
-export function ActivityMix() {
-  const activitySlices = buildActivitySlices();
-  const spreadSlices = buildSpreadSubtypeSlices();
-  const total = ARCHIVE_DATA.length;
+/**
+ * Receive the page's full activity dataset as a prop so the dashboard can
+ * pass the result of its DB query (post-Wave 5A) without this component
+ * needing to know about the data source. With no data, renders empty
+ * slices so the layout stays intact.
+ */
+export function ActivityMix({ data = [] }: { data?: Activity[] }) {
+  const activitySlices = buildActivitySlices(data);
+  const spreadSlices = buildSpreadSubtypeSlices(data);
+  const total = data.length;
   const totalNet = activitySlices.reduce((s, a) => s + a.net, 0);
 
   return (

@@ -1,8 +1,11 @@
-// Renders the small "Preview" banner on a detail page when the user just
-// landed there from a wizard submit (the actions append `?from=wizard` so we
-// can tell). Tells the user their activity isn't persisted yet — DB writes
-// land in Phase 5 — and that the page below is the closest matching
-// fixture record.
+// Renders the small "Just saved" banner on a detail page when the user has
+// just landed there from a wizard submit. The actions append `?from=wizard`
+// to the redirect so we can tell.
+//
+// Post-Wave 5A: DB writes are real, so the banner's job is to acknowledge a
+// successful save and prompt the user to edit / add notes from here. Same
+// warn-toned visual treatment so it stays a "transient nav signal" rather
+// than persistent UI chrome.
 //
 // Render policy: only show when the `from` searchParam equals `"wizard"`.
 // Render nothing otherwise so deep-links to detail pages stay clean.
@@ -15,12 +18,11 @@ export function WizardPreviewBanner({ from }: { from?: string }) {
       role="status"
     >
       <span className="font-semibold uppercase tracking-[0.14em] text-[10px]">
-        Preview
+        Just saved
       </span>
       {" — "}
       <span className="font-serif italic">
-        Your activity isn&apos;t persisted yet — DB writes land in Phase 5.
-        This is the closest matching fixture record.
+        this is your new record. Edit or add notes from here.
       </span>
     </aside>
   );

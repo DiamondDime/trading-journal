@@ -9,15 +9,12 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import {
-  getActivityById,
-  fmtCapital,
-  fmtUsd,
-  type SaleRow,
-} from "@/lib/data/archive-data";
+import { fmtCapital, fmtUsd } from "@/lib/data/archive-data";
 import { WizardPreviewBanner } from "@/components/wizard/wizard-preview-banner";
+import { requireUser } from "@/lib/auth/server";
+import { getActivity } from "@/lib/db/activity";
 
-// ── Helpers ─────────────────────────────────────────────────────────────────
+export const dynamic = "force-dynamic";
 
 const SALE_KIND_LABELS: Record<string, string> = {
   ido: "IDO",
@@ -40,94 +37,38 @@ function fmtTokens(n: number) {
   return n.toLocaleString("en-US", { maximumFractionDigits: 0 });
 }
 
-function fmtMtmDate(closedAt: string) {
-  const d = new Date(closedAt);
-  if (!Number.isFinite(d.getTime())) return closedAt;
-  return d.toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  });
+function fmtDate(iso: string | null) {
+  if (!iso) return "—";
+  return new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
 }
 
-/**
- * Compute illustrative allocation/vesting fields from the stored aggregates.
- * Fixtures only carry headline-level data (capital = usd_paid, multiplier,
- * net_pnl, days_held). We derive a plausible price + token count + a
- * synthetic TGE/vesting schedule so the detail page has real numbers to
- * render. Marked clearly here — once Chunk 5 wires DB writes, the real
- * columns (`tokens_allocated`, `tge_unlock_pct`, `vesting_cliff_months`,
- * etc.) replace this guesswork.
- */
-function deriveSaleExecution(sale: SaleRow): {
-  usdPaid: number;
-  tokensAllocated: number;
-  currentPrice: number;
-  currentValue: number;
-  tgeUnlockPct: number;
-  vestingCliffMonths: number;
-  vestingDurationMonths: number;
-  tgeDate: string;
+function fmtMultiplier(m: number) {
+  if (!Number.isFinite(m)) return "—";
+  return m >= 10 ? `${m.toFixed(1)}×` : `${m.toFixed(2)}×`;
+}
+
+function vestingDescription(schedule: Record<string, unknown> | null): {
+  tgePct: number; cliffMonths: number; durationMonths: number;
 } {
-  // Pick a plausible per-asset current price. Mirrors the asset table in
-  // the trade detail page so per-asset visuals stay coherent.
-  const currentPriceByAsset: Record<string, number> = {
-    EIGEN: 3.8,
-    W: 1.1,
-    ZETA: 0.28,
-    PYTH: 0.62,
-    JUP: 1.05,
-    ARB: 0.78,
-    BTC: 64200,
-    ETH: 3120,
-    SOL: 178.4,
-    PEPE: 0.0000142,
-  };
-  const usdPaid = sale.capital;
-  const currentValue = usdPaid * sale.multiplier;
-  const currentPrice = currentPriceByAsset[sale.asset] ?? 1;
-  // tokens = current_value / current_price — derives a self-consistent
-  // pair (tokens × price = current_value, MTM × matches).
-  const tokensAllocated = currentValue / currentPrice;
-
-  // Vesting schedule: rough heuristic per sale kind. Real values come
-  // from the DB once Chunk 5+ writes are in.
-  const tgeUnlockPct =
-    sale.saleKind === "premarket"
-      ? 100
-      : sale.saleKind === "otc"
-      ? 25
-      : sale.saleKind === "launchpad"
-      ? 100
-      : 20; // ido default
-  const vestingCliffMonths =
-    sale.saleKind === "premarket" || sale.saleKind === "launchpad"
-      ? 0
-      : 6;
-  const vestingDurationMonths =
-    sale.saleKind === "premarket" || sale.saleKind === "launchpad"
-      ? 0
-      : 18;
-
-  // TGE date — back-derive from the close date and the days held.
-  // Roughly: opened ≈ closed − daysHeld.
-  const closed = new Date(sale.closedAt);
-  const opened = new Date(closed.getTime() - sale.daysHeld * 86400_000);
-  const tgeDate = opened.toISOString().slice(0, 10);
-
-  return {
-    usdPaid,
-    tokensAllocated,
-    currentPrice,
-    currentValue,
-    tgeUnlockPct,
-    vestingCliffMonths,
-    vestingDurationMonths,
-    tgeDate,
-  };
+  if (!schedule) return { tgePct: 0, cliffMonths: 0, durationMonths: 0 };
+  const kind = String(schedule.kind ?? "");
+  if (kind === "all_at_tge") return { tgePct: 100, cliffMonths: 0, durationMonths: 0 };
+  if (kind === "tge_plus_linear") {
+    return {
+      tgePct: Number(schedule.tge_pct ?? 0),
+      cliffMonths: 0,
+      durationMonths: Math.round(Number(schedule.linear_days ?? 0) / 30),
+    };
+  }
+  if (kind === "cliff_plus_linear") {
+    return {
+      tgePct: Number(schedule.tge_pct ?? 0),
+      cliffMonths: Math.round(Number(schedule.cliff_days ?? 0) / 30),
+      durationMonths: Math.round(Number(schedule.linear_days ?? 0) / 30),
+    };
+  }
+  return { tgePct: 0, cliffMonths: 0, durationMonths: 0 };
 }
-
-// ── Page ────────────────────────────────────────────────────────────────────
 
 export default async function SaleDetailPage({
   params,
@@ -138,16 +79,33 @@ export default async function SaleDetailPage({
 }) {
   const { id } = await params;
   const sp = await searchParams;
-  const activity = getActivityById(id);
-
-  if (!activity || activity.type !== "sale") {
+  const { id: userId } = await requireUser();
+  const activity = await getActivity(userId, id);
+  if (!activity || activity.subtype.type !== "sale") {
     notFound();
   }
 
-  const s = activity as SaleRow;
-  const exec = deriveSaleExecution(s);
-  const headlineTone = s.tone === "up" ? "text-up" : "text-down";
+  const s = activity.subtype.row;
+  const usdPaid = Number(s.usdPaid);
+  const tokens = Number(s.tokensAllocated);
+  const currentPrice = Number(s.currentPriceUsd ?? 0);
+  const currentValue = tokens * currentPrice;
+  const multiplier = usdPaid > 0 ? currentValue / usdPaid : 0;
+  const netPnl = Number(activity.netPnlUsd ?? 0);
+  const headlineTone = multiplier >= 1 ? "text-up" : "text-down";
   const saleKindLabel = SALE_KIND_LABELS[s.saleKind] ?? s.saleKind;
+  const { tgePct, cliffMonths, durationMonths } = vestingDescription(s.vestingSchedule);
+  const statusLabel = activity.status[0].toUpperCase() + activity.status.slice(1);
+  const serial = `S#${activity.id.slice(0, 4).toUpperCase()}`;
+  const daysHeldMs =
+    activity.openedAt && activity.closedAt
+      ? new Date(activity.closedAt).getTime() - new Date(activity.openedAt).getTime()
+      : Date.now() - new Date(activity.openedAt ?? activity.createdAt).getTime();
+  const daysLabel =
+    daysHeldMs < 86_400_000
+      ? `${Math.round(daysHeldMs / 3_600_000)}h`
+      : `${Math.round(daysHeldMs / 86_400_000)}d`;
+  const closedLabel = activity.closedAt ? fmtDate(activity.closedAt) : "—";
 
   return (
     <div className="flex h-screen w-full bg-app">
@@ -155,34 +113,31 @@ export default async function SaleDetailPage({
       <main className="flex-1 overflow-y-auto">
         <article className="mx-auto max-w-4xl px-6 py-14 md:py-20">
           <WizardPreviewBanner from={sp.from} />
-          {/* ── meta row ──────────────────────────────────────────────── */}
           <div className="flex items-center justify-between font-mono text-xs text-text-tertiary">
-            <span>{s.serial}</span>
+            <span>{serial}</span>
             <span className="flex items-center gap-2">
               <span className="inline-flex items-center gap-1.5 rounded-full bg-subtle px-2.5 py-0.5">
                 <span className="h-1.5 w-1.5 rounded-full bg-text-tertiary" />
                 <span className="text-[10px] font-semibold uppercase tracking-[0.12em]">
-                  {s.status[0].toUpperCase() + s.status.slice(1)}
+                  {statusLabel}
                 </span>
               </span>
-              <span>{s.closedLabel}, 2026</span>
+              <span>{closedLabel}</span>
             </span>
           </div>
 
-          {/* ── title block ───────────────────────────────────────────── */}
           <header className="mt-6">
             <h1 className="font-serif text-4xl font-medium leading-tight tracking-tight text-text md:text-5xl">
-              {s.asset} — {s.venue} {saleKindLabel}
+              {activity.name}
             </h1>
             <p className="mt-3 text-base text-text-secondary">
-              {saleKindLabel} · {s.venue} · {s.asset}
+              {saleKindLabel} · {s.saleVenue ?? "—"} · {s.tokenSymbol}
             </p>
             <p className="mt-1 font-mono text-sm text-text-tertiary">
-              {s.daysLabel} from purchase to MTM
+              {daysLabel} from purchase to MTM
             </p>
           </header>
 
-          {/* ── hero block ────────────────────────────────────────────── */}
           <section className="mt-14 border-y border-border py-12">
             <div className="flex flex-col gap-2">
               <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-text-tertiary">
@@ -193,7 +148,7 @@ export default async function SaleDetailPage({
                   className="font-serif font-normal leading-none text-signature"
                   style={{ fontSize: "clamp(56px, 9vw, 96px)" }}
                 >
-                  {s.headlineLabel}
+                  {fmtMultiplier(multiplier)}
                 </span>
                 <span className="font-serif text-2xl font-normal text-text-tertiary">
                   MTM
@@ -202,26 +157,13 @@ export default async function SaleDetailPage({
               <p className="mt-3 font-mono text-sm text-text-secondary">
                 Net{" "}
                 <span className={`${headlineTone} font-medium`}>
-                  {fmtUsd(s.netPnl, true)}
+                  {fmtUsd(netPnl, true)}
                 </span>{" "}
-                realized on {fmtCapital(s.capital)} paid
+                realized on {fmtCapital(usdPaid)} paid
               </p>
             </div>
           </section>
 
-          {/* ── thesis ────────────────────────────────────────────────── */}
-          <section className="mt-14">
-            <h2 className="font-serif text-xs font-semibold uppercase tracking-[0.18em] text-text-tertiary">
-              Thesis
-            </h2>
-            <div className="mt-4 space-y-4 font-serif text-lg leading-[1.65] text-text">
-              {s.note ? <p>{s.note}</p> : <p className="text-text-tertiary">—</p>}
-            </div>
-          </section>
-
-          {/* ── allocation table ──────────────────────────────────────── */}
-          {/* Fixture-derived: see deriveSaleExecution() — real columns land
-              with Chunk 5+ DB writes. */}
           <section className="mt-14">
             <h2 className="font-serif text-xs font-semibold uppercase tracking-[0.18em] text-text-tertiary">
               Allocation
@@ -238,55 +180,39 @@ export default async function SaleDetailPage({
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  <ExecRow label="USD paid" value={fmtUsd(exec.usdPaid)} mono />
+                  <ExecRow label="USD paid" value={fmtUsd(usdPaid)} mono />
                   <ExecRow
                     label="Tokens allocated"
-                    value={`${fmtTokens(exec.tokensAllocated)} ${s.asset}`}
+                    value={`${fmtTokens(tokens)} ${s.tokenSymbol}`}
                     mono
                   />
-                  <ExecRow
-                    label="TGE date"
-                    value={fmtMtmDate(exec.tgeDate)}
-                    mono
-                  />
-                  <ExecRow
-                    label="TGE unlock %"
-                    value={`${exec.tgeUnlockPct}%`}
-                    mono
-                  />
+                  <ExecRow label="TGE date" value={fmtDate(s.saleDate)} mono />
+                  <ExecRow label="TGE unlock %" value={`${tgePct}%`} mono />
                   <ExecRow
                     label="Vesting cliff"
-                    value={
-                      exec.vestingCliffMonths > 0
-                        ? `${exec.vestingCliffMonths}mo`
-                        : "none"
-                    }
+                    value={cliffMonths > 0 ? `${cliffMonths}mo` : "none"}
                     mono
                   />
                   <ExecRow
                     label="Vesting duration"
-                    value={
-                      exec.vestingDurationMonths > 0
-                        ? `${exec.vestingDurationMonths}mo`
-                        : "none"
-                    }
+                    value={durationMonths > 0 ? `${durationMonths}mo` : "none"}
                     mono
                   />
                   <ExecRow
                     label="Current price"
-                    value={`$${fmtPrice(exec.currentPrice)}`}
+                    value={currentPrice > 0 ? `$${fmtPrice(currentPrice)}` : "—"}
                     mono
                   />
                   <ExecRow
                     label="Current value"
-                    value={fmtUsd(exec.currentValue)}
+                    value={currentValue > 0 ? fmtUsd(currentValue) : "—"}
                     mono
                   />
                   <ExecRow
                     label="Net P&L"
                     value={
                       <span className={`font-medium ${headlineTone}`}>
-                        {fmtUsd(s.netPnl, true)}
+                        {fmtUsd(netPnl, true)}
                       </span>
                     }
                     mono
@@ -295,7 +221,7 @@ export default async function SaleDetailPage({
                     label="MTM ×"
                     value={
                       <span className={`font-medium ${headlineTone}`}>
-                        {s.headlineLabel}
+                        {fmtMultiplier(multiplier)}
                       </span>
                     }
                     mono
@@ -305,14 +231,13 @@ export default async function SaleDetailPage({
             </div>
           </section>
 
-          {/* ── tags ──────────────────────────────────────────────────── */}
-          {s.regimeTags.length > 0 && (
+          {activity.regimeTags.length > 0 && (
             <section className="mt-14">
               <h2 className="font-serif text-xs font-semibold uppercase tracking-[0.18em] text-text-tertiary">
                 Regime tags
               </h2>
               <div className="mt-4 flex flex-wrap gap-2">
-                {s.regimeTags.map((tag) => (
+                {activity.regimeTags.map((tag) => (
                   <span
                     key={tag}
                     className="rounded-md border border-border bg-surface px-3 py-1 font-mono text-[10px] uppercase tracking-[0.14em] text-text-secondary"
@@ -324,7 +249,6 @@ export default async function SaleDetailPage({
             </section>
           )}
 
-          {/* ── footer ────────────────────────────────────────────────── */}
           <footer className="mt-20 border-t border-border pt-6 font-mono text-xs text-text-tertiary">
             <div className="flex items-center justify-between">
               <Link
@@ -334,7 +258,7 @@ export default async function SaleDetailPage({
                 ← back to sales
               </Link>
               <span>
-                sale {s.serial.toLowerCase()} · csj
+                sale {serial.toLowerCase()} · csj
               </span>
             </div>
           </footer>
@@ -343,8 +267,6 @@ export default async function SaleDetailPage({
     </div>
   );
 }
-
-// ── Sub-components ──────────────────────────────────────────────────────────
 
 function ExecRow({
   label,

@@ -1,24 +1,141 @@
 "use server";
 
 import { redirect } from "next/navigation";
+import { sql } from "@/lib/db/client";
+import { requireUser } from "@/lib/auth/server";
+
+function stripNextInternals(entries: [string, FormDataEntryValue][]): [string, FormDataEntryValue][] {
+  return entries.filter(([k]) => !k.startsWith("$ACTION_"));
+}
+
+const MATCHER_TO_DB_TYPE: Record<string, string> = {
+  cash_carry: "cash_carry",
+  funding: "funding_capture",
+  cross_exchange: "cross_exchange_perp_arb",
+  calendar: "calendar",
+  dex_cex: "dex_cex_arb",
+};
+
+// chk_spread_variant only permits variant on cash_carry (funding|basis) and
+// funding_capture (same_venue|cross_venue). Map the wizard's display variant
+// string into one of those canonical values, or NULL when the spread type
+// doesn't take a variant.
+function mapVariantToCanonical(dbSpreadType: string, raw: string): string | null {
+  const v = raw.toLowerCase();
+  if (dbSpreadType === "cash_carry") {
+    if (v.includes("basis")) return "basis";
+    if (v.includes("funding") || v === "") return "funding";
+    return "funding";
+  }
+  if (dbSpreadType === "funding_capture") {
+    if (v.includes("cross")) return "cross_venue";
+    return "same_venue";
+  }
+  return null;
+}
 
 /**
- * Stub server action for v1. Logs the payload to the server console and
- * redirects to a spread detail page so the wizard's "submit" feels complete.
- * Real persistence (insert into `activity` + `activity_spread`, link legs,
- * trigger postmortem flow) lands when the API routes go through the new
- * `activity` supertype schema.
+ * Server action for the spread wizard's final submit.
  *
- * The redirect target reuses an existing fixture id (`sp-032` — the BTC
- * cash-and-carry funding-version) so the new dynamic detail page renders
- * real data on success. When real DB writes land, this becomes the new
- * row's UUID.
+ * Spread legs in v1 require real Position rows (the activity_spread schema
+ * is built around the fill-matcher pipeline). The wizard operates on
+ * exchange-fill MOCK ids, so we can't insert legs without materializing
+ * positions first. This action takes the pragmatic path:
+ *
+ *   - Insert activity (supertype) with the wizard's manual numbers
+ *   - Insert activity_spread (subtype) with spread-type metadata
+ *   - SKIP spread_legs — legs become first-class once the worker pipeline
+ *     materializes real Positions (Wave 5C / Wave 6).
+ *
+ * The DEFERRABLE activity_subtype_check trigger still fires at COMMIT,
+ * which is satisfied by the activity_spread row. The detail page renders
+ * the supertype + subtype fields directly; legs section will fill in when
+ * real positions exist.
  */
 export async function logSpread(formData: FormData): Promise<void> {
-  const payload = Object.fromEntries(formData.entries());
-  // eslint-disable-next-line no-console
-  console.log("[logSpread] would persist:", payload);
+  let activityId: string | null = null;
+  let redirectError: string | null = null;
+  let cleanedRaw: Record<string, string> = {};
 
-  const newSpreadId = "sp-032";
-  redirect(`/spreads/${newSpreadId}?from=wizard`);
+  try {
+    const { id: userId } = await requireUser();
+    const raw = Object.fromEntries(stripNextInternals([...formData.entries()])) as Record<string, string>;
+    cleanedRaw = raw;
+
+    const name = (raw.name ?? "").trim();
+    const rawVariant = (raw.variant ?? "").trim();
+    const spreadTypeMatcher = (raw.spreadType ?? "").trim();
+    const dbSpreadType = MATCHER_TO_DB_TYPE[spreadTypeMatcher] ?? "custom";
+    const variant = mapVariantToCanonical(dbSpreadType, rawVariant);
+    const capital = parseDecOrNull(raw.capital);
+    const netPnl = parseDecOrNull(raw.netPnl);
+    const openedAt = raw.openedAt ? new Date(raw.openedAt).toISOString() : null;
+    const closedAt = raw.closedAt ? new Date(raw.closedAt).toISOString() : null;
+    const regimeTags = (raw.regimeTags ?? "")
+      .split(",")
+      .map((t) => t.trim())
+      .filter(Boolean);
+    const thesis = (raw.thesis ?? "").trim() || null;
+
+    // Derive primary_base from name's first space-separated token (e.g.
+    // "BTC cash-and-carry · Binance + Coinbase" → "BTC"). Falls back to "—".
+    const primaryBase = (name.split(/[\s·-]/)[0] || "—").toUpperCase();
+
+    if (!name) throw new Error("Spread name is required");
+    if (closedAt && openedAt && new Date(closedAt) < new Date(openedAt)) {
+      throw new Error("closed_at must be >= opened_at");
+    }
+
+    activityId = await sql.begin(async (tx) => {
+      const [activity] = await tx<{ id: string }[]>`
+        INSERT INTO public.activity (
+          user_id, type, status, name,
+          opened_at, closed_at,
+          capital_deployed_usd, realized_pnl_usd, fees_usd, net_pnl_usd,
+          regime_tags, custom_tags
+        ) VALUES (
+          ${userId}::uuid, 'spread', 'closed',
+          ${name},
+          ${openedAt}::timestamptz, ${closedAt}::timestamptz,
+          ${capital ?? null}, ${netPnl ?? null}, '0', ${netPnl ?? null},
+          ${regimeTags}::text[], ${[] as string[]}::text[]
+        )
+        RETURNING id
+      `;
+
+      await tx`
+        INSERT INTO public.activity_spread (
+          activity_id, spread_type, variant, origin, source,
+          primary_base, leg_count,
+          exit_plan
+        ) VALUES (
+          ${activity.id}::uuid, ${dbSpreadType}, ${variant || null},
+          'manual', 'user',
+          ${primaryBase}, 0,
+          ${thesis}
+        )
+      `;
+
+      return activity.id;
+    });
+  } catch (e) {
+    redirectError = e instanceof Error ? e.message : String(e);
+  }
+
+  if (activityId) {
+    redirect(`/spreads/${activityId}?from=wizard`);
+  } else {
+    const qs = new URLSearchParams({
+      error: redirectError ?? "Unknown error logging spread",
+      ...cleanedRaw,
+    }).toString();
+    redirect(`/add/spread/review?${qs}`);
+  }
+}
+
+function parseDecOrNull(s: string | undefined): string | null {
+  if (!s) return null;
+  const n = Number(s);
+  if (!Number.isFinite(n)) return null;
+  return n.toString();
 }

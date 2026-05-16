@@ -1,6 +1,18 @@
-// Fixture dataset for the journal's closed-activity feed. Covers all four
-// activity types (spread / trade / sale / airdrop) the v1 product ships with.
-// Replaced by a `v_activity_feed` DB query once Phase 5/8 read paths land.
+// Fixture dataset — repurposed as seed data + display-type definitions.
+//
+// As of Wave 5A, dashboard / archive / detail pages all read from the DB
+// via `v_activity_feed` + subtype joins. This file remains the single
+// source of truth for:
+//   1. The `Activity` discriminated-union TS shape components consume
+//      (display-friendly fields like `serial`, `daysLabel`, `headlineLabel`).
+//   2. Vocabulary constants (`SPREAD_TYPE_LABELS`, `STATUS_STYLES`, …).
+//   3. Formatting helpers (`fmtUsd`, `fmtCapital`).
+//   4. Seed-only fixture rows imported by `src/lib/db/seed.ts` to
+//      populate a fresh local DB with demo data.
+//
+// `getActivityById`, `getRecentCloses`, `getTotals` etc. are still exported
+// here but should NOT be called by pages — they only operate on the in-
+// memory fixtures and are kept for /spreads/demo and the seed script.
 
 export type ActivityType = "spread" | "trade" | "sale" | "airdrop";
 
@@ -107,6 +119,11 @@ export const STATUS_STYLES: Record<ActivityStatus, { dot: string; label: string 
 };
 
 // ─── Spreads (16, unchanged from prior fixture beyond `type` + `id` fields) ─────
+//
+// Exported as `SEED_SPREADS` so `src/lib/db/seed.ts` can iterate the same
+// dataset when populating a fresh local DB. The internal SPREADS const is
+// preserved for back-compat with the existing /spreads/demo page.
+export const SEED_SPREADS: SpreadRow[] = []; // populated below via spread
 const SPREADS: SpreadRow[] = [
   {
     id: "sp-032",
@@ -511,6 +528,7 @@ const SPREADS: SpreadRow[] = [
 ];
 
 // ─── Trades (5) ─────────────────────────────────────────────────────────────────
+export const SEED_TRADES: TradeRow[] = []; // populated below
 const TRADES: TradeRow[] = [
   {
     id: "tr-005",
@@ -645,6 +663,7 @@ const TRADES: TradeRow[] = [
 ];
 
 // ─── Sales (3) ──────────────────────────────────────────────────────────────────
+export const SEED_SALES: SaleRow[] = []; // populated below
 const SALES: SaleRow[] = [
   {
     id: "sa-003",
@@ -724,6 +743,7 @@ const SALES: SaleRow[] = [
 ];
 
 // ─── Airdrops (3) ───────────────────────────────────────────────────────────────
+export const SEED_AIRDROPS: AirdropRow[] = []; // populated below
 const AIRDROPS: AirdropRow[] = [
   {
     id: "ad-003",
@@ -822,6 +842,14 @@ export const ARCHIVE_DATA: Activity[] = [
   ...SALES,
   ...AIRDROPS,
 ].map((a) => ({ ...a, href: getActivityHref(a) } as Activity));
+
+// Backfill the SEED_* exports with the same row data. Done after the
+// arrays are populated so each row carries its `href` (which depends on
+// getActivityHref above).
+SEED_SPREADS.push(...SPREADS);
+SEED_TRADES.push(...TRADES);
+SEED_SALES.push(...SALES);
+SEED_AIRDROPS.push(...AIRDROPS);
 
 export function getActivityById(id: string): Activity | undefined {
   return ARCHIVE_DATA.find((a) => a.id === id);

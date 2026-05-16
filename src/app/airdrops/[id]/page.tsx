@@ -9,82 +9,28 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import {
-  getActivityById,
-  fmtUsd,
-  type AirdropRow,
-} from "@/lib/data/archive-data";
+import { fmtUsd } from "@/lib/data/archive-data";
 import { WizardPreviewBanner } from "@/components/wizard/wizard-preview-banner";
+import { requireUser } from "@/lib/auth/server";
+import { getActivity } from "@/lib/db/activity";
 
-// ── Helpers ─────────────────────────────────────────────────────────────────
+export const dynamic = "force-dynamic";
 
 function fmtPrice(n: number) {
-  if (n < 1) {
-    return n.toLocaleString("en-US", { maximumSignificantDigits: 4 });
-  }
-  return n.toLocaleString("en-US", {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  });
+  if (n < 1) return n.toLocaleString("en-US", { maximumSignificantDigits: 4 });
+  return n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
-
 function fmtTokens(n: number) {
   return n.toLocaleString("en-US", { maximumFractionDigits: 0 });
 }
-
-function fmtClaimDate(closedAt: string, daysHeld: number) {
-  // Claim date ≈ close date − days held. Fixtures store the close date
-  // and the days held since claim; we back-derive claim time.
-  const closed = new Date(closedAt);
-  const claim = new Date(closed.getTime() - daysHeld * 86400_000);
-  return claim.toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  });
+function fmtDate(iso: string | null) {
+  if (!iso) return "—";
+  return new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
 }
-
-/**
- * Derive illustrative claim/MTM fields from the row's stored aggregates.
- * The row only carries the multiplier + net_pnl + asset/protocol; we
- * back-solve a self-consistent (tokens, current_price, value_at_claim)
- * triple so the detail table has real numbers. Replaced by the
- * `activity_airdrop` columns once Chunk 5+ writes land.
- */
-function deriveAirdropExecution(drop: AirdropRow): {
-  tokensClaimed: number;
-  currentPrice: number;
-  currentValue: number;
-  valueAtClaim: number;
-} {
-  const currentPriceByAsset: Record<string, number> = {
-    PYTH: 0.62,
-    JUP: 1.05,
-    ARB: 0.78,
-    EIGEN: 3.8,
-    W: 1.1,
-    ZETA: 0.28,
-    BTC: 64200,
-    ETH: 3120,
-    SOL: 178.4,
-    PEPE: 0.0000142,
-  };
-  // For airdrops, capital is always $0 — the MTM × encodes (current /
-  // claim-value). Current value = net_pnl (cost basis = $0). Claim value
-  // = current_value / multiplier.
-  const currentValue = drop.netPnl;
-  const valueAtClaim = drop.multiplier > 0 ? currentValue / drop.multiplier : 0;
-  const currentPrice = currentPriceByAsset[drop.asset] ?? 1;
-  const tokensClaimed = currentPrice > 0 ? currentValue / currentPrice : 0;
-  return {
-    tokensClaimed,
-    currentPrice,
-    currentValue,
-    valueAtClaim,
-  };
+function fmtMultiplier(m: number) {
+  if (!Number.isFinite(m) || m === 0) return "—";
+  return m >= 10 ? `${m.toFixed(1)}×` : `${m.toFixed(2)}×`;
 }
-
-// ── Page ────────────────────────────────────────────────────────────────────
 
 export default async function AirdropDetailPage({
   params,
@@ -95,15 +41,26 @@ export default async function AirdropDetailPage({
 }) {
   const { id } = await params;
   const sp = await searchParams;
-  const activity = getActivityById(id);
-
-  if (!activity || activity.type !== "airdrop") {
+  const { id: userId } = await requireUser();
+  const activity = await getActivity(userId, id);
+  if (!activity || activity.subtype.type !== "airdrop") {
     notFound();
   }
 
-  const a = activity as AirdropRow;
-  const exec = deriveAirdropExecution(a);
-  const headlineTone = a.tone === "up" ? "text-up" : "text-down";
+  const a = activity.subtype.row;
+  const tokens = Number(a.qtyReceived);
+  const currentPrice = Number(a.currentPriceUsd ?? 0);
+  const currentValue = tokens * currentPrice;
+  const valueAtClaim = Number(a.valueAtReceiptUsd ?? 0);
+  const multiplier = valueAtClaim > 0 ? currentValue / valueAtClaim : 1.0;
+  const netPnl = Number(activity.netPnlUsd ?? 0);
+  const headlineTone = multiplier >= 1 ? "text-up" : "text-down";
+  const statusLabel = activity.status[0].toUpperCase() + activity.status.slice(1);
+  const serial = `A#${activity.id.slice(0, 4).toUpperCase()}`;
+  const claimLabel = fmtDate(a.claimDate ?? activity.openedAt);
+  const daysSinceClaim = a.claimDate
+    ? Math.max(0, Math.round((Date.now() - new Date(a.claimDate).getTime()) / 86_400_000))
+    : 0;
 
   return (
     <div className="flex h-screen w-full bg-app">
@@ -111,34 +68,31 @@ export default async function AirdropDetailPage({
       <main className="flex-1 overflow-y-auto">
         <article className="mx-auto max-w-4xl px-6 py-14 md:py-20">
           <WizardPreviewBanner from={sp.from} />
-          {/* ── meta row ──────────────────────────────────────────────── */}
           <div className="flex items-center justify-between font-mono text-xs text-text-tertiary">
-            <span>{a.serial}</span>
+            <span>{serial}</span>
             <span className="flex items-center gap-2">
               <span className="inline-flex items-center gap-1.5 rounded-full bg-subtle px-2.5 py-0.5">
                 <span className="h-1.5 w-1.5 rounded-full bg-text-tertiary" />
                 <span className="text-[10px] font-semibold uppercase tracking-[0.12em]">
-                  Claimed
+                  {statusLabel}
                 </span>
               </span>
-              <span>{a.closedLabel}, 2026</span>
+              <span>{claimLabel}</span>
             </span>
           </div>
 
-          {/* ── title block ───────────────────────────────────────────── */}
           <header className="mt-6">
             <h1 className="font-serif text-4xl font-medium leading-tight tracking-tight text-text md:text-5xl">
-              {a.asset} · {a.protocol} airdrop
+              {activity.name}
             </h1>
             <p className="mt-3 text-base text-text-secondary">
-              {a.protocol} · {a.asset}
+              {a.protocol} · {a.tokenSymbol}
             </p>
             <p className="mt-1 font-mono text-sm text-text-tertiary">
-              {a.daysLabel} since claim
+              {daysSinceClaim}d since claim
             </p>
           </header>
 
-          {/* ── hero block ────────────────────────────────────────────── */}
           <section className="mt-14 border-y border-border py-12">
             <div className="flex flex-col gap-2">
               <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-text-tertiary">
@@ -149,7 +103,7 @@ export default async function AirdropDetailPage({
                   className="font-serif font-normal leading-none text-signature"
                   style={{ fontSize: "clamp(56px, 9vw, 96px)" }}
                 >
-                  {a.headlineLabel}
+                  {fmtMultiplier(multiplier)}
                 </span>
                 <span className="font-serif text-2xl font-normal text-text-tertiary">
                   MTM
@@ -158,26 +112,24 @@ export default async function AirdropDetailPage({
               <p className="mt-3 font-mono text-sm text-text-secondary">
                 Net{" "}
                 <span className={`${headlineTone} font-medium`}>
-                  {fmtUsd(a.netPnl, true)}
+                  {fmtUsd(netPnl, true)}
                 </span>{" "}
                 realized · cost basis $0
               </p>
             </div>
           </section>
 
-          {/* ── thesis ────────────────────────────────────────────────── */}
-          <section className="mt-14">
-            <h2 className="font-serif text-xs font-semibold uppercase tracking-[0.18em] text-text-tertiary">
-              Thesis
-            </h2>
-            <div className="mt-4 space-y-4 font-serif text-lg leading-[1.65] text-text">
-              {a.note ? <p>{a.note}</p> : <p className="text-text-tertiary">—</p>}
-            </div>
-          </section>
+          {a.eligibilityReason && (
+            <section className="mt-14">
+              <h2 className="font-serif text-xs font-semibold uppercase tracking-[0.18em] text-text-tertiary">
+                Thesis
+              </h2>
+              <div className="mt-4 space-y-4 font-serif text-lg leading-[1.65] text-text">
+                <p>{a.eligibilityReason}</p>
+              </div>
+            </section>
+          )}
 
-          {/* ── claim table ──────────────────────────────────────────── */}
-          {/* Fixture-derived: see deriveAirdropExecution() — real columns
-              land with Chunk 5+ DB writes. */}
           <section className="mt-14">
             <h2 className="font-serif text-xs font-semibold uppercase tracking-[0.18em] text-text-tertiary">
               Claim
@@ -188,50 +140,38 @@ export default async function AirdropDetailPage({
                 <TableHeader>
                   <TableRow className="hover:bg-transparent">
                     <TableHead className="text-text-tertiary">&nbsp;</TableHead>
-                    <TableHead className="text-right text-text-secondary">
-                      Value
-                    </TableHead>
+                    <TableHead className="text-right text-text-secondary">Value</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   <ExecRow label="Protocol" value={a.protocol} mono />
                   <ExecRow
                     label="Tokens claimed"
-                    value={`${fmtTokens(exec.tokensClaimed)} ${a.asset}`}
+                    value={`${fmtTokens(tokens)} ${a.tokenSymbol}`}
                     mono
                   />
-                  <ExecRow
-                    label="Claim date"
-                    value={fmtClaimDate(a.closedAt, a.daysHeld)}
-                    mono
-                  />
-                  <ExecRow
-                    label="Value at claim"
-                    value={fmtUsd(exec.valueAtClaim)}
-                    mono
-                  />
+                  <ExecRow label="Claim date" value={fmtDate(a.claimDate)} mono />
+                  <ExecRow label="Value at claim" value={fmtUsd(valueAtClaim)} mono />
                   <ExecRow
                     label="Current price"
-                    value={`$${fmtPrice(exec.currentPrice)}`}
+                    value={currentPrice > 0 ? `$${fmtPrice(currentPrice)}` : "—"}
                     mono
                   />
                   <ExecRow
                     label="Current value"
-                    value={fmtUsd(exec.currentValue)}
+                    value={currentValue > 0 ? fmtUsd(currentValue) : "—"}
                     mono
                   />
                   <ExecRow
                     label="Cost basis"
-                    value={
-                      <span className="text-text-tertiary">$0.00</span>
-                    }
+                    value={<span className="text-text-tertiary">$0.00</span>}
                     mono
                   />
                   <ExecRow
                     label="Net P&L"
                     value={
                       <span className={`font-medium ${headlineTone}`}>
-                        {fmtUsd(a.netPnl, true)}
+                        {fmtUsd(netPnl, true)}
                       </span>
                     }
                     mono
@@ -240,7 +180,7 @@ export default async function AirdropDetailPage({
                     label="MTM ×"
                     value={
                       <span className={`font-medium ${headlineTone}`}>
-                        {a.headlineLabel}
+                        {fmtMultiplier(multiplier)}
                       </span>
                     }
                     mono
@@ -250,14 +190,13 @@ export default async function AirdropDetailPage({
             </div>
           </section>
 
-          {/* ── tags ──────────────────────────────────────────────────── */}
-          {a.regimeTags.length > 0 && (
+          {activity.regimeTags.length > 0 && (
             <section className="mt-14">
               <h2 className="font-serif text-xs font-semibold uppercase tracking-[0.18em] text-text-tertiary">
                 Regime tags
               </h2>
               <div className="mt-4 flex flex-wrap gap-2">
-                {a.regimeTags.map((tag) => (
+                {activity.regimeTags.map((tag) => (
                   <span
                     key={tag}
                     className="rounded-md border border-border bg-surface px-3 py-1 font-mono text-[10px] uppercase tracking-[0.14em] text-text-secondary"
@@ -269,7 +208,6 @@ export default async function AirdropDetailPage({
             </section>
           )}
 
-          {/* ── footer ────────────────────────────────────────────────── */}
           <footer className="mt-20 border-t border-border pt-6 font-mono text-xs text-text-tertiary">
             <div className="flex items-center justify-between">
               <Link
@@ -279,7 +217,7 @@ export default async function AirdropDetailPage({
                 ← back to airdrops
               </Link>
               <span>
-                airdrop {a.serial.toLowerCase()} · csj
+                airdrop {serial.toLowerCase()} · csj
               </span>
             </div>
           </footer>
@@ -288,8 +226,6 @@ export default async function AirdropDetailPage({
     </div>
   );
 }
-
-// ── Sub-components ──────────────────────────────────────────────────────────
 
 function ExecRow({
   label,

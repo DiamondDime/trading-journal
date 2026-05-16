@@ -1,21 +1,43 @@
 "use server";
 
 import { redirect } from "next/navigation";
+import { requireUser } from "@/lib/auth/server";
+import { createAirdrop } from "@/lib/db/activity";
+import { CreateAirdropBody } from "@/lib/db/zod-schemas";
+
+function stripNextInternals(entries: [string, FormDataEntryValue][]): [string, FormDataEntryValue][] {
+  return entries.filter(([k]) => !k.startsWith("$ACTION_"));
+}
 
 /**
- * Stub server action for v1. Logs the payload to the server console and
- * redirects to the freshly-created airdrop's detail page. Real persistence
- * lives in Chunk 5+ when API routes go through `activity_airdrop`.
+ * Server action for the airdrop wizard's final submit.
  *
- * The redirect target uses the placeholder id `ad-003` (the most recent
- * fixture airdrop) so the detail page renders meaningfully. When the real
- * DB write lands, this becomes the new row's UUID.
+ * Cost basis is always $0 for airdrops; net_pnl_usd captures the current
+ * MTM value, realized_pnl_usd captures the income value at claim. The
+ * row's redirect target is /airdrops/<new-uuid>?from=wizard.
  */
 export async function logAirdrop(formData: FormData): Promise<void> {
-  const payload = Object.fromEntries(formData.entries());
-  // eslint-disable-next-line no-console
-  console.log("[logAirdrop] would persist:", payload);
+  let activityId: string | null = null;
+  let redirectError: string | null = null;
 
-  const newAirdropId = "ad-003";
-  redirect(`/airdrops/${newAirdropId}?from=wizard`);
+  let cleanedRaw: Record<string, string> = {};
+  try {
+    const { id: userId } = await requireUser();
+    cleanedRaw = Object.fromEntries(stripNextInternals([...formData.entries()])) as Record<string, string>;
+    const input = CreateAirdropBody.parse(cleanedRaw);
+    const { id } = await createAirdrop(userId, input);
+    activityId = id;
+  } catch (e) {
+    redirectError = e instanceof Error ? e.message : String(e);
+  }
+
+  if (activityId) {
+    redirect(`/airdrops/${activityId}?from=wizard`);
+  } else {
+    const qs = new URLSearchParams({
+      error: redirectError ?? "Unknown error logging airdrop",
+      ...cleanedRaw,
+    }).toString();
+    redirect(`/add/airdrop/review?${qs}`);
+  }
 }

@@ -331,3 +331,182 @@ export const ActivityFeedRowSchema = z.object({
   created_at:           z.string().datetime(),
   updated_at:           z.string().datetime(),
 });
+
+// ============================================================================
+// Activity create-body schemas
+//
+// Wired into /api/activities/{trade,sale,airdrop} (POST). Mirrors the wizard
+// form field names exactly. Numeric values arrive as strings from the GET-form
+// pipeline; we coerce + validate. .strict() rejects unknown keys so a typo in
+// the form rendering is a 400, not a silent insert with a missing column.
+// ============================================================================
+
+/** Number-as-string with a positive bound. */
+const PositiveDecimal = z
+  .string()
+  .regex(/^\d+(\.\d+)?$/, 'must be a positive decimal string')
+  .refine((s) => Number(s) > 0, { message: 'must be > 0' });
+
+/** Number-as-string, non-negative. */
+const NonNegativeDecimal = z
+  .string()
+  .regex(/^\d+(\.\d+)?$/, 'must be a non-negative decimal string')
+  .refine((s) => Number(s) >= 0, { message: 'must be >= 0' });
+
+/** Number-as-string, signed (can be negative). */
+const SignedDecimal = z
+  .string()
+  .regex(/^-?\d+(\.\d+)?$/, 'must be a signed decimal string');
+
+/** Comma-separated tags string → string[]. */
+const TagListString = z
+  .string()
+  .optional()
+  .transform((s) =>
+    (s ?? '')
+      .split(',')
+      .map((t) => t.trim())
+      .filter(Boolean)
+  )
+  .pipe(z.array(z.string().max(40)).max(20));
+
+const TradeExchange = z.enum([
+  'Binance', 'Bybit', 'Hyperliquid', 'Coinbase', 'OKX', 'Other',
+]);
+const TradeInstrument = z.enum(['perp', 'spot', 'future']);
+const TradeSide = z.enum(['long', 'short']);
+
+/**
+ * CreateTradeBody — mirrors /add/trade/fields. Validates manual-entry trades
+ * before they hit createTrade(). Keys match the form's <input name="…">.
+ *
+ * Validation rules per spec:
+ *   - entry_price > 0, exit_price > 0, quantity > 0
+ *   - capital_deployed_usd >= 0
+ *   - closed_at >= opened_at
+ */
+export const CreateTradeBody = z
+  .object({
+    exchange:   TradeExchange,
+    symbol:     z.string().min(1).max(40),
+    instrument: TradeInstrument,
+    side:       TradeSide,
+    capital:    NonNegativeDecimal,
+    qty:        PositiveDecimal,
+    entryPrice: PositiveDecimal,
+    exitPrice:  PositiveDecimal,
+    fees:       NonNegativeDecimal.optional().default('0'),
+    openedAt:   z.string().min(1),  // datetime-local string
+    closedAt:   z.string().min(1),
+    note:       z.string().max(4000).optional().default(''),
+    regimeTags: TagListString,
+    // Pass-through fields from earlier wizard steps. Not validated as content.
+    source:     z.string().max(80).optional(),
+  })
+  .strict()
+  .superRefine((val, ctx) => {
+    const opened = new Date(val.openedAt).getTime();
+    const closed = new Date(val.closedAt).getTime();
+    if (!Number.isFinite(opened)) {
+      ctx.addIssue({ code: 'custom', path: ['openedAt'], message: 'invalid datetime' });
+    }
+    if (!Number.isFinite(closed)) {
+      ctx.addIssue({ code: 'custom', path: ['closedAt'], message: 'invalid datetime' });
+    }
+    if (Number.isFinite(opened) && Number.isFinite(closed) && closed < opened) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['closedAt'],
+        message: 'closed_at must be >= opened_at',
+      });
+    }
+  });
+
+export type CreateTradeInput = z.input<typeof CreateTradeBody>;
+export type CreateTradeData = z.output<typeof CreateTradeBody>;
+
+/**
+ * CreateSaleBody — mirrors /add/sale/fields. Captures an IDO/launchpad/
+ * premarket/OTC allocation manually.
+ *
+ * Rules:
+ *   - usd_paid > 0, tokens_allocated > 0, current_price_usd >= 0
+ *   - tge_unlock_pct in [0, 100]
+ */
+export const CreateSaleBody = z
+  .object({
+    saleKind:               SaleKindSchema,
+    venue:                  z.string().min(1).max(80),
+    asset:                  z.string().min(1).max(40),
+    usdPaid:                PositiveDecimal,
+    tokensAllocated:        PositiveDecimal,
+    tgeDate:                z.string().min(1),  // YYYY-MM-DD
+    tgeUnlockPct:           z.coerce.number().min(0).max(100),
+    vestingCliffMonths:     z.coerce.number().int().nonnegative().optional().default(0),
+    vestingDurationMonths:  z.coerce.number().int().nonnegative().optional().default(0),
+    currentPriceUsd:        NonNegativeDecimal,
+    openedAt:               z.string().min(1),  // datetime-local
+    note:                   z.string().max(4000).optional().default(''),
+    regimeTags:             TagListString,
+  })
+  .strict();
+
+export type CreateSaleInput = z.input<typeof CreateSaleBody>;
+export type CreateSaleData = z.output<typeof CreateSaleBody>;
+
+/**
+ * CreateAirdropBody — mirrors /add/airdrop/fields. Captures a retro / loyalty
+ * token drop. Cost basis is always $0; net_pnl is current_value.
+ *
+ * Rules:
+ *   - tokens_claimed > 0, current_price_usd >= 0, usd_value_at_claim >= 0
+ */
+export const CreateAirdropBody = z
+  .object({
+    protocol:        z.string().min(1).max(80),
+    asset:           z.string().min(1).max(40),
+    tokensClaimed:   PositiveDecimal,
+    claimDate:       z.string().min(1),  // YYYY-MM-DD
+    usdValueAtClaim: NonNegativeDecimal,
+    currentPriceUsd: NonNegativeDecimal,
+    note:            z.string().max(4000).optional().default(''),
+    regimeTags:      TagListString,
+  })
+  .strict();
+
+export type CreateAirdropInput = z.input<typeof CreateAirdropBody>;
+export type CreateAirdropData = z.output<typeof CreateAirdropBody>;
+
+/**
+ * ListActivitiesQuery — /api/activities GET query string. Filters across all
+ * four activity types via v_activity_feed.
+ */
+export const ListActivitiesQuery = z.object({
+  type:           z.string().optional(),      // 'spread,trade,sale,airdrop' subset
+  status:         z.string().optional(),
+  spread_type:    z.string().optional(),      // only meaningful when type includes 'spread'
+  sale_kind:      z.string().optional(),
+  asset:          z.string().optional(),
+  opened_after:   z.string().datetime().optional(),
+  opened_before:  z.string().datetime().optional(),
+  search:         z.string().max(120).optional(),
+  sort_field:     z.enum([
+    'closed_at', 'opened_at', 'realized_pnl_usd', 'net_pnl_usd', 'capital_deployed_usd', 'created_at',
+  ]).default('closed_at'),
+  sort_dir:       z.enum(['asc', 'desc']).default('desc'),
+  limit:          z.coerce.number().int().min(1).max(200).default(50),
+  cursor:         z.string().optional(),
+});
+
+/**
+ * UpdateActivityBody — common-field edits for any activity type.
+ * Subtype-specific edits land in Wave 6.
+ */
+export const UpdateActivityBody = z
+  .object({
+    name:        z.string().min(1).max(120).optional(),
+    regime_tags: z.array(z.string().max(40)).max(20).optional(),
+    custom_tags: z.array(z.string().max(40)).max(20).optional(),
+    status:      ActivityStatusSchema.optional(),
+  })
+  .strict();

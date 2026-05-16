@@ -2,6 +2,7 @@ import Link from "next/link";
 import { ArrowLeft, ArrowRight } from "lucide-react";
 import { WizardShell } from "@/components/wizard/wizard-shell";
 import { WizardSummaryRow } from "@/components/wizard/wizard-summary-row";
+import { WizardErrorBanner } from "@/components/wizard/wizard-error-banner";
 import { logTrade } from "../actions";
 
 const STEP_LABELS = ["Source", "Pick", "Details", "Review"] as const;
@@ -169,6 +170,7 @@ export default async function TradeReviewPage(props: { searchParams: Search }) {
       title="Look it over"
       subtitle="One last pass before this hits your journal. Edit any row to bounce back to the form."
     >
+      <WizardErrorBanner error={getStr(sp, "error") || undefined} />
       {/* ── Hero preview ─────────────────────────────────────────────── */}
       <section className="border-y border-border py-10">
         <div className="flex flex-col gap-2">

@@ -13,21 +13,26 @@ import { ActivityMix } from "@/components/spread/activity-mix";
 import {
   fmtCapital,
   fmtUsd,
-  getActivityTypeCounts,
-  getRecentCloses,
-  getTotals,
   ACTIVITY_TYPE_LABELS,
   SPREAD_TYPE_LABELS,
   type Activity,
 } from "@/lib/data/archive-data";
+import { requireUser } from "@/lib/auth/server";
+import {
+  getTotals,
+  getActivityTypeCounts,
+  getRecentCloses,
+  listActivities,
+} from "@/lib/db/activity";
+import { fetchSubtypeMetaForIds } from "@/lib/data/db-queries";
+import { feedRowsToActivities } from "@/lib/data/db-adapter";
 
-export const dynamic = "force-static";
+// The dashboard reads the user's full feed once per render. With <1k
+// activities for a single-user app this is fast (<10ms total across the
+// aggregate queries). Force-dynamic keeps the data fresh post-wizard submit.
+export const dynamic = "force-dynamic";
 
 const RECENT_COUNT = 8;
-const recentRows = getRecentCloses(RECENT_COUNT);
-const recentNetSum = recentRows.reduce((s, r) => s + r.netPnl, 0);
-const totals = getTotals();
-const typeCounts = getActivityTypeCounts();
 
 function describeActivity(a: Activity): string {
   switch (a.type) {
@@ -42,30 +47,64 @@ function describeActivity(a: Activity): string {
   }
 }
 
-function bestDelta(a: Activity): string {
+function bestDelta(a: Activity | null | undefined): string {
+  if (!a) return "—";
   if (a.type === "spread") {
     return `${a.serial} · ${SPREAD_TYPE_LABELS[a.spreadType].toLowerCase()} · ${a.daysLabel}`;
   }
   return `${a.serial} · ${ACTIVITY_TYPE_LABELS[a.type].toLowerCase()} · ${a.daysLabel}`;
 }
 
-const recentCloses: SpreadListItem[] = recentRows.map((r) => ({
-  serial: r.serial,
-  name: r.name,
-  typeLabel: describeActivity(r),
-  status: r.status,
-  headline: r.headlineLabel,
-  headlineUnit: r.headlineKind,
-  tone: r.tone,
-  summary:
-    r.type === "airdrop"
-      ? `${r.daysLabel} · ${r.note}`
-      : `${fmtCapital(r.capital)} · ${r.daysLabel} · ${r.note}`,
-  href: r.href,
-  activityType: r.type,
-}));
+export default async function SpreadsPage() {
+  const { id: userId } = await requireUser();
 
-export default function SpreadsPage() {
+  // Parallel reads — independent aggregations + recent-closes window + full
+  // list for the equity curve / activity-mix charts that scan the whole set.
+  const [totals, typeCounts, recentRows, allRows] = await Promise.all([
+    getTotals(userId),
+    getActivityTypeCounts(userId),
+    getRecentCloses(userId, RECENT_COUNT),
+    listActivities(userId, { limit: 200, sortField: "closed_at", sortDir: "desc" }),
+  ]);
+
+  // Subtype metadata for: best, worst, recent grid, and the full chart set.
+  const allInteresting = [
+    ...allRows,
+    ...(totals.best ? [totals.best] : []),
+    ...(totals.worst ? [totals.worst] : []),
+  ];
+  const meta = await fetchSubtypeMetaForIds(userId, allInteresting);
+
+  const allDisplays = feedRowsToActivities(allRows, meta);
+  const recentDisplays = feedRowsToActivities(recentRows, meta);
+  const bestDisplay = totals.best ? feedRowsToActivities([totals.best], meta)[0] : null;
+  const worstDisplay = totals.worst ? feedRowsToActivities([totals.worst], meta)[0] : null;
+
+  const recentNetSum = recentRows.reduce((s, r) => s + Number(r.netPnlUsd ?? 0), 0);
+
+  const recentCloses: SpreadListItem[] = recentDisplays.map((r) => ({
+    serial: r.serial,
+    name: r.name,
+    typeLabel: describeActivity(r),
+    status: r.status,
+    headline: r.headlineLabel,
+    headlineUnit: r.headlineKind,
+    tone: r.tone,
+    summary:
+      r.type === "airdrop"
+        ? `${r.daysLabel} · ${r.note || "—"}`
+        : `${fmtCapital(r.capital)} · ${r.daysLabel} · ${r.note || "—"}`,
+    href: r.href,
+    activityType: r.type,
+  }));
+
+  // Friendly "since" date — use first close from totals if available.
+  const sinceLabel = totals.firstClose
+    ? new Date(totals.firstClose).toLocaleDateString("en-US", {
+        month: "short", day: "numeric", year: "numeric",
+      })
+    : "today";
+
   return (
     <div className="w-full">
       {/* ── hero strip ──────────────────────────────────────────────────── */}
@@ -75,7 +114,7 @@ export default function SpreadsPage() {
             The book
           </h1>
           <p className="mt-2 font-serif text-sm italic text-text-tertiary">
-            {totals.count} activities · {typeCounts.spread} spreads · {typeCounts.trade} trades · {typeCounts.sale} sales · {typeCounts.airdrop} airdrops · since Jan 12, 2026
+            {totals.count} activities · {typeCounts.spread} spreads · {typeCounts.trade} trades · {typeCounts.sale} sales · {typeCounts.airdrop} airdrops · since {sinceLabel}
           </p>
         </div>
 
@@ -124,15 +163,15 @@ export default function SpreadsPage() {
           />
           <KpiCard
             label="Best activity"
-            value={fmtUsd(totals.best.netPnl, true)}
+            value={bestDisplay ? fmtUsd(bestDisplay.netPnl, true) : "—"}
             tone="up"
-            delta={bestDelta(totals.best)}
+            delta={bestDelta(bestDisplay)}
           />
           <KpiCard
             label="Worst activity"
-            value={fmtUsd(totals.worst.netPnl, true)}
+            value={worstDisplay ? fmtUsd(worstDisplay.netPnl, true) : "—"}
             tone="down"
-            delta={bestDelta(totals.worst)}
+            delta={bestDelta(worstDisplay)}
           />
         </section>
 
@@ -166,7 +205,7 @@ export default function SpreadsPage() {
                 Recent closes
               </h2>
               <span className="font-mono text-[11px] text-text-tertiary">
-                {RECENT_COUNT} of {totals.count} · {fmtUsd(recentNetSum)} realized
+                {recentRows.length} of {totals.count} · {fmtUsd(recentNetSum)} realized
               </span>
             </div>
             <Link
@@ -176,11 +215,25 @@ export default function SpreadsPage() {
               The archive <ArrowRight className="h-3 w-3" />
             </Link>
           </div>
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
-            {recentCloses.map((item) => (
-              <SpreadListCard key={item.serial} item={item} />
-            ))}
-          </div>
+          {recentCloses.length > 0 ? (
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+              {recentCloses.map((item) => (
+                <SpreadListCard key={item.serial} item={item} />
+              ))}
+            </div>
+          ) : (
+            <div className="rounded-md border border-dashed border-border bg-surface py-12 text-center">
+              <p className="font-serif text-base italic text-text-secondary">
+                No activities logged yet.
+              </p>
+              <Link
+                href="/add"
+                className="mt-3 inline-block font-mono text-[10px] uppercase tracking-[0.18em] text-text-tertiary underline-offset-4 hover:text-text hover:underline"
+              >
+                Log your first activity
+              </Link>
+            </div>
+          )}
         </section>
 
         {/* ── equity curve ──────────────────────────────────────────────── */}
@@ -195,21 +248,23 @@ export default function SpreadsPage() {
               </p>
             </div>
             <span className="font-mono text-[11px] text-text-tertiary">
-              Jan 8 → May 16, 2026
+              {totals.firstClose
+                ? `${new Date(totals.firstClose).toLocaleDateString("en-US", { month: "short", day: "numeric" })} → ${new Date(totals.lastClose ?? Date.now()).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}`
+                : "—"}
             </span>
           </div>
-          <EquityCurveChart />
+          <EquityCurveChart data={allDisplays} />
         </section>
 
         {/* ── notes feed + activity mix ─────────────────────────────────── */}
         <section className="mb-10 grid grid-cols-1 gap-6 xl:grid-cols-[1fr_1.6fr]">
           <NotesFeed />
-          <ActivityMix />
+          <ActivityMix data={allDisplays} />
         </section>
 
         {/* ── footer ────────────────────────────────────────────────────── */}
         <footer className="mt-8 flex items-center justify-between border-t border-border pt-5 font-mono text-[10px] uppercase tracking-[0.18em] text-text-tertiary">
-          <span>crypto journal · v0.1 · since Jan 12, 2026</span>
+          <span>crypto journal · v0.1 · since {sinceLabel}</span>
           <span>3 exchanges connected · {totals.count} activities archived</span>
         </footer>
       </div>
