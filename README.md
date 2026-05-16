@@ -22,6 +22,8 @@ docker compose up -d
 
 On first boot the `web` container waits for Postgres to report healthy, runs `pnpm db:migrate`, then starts. The `worker` container starts in parallel and idles until you connect an exchange.
 
+On first install, run `pnpm db:seed` to populate 27 demo activities so the UI isn't empty.
+
 ## Architecture
 
 Three services, one Postgres.
@@ -86,8 +88,30 @@ The full set of pnpm scripts:
 | `pnpm db:create` / `db:drop` / `db:reset` | Postgres lifecycle |
 | `pnpm db:migrate` | Apply `supabase/migrations/*.sql` in order |
 | `pnpm db:psql` | Interactive psql shell |
-| `pnpm worker:dev` | Run the Python worker against your local DB |
+| `pnpm worker:dev` | Run the Python worker daemon against your local DB |
+| `pnpm worker:once` | Run a single sync+match cycle then exit |
+| `pnpm worker:match` | Run the leg matcher only (no exchange sync) |
 | `pnpm worker:test` | pytest in `worker/` |
+
+## Worker (exchange ingestion)
+
+The worker is a Python daemon that pulls fills from connected exchanges and
+runs the leg matcher.
+
+```bash
+# One-shot (useful for development):
+pnpm worker:once
+
+# Long-running (production):
+pnpm worker:dev
+
+# Matcher only (no sync):
+pnpm worker:match
+```
+
+Environment: `DATABASE_URL`, `CREDENTIALS_MASTER_KEY` (required), optional
+`WORKER_POLL_INTERVAL_SECONDS` (default 300), `WORKER_LOOKBACK_DAYS` (default
+30), `WORKER_LOG_LEVEL` (default INFO). Logs are JSON lines on stdout.
 
 ## Contributing
 

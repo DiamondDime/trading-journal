@@ -16,8 +16,11 @@
     "db:drop": "dropdb --if-exists crypto_spread_journal",
     "db:migrate": "for f in supabase/migrations/*.sql; do echo \"-- $f\"; psql -d crypto_spread_journal -v ON_ERROR_STOP=1 -f \"$f\" || exit 1; done",
     "db:reset": "pnpm db:drop && pnpm db:create && pnpm db:migrate",
+    "db:seed": "tsx src/lib/db/seed.ts",
     "db:psql": "psql -d crypto_spread_journal",
     "worker:dev": "cd worker && uv run python -m csj_worker.main",
+    "worker:once": "cd worker && uv run python -m csj_worker.main --once",
+    "worker:match": "cd worker && uv run python -m csj_worker.main match",
     "worker:test": "cd worker && uv run pytest"
   },
   "dependencies": {
@@ -46,6 +49,7 @@
     "eslint": "^9",
     "eslint-config-next": "16.2.6",
     "tailwindcss": "^4",
+    "tsx": "^4.22.0",
     "typescript": "^5",
     "vitest": "^4.1.6"
   },
