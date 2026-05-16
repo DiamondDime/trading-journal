@@ -20,8 +20,29 @@ import {
 } from "@/lib/data/exchange-fills-mock";
 import { SPREAD_TYPE_LABELS, type MatcherSpreadType } from "@/lib/matcher/spread-matcher";
 import { cn } from "@/lib/utils";
+import { requireUser } from "@/lib/auth/server";
+import { getActivity } from "@/lib/db/activity";
 
 const STEP_LABELS = ["Source", "Pick legs", "Type", "Fields", "Review"] as const;
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/** Map the canonical DB spread_type → matcher key the wizard URL uses. */
+const DB_TO_MATCHER_TYPE: Record<string, string> = {
+  cash_carry: "cash_carry",
+  funding_capture: "funding",
+  cross_exchange_perp_arb: "cross_exchange",
+  calendar: "calendar",
+  dex_cex_arb: "dex_cex",
+};
+
+function isoToDateTimeLocal(iso: string | null): string {
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (!Number.isFinite(d.getTime())) return "";
+  const pad = (n: number) => n.toString().padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
 
 type Search = Promise<{ [key: string]: string | string[] | undefined }>;
 
@@ -147,6 +168,44 @@ function sumNetPnl(legs: ImportedTradeFill[]): number {
 
 export default async function SpreadFieldsPage(props: { searchParams: Search }) {
   const sp = await props.searchParams;
+  const editId = getStr(sp, "edit");
+
+  // Edit-mode pre-fill from DB. Manual spreads have no leg rows (the create
+  // action skips them), so the legs table will be empty — that's OK and
+  // matches what the user sees on the detail page.
+  let dbDefaults: Partial<{
+    name: string;
+    variant: string;
+    openedAt: string;
+    closedAt: string;
+    capital: string;
+    netPnl: string;
+    thesis: string;
+    regimeTags: string;
+    spreadType: string;
+    serial: string;
+  }> = {};
+  let editValid = false;
+  if (editId && UUID_RE.test(editId)) {
+    const { id: userId } = await requireUser();
+    const activity = await getActivity(userId, editId);
+    if (activity && activity.subtype.type === "spread") {
+      const s = activity.subtype.row;
+      dbDefaults = {
+        name: activity.name,
+        variant: s.variant ?? "",
+        openedAt: isoToDateTimeLocal(activity.openedAt),
+        closedAt: isoToDateTimeLocal(activity.closedAt),
+        capital: activity.capitalDeployedUsd ?? "",
+        netPnl: activity.netPnlUsd ?? "",
+        thesis: s.exitPlan ?? "",
+        regimeTags: activity.regimeTags.join(", "),
+        spreadType: DB_TO_MATCHER_TYPE[s.spreadType] ?? "",
+        serial: activity.id.slice(0, 4).toUpperCase(),
+      };
+      editValid = true;
+    }
+  }
 
   const legIds = parseLegIds(sp);
   const legs = legIds
@@ -154,27 +213,29 @@ export default async function SpreadFieldsPage(props: { searchParams: Search }) 
     .filter((l): l is ImportedTradeFill => !!l);
   const missing = legIds.filter((id) => !getImportedFillById(id));
 
-  const spreadType = getStr(sp, "spreadType");
+  const spreadType = getStr(sp, "spreadType") || dbDefaults.spreadType || "";
   const matcher = getStr(sp, "matcher"); // "auto" | "manual" | ""
 
   // ── Defaults — pre-filled either from URL (matcher path) or derived ────────
   const defaults = {
-    name: getStr(sp, "name") || suggestName(legs, spreadType),
-    variant: getStr(sp, "variant") || suggestSubtitle(spreadType),
+    name: getStr(sp, "name") || dbDefaults.name || suggestName(legs, spreadType),
+    variant: getStr(sp, "variant") || dbDefaults.variant || suggestSubtitle(spreadType),
     openedAt:
-      getStr(sp, "openedAt") || fmtDateInput(earliestOpen(legs)),
+      getStr(sp, "openedAt") || dbDefaults.openedAt || fmtDateInput(earliestOpen(legs)),
     closedAt:
-      getStr(sp, "closedAt") || fmtDateInput(latestClose(legs)),
-    capital: getStr(sp, "capital") || (legs.length ? String(sumCapital(legs)) : ""),
-    netPnl: getStr(sp, "netPnl") || (legs.length ? sumNetPnl(legs).toFixed(2) : ""),
+      getStr(sp, "closedAt") || dbDefaults.closedAt || fmtDateInput(latestClose(legs)),
+    capital: getStr(sp, "capital") || dbDefaults.capital || (legs.length ? String(sumCapital(legs)) : ""),
+    netPnl: getStr(sp, "netPnl") || dbDefaults.netPnl || (legs.length ? sumNetPnl(legs).toFixed(2) : ""),
     headlineUnit: getStr(sp, "headlineUnit", "APR"),
     headlineValue: getStr(sp, "headlineValue"),
-    thesis: getStr(sp, "thesis"),
-    regimeTags: getStr(sp, "regimeTags"),
+    thesis: getStr(sp, "thesis") || dbDefaults.thesis || "",
+    regimeTags: getStr(sp, "regimeTags") || dbDefaults.regimeTags || "",
   };
 
-  // Empty state: manual route arrived without any selected legs.
-  if (legs.length === 0 && legIds.length === 0) {
+  // Empty state: manual route arrived without any selected legs. Edit mode
+  // skips this since edits operate on existing rows (no legs stored on v1
+  // manual spreads).
+  if (!editValid && legs.length === 0 && legIds.length === 0) {
     return (
       <WizardShell
         type="spread"
@@ -200,17 +261,19 @@ export default async function SpreadFieldsPage(props: { searchParams: Search }) 
     );
   }
 
-  const backHref = matcher === "manual"
-    ? `/add/spread/type?${new URLSearchParams({
-        legs: legIds.join(","),
-        matcher,
-        ...(spreadType ? { spreadType } : {}),
-      }).toString()}`
-    : `/add/spread/type?${new URLSearchParams({
-        legs: legIds.join(","),
-        ...(matcher ? { matcher } : {}),
-        ...(spreadType ? { spreadType } : {}),
-      }).toString()}`;
+  const backHref = editValid
+    ? `/spreads/${editId}`
+    : matcher === "manual"
+      ? `/add/spread/type?${new URLSearchParams({
+          legs: legIds.join(","),
+          matcher,
+          ...(spreadType ? { spreadType } : {}),
+        }).toString()}`
+      : `/add/spread/type?${new URLSearchParams({
+          legs: legIds.join(","),
+          ...(matcher ? { matcher } : {}),
+          ...(spreadType ? { spreadType } : {}),
+        }).toString()}`;
 
   return (
     <WizardShell
@@ -218,9 +281,27 @@ export default async function SpreadFieldsPage(props: { searchParams: Search }) 
       step={4}
       totalSteps={5}
       stepLabels={STEP_LABELS}
-      title="Spread details"
-      subtitle="Confirm the legs, name the spread, and write what you were thinking when you put it on."
+      title={editValid ? "Edit spread" : "Spread details"}
+      subtitle={
+        editValid
+          ? "Editing existing spread. The original legs aren't carried in v1 manual spreads — change the numbers, thesis, or tags freely."
+          : "Confirm the legs, name the spread, and write what you were thinking when you put it on."
+      }
     >
+      {editValid && (
+        <aside
+          className="mb-6 rounded-md border border-warn/30 bg-warn/5 px-4 py-2.5 text-[12px] text-warn"
+          role="status"
+        >
+          <span className="font-semibold uppercase tracking-[0.14em] text-[10px]">
+            Editing
+          </span>
+          {" — "}
+          <span className="font-serif italic">
+            spread #{dbDefaults.serial}. Changes save back to the same record.
+          </span>
+        </aside>
+      )}
       {/* ── Legs summary (read-only) ──────────────────────────────────────── */}
       <section className="mb-10">
         <h2 className="mb-3 font-serif text-[11px] font-semibold uppercase tracking-[0.18em] text-text-tertiary">
@@ -332,6 +413,7 @@ export default async function SpreadFieldsPage(props: { searchParams: Search }) 
         className="flex flex-col gap-7"
       >
         {/* Pass-through */}
+        {editValid && <input type="hidden" name="edit" value={editId} />}
         <input type="hidden" name="legs" value={legIds.join(",")} />
         {matcher && <input type="hidden" name="matcher" value={matcher} />}
         {spreadType && (

@@ -3,10 +3,13 @@
 import { redirect } from "next/navigation";
 import { sql } from "@/lib/db/client";
 import { requireUser } from "@/lib/auth/server";
+import { updateSpreadActivity } from "@/lib/db/activity";
 
 function stripNextInternals(entries: [string, FormDataEntryValue][]): [string, FormDataEntryValue][] {
   return entries.filter(([k]) => !k.startsWith("$ACTION_"));
 }
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 const MATCHER_TO_DB_TYPE: Record<string, string> = {
   cash_carry: "cash_carry",
@@ -51,15 +54,24 @@ function mapVariantToCanonical(dbSpreadType: string, raw: string): string | null
  * which is satisfied by the activity_spread row. The detail page renders
  * the supertype + subtype fields directly; legs section will fill in when
  * real positions exist.
+ *
+ * Edit mode: when `edit=<uuid>` is in the FormData, the action dispatches
+ * to updateSpreadActivity. Redirect adds `action=edited`.
  */
 export async function logSpread(formData: FormData): Promise<void> {
   let activityId: string | null = null;
+  let isEdit = false;
   let redirectError: string | null = null;
   let cleanedRaw: Record<string, string> = {};
 
+  const editRaw = formData.get("edit");
+  const editId = typeof editRaw === "string" && UUID_RE.test(editRaw) ? editRaw : null;
+
   try {
     const { id: userId } = await requireUser();
-    const raw = Object.fromEntries(stripNextInternals([...formData.entries()])) as Record<string, string>;
+    const raw = Object.fromEntries(
+      stripNextInternals([...formData.entries()]).filter(([k]) => k !== "edit"),
+    ) as Record<string, string>;
     cleanedRaw = raw;
 
     const name = (raw.name ?? "").trim();
@@ -86,48 +98,75 @@ export async function logSpread(formData: FormData): Promise<void> {
       throw new Error("closed_at must be >= opened_at");
     }
 
-    activityId = await sql.begin(async (tx) => {
-      const [activity] = await tx<{ id: string }[]>`
-        INSERT INTO public.activity (
-          user_id, type, status, name,
-          opened_at, closed_at,
-          capital_deployed_usd, realized_pnl_usd, fees_usd, net_pnl_usd,
-          regime_tags, custom_tags
-        ) VALUES (
-          ${userId}::uuid, 'spread', 'closed',
-          ${name},
-          ${openedAt}::timestamptz, ${closedAt}::timestamptz,
-          ${capital ?? null}, ${netPnl ?? null}, '0', ${netPnl ?? null},
-          ${regimeTags}::text[], ${[] as string[]}::text[]
-        )
-        RETURNING id
-      `;
+    if (editId) {
+      isEdit = true;
+      const ok = await updateSpreadActivity(
+        userId,
+        editId,
+        {
+          name,
+          regimeTags,
+          openedAt,
+          closedAt,
+          capitalDeployedUsd: capital,
+          realizedPnlUsd: netPnl,
+          netPnlUsd: netPnl,
+        },
+        {
+          spreadType: dbSpreadType,
+          variant,
+          primaryBase,
+          exitPlan: thesis,
+        },
+      );
+      if (!ok) throw new Error("Spread not found or not owned by you");
+      activityId = editId;
+    } else {
+      activityId = await sql.begin(async (tx) => {
+        const [activity] = await tx<{ id: string }[]>`
+          INSERT INTO public.activity (
+            user_id, type, status, name,
+            opened_at, closed_at,
+            capital_deployed_usd, realized_pnl_usd, fees_usd, net_pnl_usd,
+            regime_tags, custom_tags
+          ) VALUES (
+            ${userId}::uuid, 'spread', 'closed',
+            ${name},
+            ${openedAt}::timestamptz, ${closedAt}::timestamptz,
+            ${capital ?? null}, ${netPnl ?? null}, '0', ${netPnl ?? null},
+            ${regimeTags}::text[], ${[] as string[]}::text[]
+          )
+          RETURNING id
+        `;
 
-      await tx`
-        INSERT INTO public.activity_spread (
-          activity_id, spread_type, variant, origin, source,
-          primary_base, leg_count,
-          exit_plan
-        ) VALUES (
-          ${activity.id}::uuid, ${dbSpreadType}, ${variant || null},
-          'manual', 'user',
-          ${primaryBase}, 0,
-          ${thesis}
-        )
-      `;
+        await tx`
+          INSERT INTO public.activity_spread (
+            activity_id, spread_type, variant, origin, source,
+            primary_base, leg_count,
+            exit_plan
+          ) VALUES (
+            ${activity.id}::uuid, ${dbSpreadType}, ${variant || null},
+            'manual', 'user',
+            ${primaryBase}, 0,
+            ${thesis}
+          )
+        `;
 
-      return activity.id;
-    });
+        return activity.id;
+      });
+    }
   } catch (e) {
     redirectError = e instanceof Error ? e.message : String(e);
   }
 
   if (activityId) {
-    redirect(`/spreads/${activityId}?from=wizard`);
+    const qs = isEdit ? "from=wizard&action=edited" : "from=wizard";
+    redirect(`/spreads/${activityId}?${qs}`);
   } else {
     const qs = new URLSearchParams({
       error: redirectError ?? "Unknown error logging spread",
       ...cleanedRaw,
+      ...(editId ? { edit: editId } : {}),
     }).toString();
     redirect(`/add/spread/review?${qs}`);
   }

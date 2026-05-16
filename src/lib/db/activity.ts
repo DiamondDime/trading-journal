@@ -630,6 +630,14 @@ export interface ActivityPatch {
   status?: ActivityStatus;
   regimeTags?: string[];
   customTags?: string[];
+  // Aggregates — wizard recomputes these on edit and pushes them back. Optional
+  // because the common-field PATCH path (name/tags) shouldn't need to specify.
+  openedAt?: string | null;
+  closedAt?: string | null;
+  capitalDeployedUsd?: string | null;
+  realizedPnlUsd?: string | null;
+  feesUsd?: string;
+  netPnlUsd?: string | null;
 }
 
 export async function updateActivity(
@@ -637,11 +645,18 @@ export async function updateActivity(
   activityId: string,
   patch: ActivityPatch,
 ): Promise<boolean> {
+  if (!UUID_RE.test(activityId)) return false;
   const patches: Record<string, unknown> = {};
   if (patch.name !== undefined) patches.name = patch.name;
   if (patch.status !== undefined) patches.status = patch.status;
   if (patch.regimeTags !== undefined) patches.regime_tags = patch.regimeTags;
   if (patch.customTags !== undefined) patches.custom_tags = patch.customTags;
+  if (patch.openedAt !== undefined) patches.opened_at = patch.openedAt;
+  if (patch.closedAt !== undefined) patches.closed_at = patch.closedAt;
+  if (patch.capitalDeployedUsd !== undefined) patches.capital_deployed_usd = patch.capitalDeployedUsd;
+  if (patch.realizedPnlUsd !== undefined) patches.realized_pnl_usd = patch.realizedPnlUsd;
+  if (patch.feesUsd !== undefined) patches.fees_usd = patch.feesUsd;
+  if (patch.netPnlUsd !== undefined) patches.net_pnl_usd = patch.netPnlUsd;
   if (Object.keys(patches).length === 0) return true;
 
   const rows = await sql`
@@ -655,6 +670,322 @@ export async function updateActivity(
   return rows.length > 0;
 }
 
+// ----------------------------------------------------------------------------
+// Subtype-specific updates
+//
+// Each wizard edit path needs to push subtype-specific fields back to the
+// matching activity_<type> row. These helpers narrow the SQL to the columns
+// each type actually owns; the wizard always rewrites everything (no partial
+// patches), so the patches are required-rather-than-optional in practice.
+//
+// All four go through sql.begin() with the supertype update so the supertype
+// + subtype edits land atomically. If the user changed something that affects
+// derived aggregates (qty/entry/exit on a trade, tokens/price on a sale), the
+// wizard's action helper recomputes net_pnl_usd / realized_pnl_usd / fees and
+// passes those through `updateActivity`.
+// ----------------------------------------------------------------------------
+
+/** Update an activity + its activity_trade row. */
+export async function updateTradeActivity(
+  userId: string,
+  activityId: string,
+  parentPatch: ActivityPatch,
+  tradePatch: {
+    symbol?: string;
+    exchange?: string;
+    instrumentKind?: string;
+    side?: 'long' | 'short';
+    entryThesis?: string | null;
+    qty?: string;
+    avgEntryPrice?: string;
+    avgExitPrice?: string;
+    realizedApr?: string | null;
+  },
+): Promise<boolean> {
+  return sql.begin(async (tx) => {
+    // 1. Supertype update + ownership check
+    const parentPatches: Record<string, unknown> = {};
+    if (parentPatch.name !== undefined) parentPatches.name = parentPatch.name;
+    if (parentPatch.status !== undefined) parentPatches.status = parentPatch.status;
+    if (parentPatch.regimeTags !== undefined) parentPatches.regime_tags = parentPatch.regimeTags;
+    if (parentPatch.customTags !== undefined) parentPatches.custom_tags = parentPatch.customTags;
+    if (parentPatch.openedAt !== undefined) parentPatches.opened_at = parentPatch.openedAt;
+    if (parentPatch.closedAt !== undefined) parentPatches.closed_at = parentPatch.closedAt;
+    if (parentPatch.capitalDeployedUsd !== undefined) parentPatches.capital_deployed_usd = parentPatch.capitalDeployedUsd;
+    if (parentPatch.realizedPnlUsd !== undefined) parentPatches.realized_pnl_usd = parentPatch.realizedPnlUsd;
+    if (parentPatch.feesUsd !== undefined) parentPatches.fees_usd = parentPatch.feesUsd;
+    if (parentPatch.netPnlUsd !== undefined) parentPatches.net_pnl_usd = parentPatch.netPnlUsd;
+
+    if (Object.keys(parentPatches).length > 0) {
+      const parentRows = await tx`
+        UPDATE public.activity
+        SET ${tx(parentPatches)}
+        WHERE id = ${activityId}::uuid
+          AND user_id = ${userId}::uuid
+          AND deleted_at IS NULL
+        RETURNING id
+      `;
+      if (parentRows.length === 0) return false;
+    } else {
+      // Still need to verify ownership before touching subtype
+      const ownerRows = await tx<{ id: string }[]>`
+        SELECT id FROM public.activity
+        WHERE id = ${activityId}::uuid
+          AND user_id = ${userId}::uuid
+          AND deleted_at IS NULL
+        LIMIT 1
+      `;
+      if (ownerRows.length === 0) return false;
+    }
+
+    // 2. Subtype update
+    const subPatches: Record<string, unknown> = {};
+    if (tradePatch.symbol !== undefined) subPatches.symbol = tradePatch.symbol;
+    if (tradePatch.exchange !== undefined) subPatches.exchange = tradePatch.exchange;
+    if (tradePatch.instrumentKind !== undefined) subPatches.instrument_kind = tradePatch.instrumentKind;
+    if (tradePatch.side !== undefined) subPatches.side = tradePatch.side;
+    if (tradePatch.entryThesis !== undefined) subPatches.entry_thesis = tradePatch.entryThesis;
+    if (tradePatch.qty !== undefined) subPatches.qty = tradePatch.qty;
+    if (tradePatch.avgEntryPrice !== undefined) subPatches.avg_entry_price = tradePatch.avgEntryPrice;
+    if (tradePatch.avgExitPrice !== undefined) subPatches.avg_exit_price = tradePatch.avgExitPrice;
+    if (tradePatch.realizedApr !== undefined) subPatches.realized_apr = tradePatch.realizedApr;
+
+    if (Object.keys(subPatches).length > 0) {
+      await tx`
+        UPDATE public.activity_trade
+        SET ${tx(subPatches)}
+        WHERE activity_id = ${activityId}::uuid
+      `;
+    }
+
+    return true;
+  });
+}
+
+/**
+ * JSONB shape for activity_sale.vesting_schedule. Mirrors the four kinds
+ * createSale's buildVestingSchedule emits — keeps the update path strictly
+ * compatible with what's already in the column.
+ */
+export type SaleVestingScheduleJson =
+  | { kind: 'all_at_tge' }
+  | { kind: 'tge_plus_linear'; tge_pct: number; linear_days: number }
+  | { kind: 'cliff_plus_linear'; cliff_days: number; linear_days: number; tge_pct?: number };
+
+/** Update an activity + its activity_sale row. */
+export async function updateSaleActivity(
+  userId: string,
+  activityId: string,
+  parentPatch: ActivityPatch,
+  salePatch: {
+    tokenSymbol?: string;
+    saleKind?: string;
+    saleVenue?: string | null;
+    saleDate?: string;
+    usdPaid?: string;
+    tokensAllocated?: string;
+    vestingSchedule?: SaleVestingScheduleJson | null;
+    currentPriceUsd?: string | null;
+  },
+): Promise<boolean> {
+  return sql.begin(async (tx) => {
+    const parentPatches: Record<string, unknown> = {};
+    if (parentPatch.name !== undefined) parentPatches.name = parentPatch.name;
+    if (parentPatch.status !== undefined) parentPatches.status = parentPatch.status;
+    if (parentPatch.regimeTags !== undefined) parentPatches.regime_tags = parentPatch.regimeTags;
+    if (parentPatch.customTags !== undefined) parentPatches.custom_tags = parentPatch.customTags;
+    if (parentPatch.openedAt !== undefined) parentPatches.opened_at = parentPatch.openedAt;
+    if (parentPatch.capitalDeployedUsd !== undefined) parentPatches.capital_deployed_usd = parentPatch.capitalDeployedUsd;
+    if (parentPatch.realizedPnlUsd !== undefined) parentPatches.realized_pnl_usd = parentPatch.realizedPnlUsd;
+    if (parentPatch.netPnlUsd !== undefined) parentPatches.net_pnl_usd = parentPatch.netPnlUsd;
+
+    if (Object.keys(parentPatches).length > 0) {
+      const parentRows = await tx`
+        UPDATE public.activity
+        SET ${tx(parentPatches)}
+        WHERE id = ${activityId}::uuid
+          AND user_id = ${userId}::uuid
+          AND deleted_at IS NULL
+        RETURNING id
+      `;
+      if (parentRows.length === 0) return false;
+    } else {
+      const ownerRows = await tx<{ id: string }[]>`
+        SELECT id FROM public.activity
+        WHERE id = ${activityId}::uuid
+          AND user_id = ${userId}::uuid
+          AND deleted_at IS NULL
+        LIMIT 1
+      `;
+      if (ownerRows.length === 0) return false;
+    }
+
+    const subPatches: Record<string, unknown> = {};
+    if (salePatch.tokenSymbol !== undefined) subPatches.token_symbol = salePatch.tokenSymbol;
+    if (salePatch.saleKind !== undefined) subPatches.sale_kind = salePatch.saleKind;
+    if (salePatch.saleVenue !== undefined) subPatches.sale_venue = salePatch.saleVenue;
+    if (salePatch.saleDate !== undefined) subPatches.sale_date = salePatch.saleDate;
+    if (salePatch.usdPaid !== undefined) subPatches.usd_paid = salePatch.usdPaid;
+    if (salePatch.tokensAllocated !== undefined) subPatches.tokens_allocated = salePatch.tokensAllocated;
+    if (salePatch.vestingSchedule !== undefined) {
+      subPatches.vesting_schedule = salePatch.vestingSchedule === null ? null : tx.json(salePatch.vestingSchedule);
+    }
+    if (salePatch.currentPriceUsd !== undefined) {
+      subPatches.current_price_usd = salePatch.currentPriceUsd;
+      // ISO string instead of raw `now()` — postgres.js's object-spread for
+      // UPDATE can't take SQL fragments as values. Same effective timestamp.
+      subPatches.current_price_at = new Date().toISOString();
+    }
+
+    if (Object.keys(subPatches).length > 0) {
+      await tx`
+        UPDATE public.activity_sale
+        SET ${tx(subPatches)}
+        WHERE activity_id = ${activityId}::uuid
+      `;
+    }
+
+    return true;
+  });
+}
+
+/** Update an activity + its activity_airdrop row. */
+export async function updateAirdropActivity(
+  userId: string,
+  activityId: string,
+  parentPatch: ActivityPatch,
+  airdropPatch: {
+    tokenSymbol?: string;
+    protocol?: string;
+    qtyReceived?: string;
+    claimDate?: string | null;
+    valueAtReceiptUsd?: string | null;
+    currentPriceUsd?: string | null;
+    eligibilityReason?: string | null;
+  },
+): Promise<boolean> {
+  return sql.begin(async (tx) => {
+    const parentPatches: Record<string, unknown> = {};
+    if (parentPatch.name !== undefined) parentPatches.name = parentPatch.name;
+    if (parentPatch.status !== undefined) parentPatches.status = parentPatch.status;
+    if (parentPatch.regimeTags !== undefined) parentPatches.regime_tags = parentPatch.regimeTags;
+    if (parentPatch.customTags !== undefined) parentPatches.custom_tags = parentPatch.customTags;
+    if (parentPatch.openedAt !== undefined) parentPatches.opened_at = parentPatch.openedAt;
+    if (parentPatch.closedAt !== undefined) parentPatches.closed_at = parentPatch.closedAt;
+    if (parentPatch.capitalDeployedUsd !== undefined) parentPatches.capital_deployed_usd = parentPatch.capitalDeployedUsd;
+    if (parentPatch.realizedPnlUsd !== undefined) parentPatches.realized_pnl_usd = parentPatch.realizedPnlUsd;
+    if (parentPatch.netPnlUsd !== undefined) parentPatches.net_pnl_usd = parentPatch.netPnlUsd;
+
+    if (Object.keys(parentPatches).length > 0) {
+      const parentRows = await tx`
+        UPDATE public.activity
+        SET ${tx(parentPatches)}
+        WHERE id = ${activityId}::uuid
+          AND user_id = ${userId}::uuid
+          AND deleted_at IS NULL
+        RETURNING id
+      `;
+      if (parentRows.length === 0) return false;
+    } else {
+      const ownerRows = await tx<{ id: string }[]>`
+        SELECT id FROM public.activity
+        WHERE id = ${activityId}::uuid
+          AND user_id = ${userId}::uuid
+          AND deleted_at IS NULL
+        LIMIT 1
+      `;
+      if (ownerRows.length === 0) return false;
+    }
+
+    const subPatches: Record<string, unknown> = {};
+    if (airdropPatch.tokenSymbol !== undefined) subPatches.token_symbol = airdropPatch.tokenSymbol;
+    if (airdropPatch.protocol !== undefined) subPatches.protocol = airdropPatch.protocol;
+    if (airdropPatch.qtyReceived !== undefined) subPatches.qty_received = airdropPatch.qtyReceived;
+    if (airdropPatch.claimDate !== undefined) subPatches.claim_date = airdropPatch.claimDate;
+    if (airdropPatch.valueAtReceiptUsd !== undefined) subPatches.value_at_receipt_usd = airdropPatch.valueAtReceiptUsd;
+    if (airdropPatch.currentPriceUsd !== undefined) {
+      subPatches.current_price_usd = airdropPatch.currentPriceUsd;
+      subPatches.current_price_at = new Date().toISOString();
+    }
+    if (airdropPatch.eligibilityReason !== undefined) subPatches.eligibility_reason = airdropPatch.eligibilityReason;
+
+    if (Object.keys(subPatches).length > 0) {
+      await tx`
+        UPDATE public.activity_airdrop
+        SET ${tx(subPatches)}
+        WHERE activity_id = ${activityId}::uuid
+      `;
+    }
+
+    return true;
+  });
+}
+
+/** Update an activity + its activity_spread row. */
+export async function updateSpreadActivity(
+  userId: string,
+  activityId: string,
+  parentPatch: ActivityPatch,
+  spreadPatch: {
+    spreadType?: string;
+    variant?: string | null;
+    primaryBase?: string;
+    exitPlan?: string | null;
+    targetAprAtOpen?: string | null;
+  },
+): Promise<boolean> {
+  return sql.begin(async (tx) => {
+    const parentPatches: Record<string, unknown> = {};
+    if (parentPatch.name !== undefined) parentPatches.name = parentPatch.name;
+    if (parentPatch.status !== undefined) parentPatches.status = parentPatch.status;
+    if (parentPatch.regimeTags !== undefined) parentPatches.regime_tags = parentPatch.regimeTags;
+    if (parentPatch.customTags !== undefined) parentPatches.custom_tags = parentPatch.customTags;
+    if (parentPatch.openedAt !== undefined) parentPatches.opened_at = parentPatch.openedAt;
+    if (parentPatch.closedAt !== undefined) parentPatches.closed_at = parentPatch.closedAt;
+    if (parentPatch.capitalDeployedUsd !== undefined) parentPatches.capital_deployed_usd = parentPatch.capitalDeployedUsd;
+    if (parentPatch.realizedPnlUsd !== undefined) parentPatches.realized_pnl_usd = parentPatch.realizedPnlUsd;
+    if (parentPatch.netPnlUsd !== undefined) parentPatches.net_pnl_usd = parentPatch.netPnlUsd;
+
+    if (Object.keys(parentPatches).length > 0) {
+      const parentRows = await tx`
+        UPDATE public.activity
+        SET ${tx(parentPatches)}
+        WHERE id = ${activityId}::uuid
+          AND user_id = ${userId}::uuid
+          AND deleted_at IS NULL
+        RETURNING id
+      `;
+      if (parentRows.length === 0) return false;
+    } else {
+      const ownerRows = await tx<{ id: string }[]>`
+        SELECT id FROM public.activity
+        WHERE id = ${activityId}::uuid
+          AND user_id = ${userId}::uuid
+          AND deleted_at IS NULL
+        LIMIT 1
+      `;
+      if (ownerRows.length === 0) return false;
+    }
+
+    const subPatches: Record<string, unknown> = {};
+    if (spreadPatch.spreadType !== undefined) subPatches.spread_type = spreadPatch.spreadType;
+    if (spreadPatch.variant !== undefined) subPatches.variant = spreadPatch.variant;
+    if (spreadPatch.primaryBase !== undefined) subPatches.primary_base = spreadPatch.primaryBase;
+    if (spreadPatch.exitPlan !== undefined) subPatches.exit_plan = spreadPatch.exitPlan;
+    if (spreadPatch.targetAprAtOpen !== undefined) subPatches.target_apr_at_open = spreadPatch.targetAprAtOpen;
+
+    if (Object.keys(subPatches).length > 0) {
+      await tx`
+        UPDATE public.activity_spread
+        SET ${tx(subPatches)}
+        WHERE activity_id = ${activityId}::uuid
+      `;
+    }
+
+    return true;
+  });
+}
+
 /**
  * Soft-delete by setting deleted_at. RLS-style ownership check enforced via
  * the WHERE clause; returns false if the row wasn't found (or wasn't owned).
@@ -663,6 +994,7 @@ export async function deleteActivity(
   userId: string,
   activityId: string,
 ): Promise<boolean> {
+  if (!UUID_RE.test(activityId)) return false;
   const rows = await sql`
     UPDATE public.activity
     SET deleted_at = now()

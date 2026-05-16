@@ -40,6 +40,7 @@ const SPREAD_FIELDS = [
   "headlineValue",
   "thesis",
   "regimeTags",
+  "edit",
 ] as const;
 
 type Search = Promise<{ [key: string]: string | string[] | undefined }>;
@@ -167,6 +168,7 @@ export default async function SpreadReviewPage(props: { searchParams: Search }) 
     if (val) editParams.append(k, val);
   }
   const editAllHref = `/add/spread/fields?${editParams.toString()}`;
+  const isEditing = getStr(sp, "edit") !== "";
 
   const headlineTone = netPnl >= 0 ? "up" : "down";
   const headlineSign = headlineValue >= 0 ? "+" : "−";
@@ -180,8 +182,12 @@ export default async function SpreadReviewPage(props: { searchParams: Search }) 
       step={5}
       totalSteps={5}
       stepLabels={STEP_LABELS}
-      title="Look it over"
-      subtitle="One last pass before this hits your journal. Edit any row to bounce back to the fields step."
+      title={isEditing ? "Confirm changes" : "Look it over"}
+      subtitle={
+        isEditing
+          ? "Saving these changes to the same record. Edit any row to bounce back to the fields step."
+          : "One last pass before this hits your journal. Edit any row to bounce back to the fields step."
+      }
     >
       <WizardErrorBanner error={getStr(sp, "error") || undefined} />
       {/* ── Hero preview (signature amber) ────────────────────────────────── */}
@@ -428,7 +434,7 @@ export default async function SpreadReviewPage(props: { searchParams: Search }) 
             type="submit"
             className="inline-flex items-center gap-2 rounded-md border border-text bg-text px-5 py-2 font-mono text-[11px] uppercase tracking-[0.16em] text-app transition-colors hover:bg-text-secondary"
           >
-            Log spread
+            {isEditing ? "Save changes" : "Log spread"}
             <ArrowRight className="h-3 w-3" />
           </button>
         </div>

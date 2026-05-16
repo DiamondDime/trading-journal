@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
+import { Pencil } from "lucide-react";
 import { Sidebar } from "@/components/sidebar";
 import {
   Table,
@@ -13,6 +14,9 @@ import { fmtCapital, fmtUsd } from "@/lib/data/archive-data";
 import { WizardPreviewBanner } from "@/components/wizard/wizard-preview-banner";
 import { requireUser } from "@/lib/auth/server";
 import { getActivity } from "@/lib/db/activity";
+import { getNoteForActivity } from "@/lib/db/notes";
+import { DeleteButton } from "@/components/activity/delete-button";
+import { NotesEditor } from "@/components/activity/notes-editor";
 
 export const dynamic = "force-dynamic";
 
@@ -75,12 +79,15 @@ export default async function SaleDetailPage({
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ from?: string }>;
+  searchParams: Promise<{ from?: string; action?: string }>;
 }) {
   const { id } = await params;
   const sp = await searchParams;
   const { id: userId } = await requireUser();
-  const activity = await getActivity(userId, id);
+  const [activity, note] = await Promise.all([
+    getActivity(userId, id),
+    getNoteForActivity(userId, id),
+  ]);
   if (!activity || activity.subtype.type !== "sale") {
     notFound();
   }
@@ -112,7 +119,7 @@ export default async function SaleDetailPage({
       <Sidebar />
       <main className="flex-1 overflow-y-auto">
         <article className="mx-auto max-w-4xl px-6 py-14 md:py-20">
-          <WizardPreviewBanner from={sp.from} />
+          <WizardPreviewBanner from={sp.from} action={sp.action} />
           <div className="flex items-center justify-between font-mono text-xs text-text-tertiary">
             <span>{serial}</span>
             <span className="flex items-center gap-2">
@@ -127,9 +134,18 @@ export default async function SaleDetailPage({
           </div>
 
           <header className="mt-6">
-            <h1 className="font-serif text-4xl font-medium leading-tight tracking-tight text-text md:text-5xl">
-              {activity.name}
-            </h1>
+            <div className="flex items-start justify-between gap-6">
+              <h1 className="font-serif text-4xl font-medium leading-tight tracking-tight text-text md:text-5xl">
+                {activity.name}
+              </h1>
+              <Link
+                href={`/add/sale/fields?edit=${activity.id}`}
+                aria-label="Edit sale"
+                className="mt-2 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-border bg-surface text-text-tertiary transition-colors hover:border-border-strong hover:text-text"
+              >
+                <Pencil className="h-3.5 w-3.5" />
+              </Link>
+            </div>
             <p className="mt-3 text-base text-text-secondary">
               {saleKindLabel} · {s.saleVenue ?? "—"} · {s.tokenSymbol}
             </p>
@@ -248,6 +264,42 @@ export default async function SaleDetailPage({
               </div>
             </section>
           )}
+
+          <section className="mt-14">
+            <h2 className="font-serif text-xs font-semibold uppercase tracking-[0.18em] text-text-tertiary">
+              Notes
+            </h2>
+            <p className="mt-2 font-serif text-[12px] italic text-text-tertiary">
+              Your postmortem
+            </p>
+            <div className="mt-4">
+              <NotesEditor
+                activityId={activity.id}
+                initialBody={note?.body ?? ""}
+                initialVersion={note?.updatedAt ?? null}
+              />
+            </div>
+          </section>
+
+          <section className="mt-14">
+            <h2 className="font-serif text-xs font-semibold uppercase tracking-[0.18em] text-text-tertiary">
+              Actions
+            </h2>
+            <div className="mt-4 flex flex-wrap items-center gap-2">
+              <Link
+                href={`/add/sale/fields?edit=${activity.id}`}
+                className="inline-flex items-center gap-1.5 rounded-md border border-border bg-surface px-3 py-1.5 font-mono text-[10px] uppercase tracking-[0.16em] text-text-secondary transition-colors hover:border-border-strong hover:text-text"
+              >
+                <Pencil className="h-3 w-3" />
+                Edit
+              </Link>
+              <DeleteButton
+                activityId={activity.id}
+                activityType="sale"
+                serial={serial}
+              />
+            </div>
+          </section>
 
           <footer className="mt-20 border-t border-border pt-6 font-mono text-xs text-text-tertiary">
             <div className="flex items-center justify-between">

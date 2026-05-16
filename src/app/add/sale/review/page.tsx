@@ -21,6 +21,7 @@ const SALE_FIELDS = [
   "openedAt",
   "note",
   "regimeTags",
+  "edit",
 ] as const;
 
 const SALE_KIND_LABELS: Record<string, string> = {
@@ -116,6 +117,7 @@ export default async function SaleReviewPage(props: { searchParams: Search }) {
       )
     )
   ).toString()}`;
+  const isEditing = getStr(sp, "edit") !== "";
 
   return (
     <WizardShell
@@ -123,8 +125,12 @@ export default async function SaleReviewPage(props: { searchParams: Search }) {
       step={2}
       totalSteps={2}
       stepLabels={STEP_LABELS}
-      title="Look it over"
-      subtitle="One last pass before this hits your journal. Edit any row to bounce back to the form."
+      title={isEditing ? "Confirm changes" : "Look it over"}
+      subtitle={
+        isEditing
+          ? "Saving these changes to the same record. Edit any row to bounce back to the form."
+          : "One last pass before this hits your journal. Edit any row to bounce back to the form."
+      }
     >
       <WizardErrorBanner error={getStr(sp, "error") || undefined} />
       {/* ── Hero preview ─────────────────────────────────────────────── */}
@@ -291,7 +297,7 @@ export default async function SaleReviewPage(props: { searchParams: Search }) {
             type="submit"
             className="inline-flex items-center gap-2 rounded-md border border-text bg-text px-5 py-2 font-mono text-[11px] uppercase tracking-[0.16em] text-app transition-colors hover:bg-text-secondary"
           >
-            Log sale
+            {isEditing ? "Save changes" : "Log sale"}
             <ArrowRight className="h-3 w-3" />
           </button>
         </div>

@@ -7,6 +7,8 @@ import {
   WizardTextarea,
 } from "@/components/wizard/wizard-field";
 import { cn } from "@/lib/utils";
+import { requireUser } from "@/lib/auth/server";
+import { getActivity } from "@/lib/db/activity";
 
 const STEP_LABELS = ["Details", "Review"] as const;
 
@@ -19,10 +21,61 @@ const SALE_KINDS = [
 
 type Search = Promise<{ [key: string]: string | string[] | undefined }>;
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 function getStr(sp: Awaited<Search>, key: string, fallback = ""): string {
   const v = sp[key];
   if (typeof v === "string") return v;
   return fallback;
+}
+
+function isoToDateTimeLocal(iso: string | null): string {
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (!Number.isFinite(d.getTime())) return "";
+  const pad = (n: number) => n.toString().padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+function isoToDate(iso: string | null): string {
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (!Number.isFinite(d.getTime())) return "";
+  const pad = (n: number) => n.toString().padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
+/**
+ * Decompose an activity_sale.vesting_schedule jsonb back into the three
+ * wizard inputs (tgePct, cliffMonths, durationMonths). Inverse of
+ * buildVestingSchedule in activity.ts.
+ */
+function vestingScheduleToInputs(
+  schedule: Record<string, unknown> | null,
+): { tgePct: string; cliffMonths: string; durationMonths: string } {
+  if (!schedule) return { tgePct: "", cliffMonths: "", durationMonths: "" };
+  const kind = String(schedule.kind ?? "");
+  if (kind === "all_at_tge") {
+    return { tgePct: "100", cliffMonths: "0", durationMonths: "0" };
+  }
+  if (kind === "tge_plus_linear") {
+    const linearDays = Number(schedule.linear_days ?? 0);
+    return {
+      tgePct: String(schedule.tge_pct ?? 0),
+      cliffMonths: "0",
+      durationMonths: String(Math.round(linearDays / 30)),
+    };
+  }
+  if (kind === "cliff_plus_linear") {
+    const cliffDays = Number(schedule.cliff_days ?? 0);
+    const linearDays = Number(schedule.linear_days ?? 0);
+    return {
+      tgePct: String(schedule.tge_pct ?? 0),
+      cliffMonths: String(Math.round(cliffDays / 30)),
+      durationMonths: String(Math.round(linearDays / 30)),
+    };
+  }
+  return { tgePct: "", cliffMonths: "", durationMonths: "" };
 }
 
 /**
@@ -30,30 +83,75 @@ function getStr(sp: Awaited<Search>, key: string, fallback = ""): string {
  * allocations don't appear in exchange trade history, so there's no
  * exchange-fills picker; the wizard collapses to Fields → Review.
  *
- * Native GET form with action="/add/sale/review" — every named input
- * becomes a search-param on the next route. No client JS for the happy
- * path.
+ * Edit mode (`?edit=<uuid>`): pre-fill from the existing sale row. The
+ * `edit` flag rides through hidden inputs to the server action, which
+ * dispatches to the update path.
  */
 export default async function SaleFieldsPage(props: {
   searchParams: Search;
 }) {
   const sp = await props.searchParams;
+  const editId = getStr(sp, "edit");
+
+  let dbDefaults: Partial<{
+    saleKind: string;
+    venue: string;
+    asset: string;
+    usdPaid: string;
+    tokensAllocated: string;
+    tgeDate: string;
+    tgeUnlockPct: string;
+    vestingCliffMonths: string;
+    vestingDurationMonths: string;
+    currentPriceUsd: string;
+    openedAt: string;
+    regimeTags: string;
+    serial: string;
+  }> = {};
+  let editValid = false;
+
+  if (editId && UUID_RE.test(editId)) {
+    const { id: userId } = await requireUser();
+    const activity = await getActivity(userId, editId);
+    if (activity && activity.subtype.type === "sale") {
+      const s = activity.subtype.row;
+      const v = vestingScheduleToInputs(s.vestingSchedule);
+      dbDefaults = {
+        saleKind: s.saleKind,
+        venue: s.saleVenue ?? "",
+        asset: s.tokenSymbol,
+        usdPaid: s.usdPaid,
+        tokensAllocated: s.tokensAllocated,
+        tgeDate: isoToDate(s.saleDate),
+        tgeUnlockPct: v.tgePct,
+        vestingCliffMonths: v.cliffMonths,
+        vestingDurationMonths: v.durationMonths,
+        currentPriceUsd: s.currentPriceUsd ?? "",
+        openedAt: isoToDateTimeLocal(activity.openedAt),
+        regimeTags: activity.regimeTags.join(", "),
+        serial: activity.id.slice(0, 4).toUpperCase(),
+      };
+      editValid = true;
+    }
+  }
 
   const defaults = {
-    saleKind: getStr(sp, "saleKind", "ido"),
-    venue: getStr(sp, "venue"),
-    asset: getStr(sp, "asset"),
-    usdPaid: getStr(sp, "usdPaid"),
-    tokensAllocated: getStr(sp, "tokensAllocated"),
-    tgeDate: getStr(sp, "tgeDate"),
-    tgeUnlockPct: getStr(sp, "tgeUnlockPct"),
-    vestingCliffMonths: getStr(sp, "vestingCliffMonths"),
-    vestingDurationMonths: getStr(sp, "vestingDurationMonths"),
-    currentPriceUsd: getStr(sp, "currentPriceUsd"),
-    openedAt: getStr(sp, "openedAt"),
-    note: getStr(sp, "note"),
-    regimeTags: getStr(sp, "regimeTags"),
+    saleKind: getStr(sp, "saleKind") || dbDefaults.saleKind || "ido",
+    venue: getStr(sp, "venue") || dbDefaults.venue || "",
+    asset: getStr(sp, "asset") || dbDefaults.asset || "",
+    usdPaid: getStr(sp, "usdPaid") || dbDefaults.usdPaid || "",
+    tokensAllocated: getStr(sp, "tokensAllocated") || dbDefaults.tokensAllocated || "",
+    tgeDate: getStr(sp, "tgeDate") || dbDefaults.tgeDate || "",
+    tgeUnlockPct: getStr(sp, "tgeUnlockPct") || dbDefaults.tgeUnlockPct || "",
+    vestingCliffMonths: getStr(sp, "vestingCliffMonths") || dbDefaults.vestingCliffMonths || "",
+    vestingDurationMonths: getStr(sp, "vestingDurationMonths") || dbDefaults.vestingDurationMonths || "",
+    currentPriceUsd: getStr(sp, "currentPriceUsd") || dbDefaults.currentPriceUsd || "",
+    openedAt: getStr(sp, "openedAt") || dbDefaults.openedAt || "",
+    note: getStr(sp, "note") || "",
+    regimeTags: getStr(sp, "regimeTags") || dbDefaults.regimeTags || "",
   };
+
+  const backHref = editValid ? `/sales/${editId}` : "/add";
 
   return (
     <WizardShell
@@ -61,15 +159,35 @@ export default async function SaleFieldsPage(props: {
       step={1}
       totalSteps={2}
       stepLabels={STEP_LABELS}
-      title="Sale details"
-      subtitle="Token allocations from launchpads, IDOs, premarkets, and OTC desks. Capture the schedule once — vesting math comes off these numbers."
+      title={editValid ? "Edit sale" : "Sale details"}
+      subtitle={
+        editValid
+          ? "Editing existing sale. Vesting schedule and MTM price can change here too."
+          : "Token allocations from launchpads, IDOs, premarkets, and OTC desks. Capture the schedule once — vesting math comes off these numbers."
+      }
     >
+      {editValid && (
+        <aside
+          className="mb-6 rounded-md border border-warn/30 bg-warn/5 px-4 py-2.5 text-[12px] text-warn"
+          role="status"
+        >
+          <span className="font-semibold uppercase tracking-[0.14em] text-[10px]">
+            Editing
+          </span>
+          {" — "}
+          <span className="font-serif italic">
+            sale #{dbDefaults.serial}. Changes save back to the same record.
+          </span>
+        </aside>
+      )}
       <form
         id="sale-fields-form"
         action="/add/sale/review"
         method="get"
         className="flex flex-col gap-7"
       >
+        {editValid && <input type="hidden" name="edit" value={editId} />}
+
         {/* ── Kind ───────────────────────────────────────────────────── */}
         <SectionLabel>Kind</SectionLabel>
         <RadioGrid
@@ -285,7 +403,7 @@ export default async function SaleFieldsPage(props: {
         {/* ── Nav ────────────────────────────────────────────────────── */}
         <div className="mt-6 flex items-center justify-between border-t border-border pt-6">
           <Link
-            href="/add"
+            href={backHref}
             className="inline-flex items-center gap-1.5 font-mono text-[11px] uppercase tracking-[0.16em] text-text-tertiary transition-colors hover:text-text"
           >
             <ArrowLeft className="h-3 w-3" />

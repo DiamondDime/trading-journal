@@ -16,6 +16,7 @@ const AIRDROP_FIELDS = [
   "currentPriceUsd",
   "note",
   "regimeTags",
+  "edit",
 ] as const;
 
 type Search = Promise<{ [key: string]: string | string[] | undefined }>;
@@ -100,6 +101,7 @@ export default async function AirdropReviewPage(props: {
       )
     )
   ).toString()}`;
+  const isEditing = getStr(sp, "edit") !== "";
 
   return (
     <WizardShell
@@ -107,8 +109,12 @@ export default async function AirdropReviewPage(props: {
       step={2}
       totalSteps={2}
       stepLabels={STEP_LABELS}
-      title="Look it over"
-      subtitle="One last pass before this hits your journal. Edit any row to bounce back to the form."
+      title={isEditing ? "Confirm changes" : "Look it over"}
+      subtitle={
+        isEditing
+          ? "Saving these changes to the same record. Edit any row to bounce back to the form."
+          : "One last pass before this hits your journal. Edit any row to bounce back to the form."
+      }
     >
       <WizardErrorBanner error={getStr(sp, "error") || undefined} />
       {/* ── Hero preview ─────────────────────────────────────────────── */}
@@ -244,7 +250,7 @@ export default async function AirdropReviewPage(props: {
             type="submit"
             className="inline-flex items-center gap-2 rounded-md border border-text bg-text px-5 py-2 font-mono text-[11px] uppercase tracking-[0.16em] text-app transition-colors hover:bg-text-secondary"
           >
-            Log airdrop
+            {isEditing ? "Save changes" : "Log airdrop"}
             <ArrowRight className="h-3 w-3" />
           </button>
         </div>

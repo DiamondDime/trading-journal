@@ -6,10 +6,14 @@ import {
   WizardInput,
   WizardTextarea,
 } from "@/components/wizard/wizard-field";
+import { requireUser } from "@/lib/auth/server";
+import { getActivity } from "@/lib/db/activity";
 
 const STEP_LABELS = ["Details", "Review"] as const;
 
 type Search = Promise<{ [key: string]: string | string[] | undefined }>;
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 function getStr(sp: Awaited<Search>, key: string, fallback = ""): string {
   const v = sp[key];
@@ -17,30 +21,73 @@ function getStr(sp: Awaited<Search>, key: string, fallback = ""): string {
   return fallback;
 }
 
+function isoToDate(iso: string | null): string {
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (!Number.isFinite(d.getTime())) return "";
+  const pad = (n: number) => n.toString().padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
 /**
  * Airdrop details — only data-entry step for Airdrop activities.
  * Airdrops never appear in exchange trade history; the wizard collapses
  * to Fields → Review.
  *
- * Cost basis is always $0 for retro/loyalty drops, but we capture the
- * USD value at the moment of claim — useful for tax records and as the
- * baseline for the MTM multiplier on the review screen.
+ * Edit mode (`?edit=<uuid>`): pre-fill from the existing airdrop row.
+ * Cost basis stays $0; the wizard only edits the qty/value/price triple.
  */
 export default async function AirdropFieldsPage(props: {
   searchParams: Search;
 }) {
   const sp = await props.searchParams;
+  const editId = getStr(sp, "edit");
+
+  let dbDefaults: Partial<{
+    protocol: string;
+    asset: string;
+    tokensClaimed: string;
+    claimDate: string;
+    usdValueAtClaim: string;
+    currentPriceUsd: string;
+    note: string;
+    regimeTags: string;
+    serial: string;
+  }> = {};
+  let editValid = false;
+
+  if (editId && UUID_RE.test(editId)) {
+    const { id: userId } = await requireUser();
+    const activity = await getActivity(userId, editId);
+    if (activity && activity.subtype.type === "airdrop") {
+      const a = activity.subtype.row;
+      dbDefaults = {
+        protocol: a.protocol,
+        asset: a.tokenSymbol,
+        tokensClaimed: a.qtyReceived,
+        claimDate: isoToDate(a.claimDate),
+        usdValueAtClaim: a.valueAtReceiptUsd ?? "",
+        currentPriceUsd: a.currentPriceUsd ?? "",
+        note: a.eligibilityReason ?? "",
+        regimeTags: activity.regimeTags.join(", "),
+        serial: activity.id.slice(0, 4).toUpperCase(),
+      };
+      editValid = true;
+    }
+  }
 
   const defaults = {
-    protocol: getStr(sp, "protocol"),
-    asset: getStr(sp, "asset"),
-    tokensClaimed: getStr(sp, "tokensClaimed"),
-    claimDate: getStr(sp, "claimDate"),
-    usdValueAtClaim: getStr(sp, "usdValueAtClaim"),
-    currentPriceUsd: getStr(sp, "currentPriceUsd"),
-    note: getStr(sp, "note"),
-    regimeTags: getStr(sp, "regimeTags"),
+    protocol: getStr(sp, "protocol") || dbDefaults.protocol || "",
+    asset: getStr(sp, "asset") || dbDefaults.asset || "",
+    tokensClaimed: getStr(sp, "tokensClaimed") || dbDefaults.tokensClaimed || "",
+    claimDate: getStr(sp, "claimDate") || dbDefaults.claimDate || "",
+    usdValueAtClaim: getStr(sp, "usdValueAtClaim") || dbDefaults.usdValueAtClaim || "",
+    currentPriceUsd: getStr(sp, "currentPriceUsd") || dbDefaults.currentPriceUsd || "",
+    note: getStr(sp, "note") || dbDefaults.note || "",
+    regimeTags: getStr(sp, "regimeTags") || dbDefaults.regimeTags || "",
   };
+
+  const backHref = editValid ? `/airdrops/${editId}` : "/add";
 
   return (
     <WizardShell
@@ -48,15 +95,35 @@ export default async function AirdropFieldsPage(props: {
       step={1}
       totalSteps={2}
       stepLabels={STEP_LABELS}
-      title="Airdrop details"
-      subtitle="Free tokens still count. Capture what you claimed, when, and the spot value at claim — the rest is mark-to-market upside."
+      title={editValid ? "Edit airdrop" : "Airdrop details"}
+      subtitle={
+        editValid
+          ? "Editing existing airdrop. Cost basis stays $0; everything else is fair game."
+          : "Free tokens still count. Capture what you claimed, when, and the spot value at claim — the rest is mark-to-market upside."
+      }
     >
+      {editValid && (
+        <aside
+          className="mb-6 rounded-md border border-warn/30 bg-warn/5 px-4 py-2.5 text-[12px] text-warn"
+          role="status"
+        >
+          <span className="font-semibold uppercase tracking-[0.14em] text-[10px]">
+            Editing
+          </span>
+          {" — "}
+          <span className="font-serif italic">
+            airdrop #{dbDefaults.serial}. Changes save back to the same record.
+          </span>
+        </aside>
+      )}
       <form
         id="airdrop-fields-form"
         action="/add/airdrop/review"
         method="get"
         className="flex flex-col gap-7"
       >
+        {editValid && <input type="hidden" name="edit" value={editId} />}
+
         {/* ── Protocol + token ─────────────────────────────────────── */}
         <SectionLabel>Protocol &amp; token</SectionLabel>
         <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
@@ -188,7 +255,7 @@ export default async function AirdropFieldsPage(props: {
         {/* ── Nav ────────────────────────────────────────────────────── */}
         <div className="mt-6 flex items-center justify-between border-t border-border pt-6">
           <Link
-            href="/add"
+            href={backHref}
             className="inline-flex items-center gap-1.5 font-mono text-[11px] uppercase tracking-[0.16em] text-text-tertiary transition-colors hover:text-text"
           >
             <ArrowLeft className="h-3 w-3" />

@@ -1,0 +1,242 @@
+/**
+ * Typed DB helpers for the `notes` table (1:1 with activity).
+ *
+ * Schema (per migration 007 + rename in 011):
+ *   id              uuid pk
+ *   user_id         uuid (RLS scoped)
+ *   activity_id     uuid (unique — one note per activity)
+ *   body            text (markdown content)
+ *   entry_rationale text (nullable — reserved highlight field, v1.5)
+ *   exit_conclusion text (nullable — reserved highlight field, v1.5)
+ *   created_at      timestamptz
+ *   updated_at      timestamptz  (bumped automatically by tg_set_updated_at trigger)
+ *   deleted_at      timestamptz nullable
+ *
+ * The task description references `body_md`, `last_edited_at`, and `version`
+ * — those names predated the actual migration. We use the on-disk column
+ * names (`body`, `updated_at`) and use `updated_at` as the optimistic-
+ * concurrency token (compare ISO strings for staleness).
+ *
+ * postgres.js camelCase transform → JS keys come back as: id, userId,
+ * activityId, body, entryRationale, exitConclusion, createdAt, updatedAt,
+ * deletedAt.
+ */
+import { sql } from '@/lib/db/client';
+import type { ActivityId, NoteId, Iso8601 } from '@/types/canonical';
+
+export interface NoteRow {
+  id: NoteId;
+  userId: string;
+  activityId: ActivityId;
+  body: string;
+  entryRationale: string | null;
+  exitConclusion: string | null;
+  createdAt: Iso8601;
+  updatedAt: Iso8601;
+  deletedAt: Iso8601 | null;
+}
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * postgres.js returns `timestamptz` columns as JS Date objects by default.
+ * The rest of the app (and client components) expect ISO strings — Dates
+ * crossing the RSC boundary land back on the client as Date objects which
+ * blow up "Objects are not valid as React child" when rendered. Normalize
+ * to ISO strings at this layer.
+ */
+function dateToIso(v: unknown): string | null {
+  if (v === null || v === undefined) return null;
+  if (v instanceof Date) return v.toISOString();
+  return String(v);
+}
+
+function normalizeNote<T extends { createdAt: unknown; updatedAt: unknown; deletedAt: unknown }>(
+  row: T,
+): T {
+  return {
+    ...row,
+    createdAt: dateToIso(row.createdAt) as Iso8601,
+    updatedAt: dateToIso(row.updatedAt) as Iso8601,
+    deletedAt: dateToIso(row.deletedAt),
+  };
+}
+
+/**
+ * Fetch the note for a given activity. Returns null if no note exists or
+ * the activity isn't owned by the user (no leak of existence).
+ *
+ * The `user_id` filter also acts as the owner check — RLS would do this
+ * automatically but the local-Postgres shim bypasses RLS, so we filter
+ * explicitly to keep parity with deployed RLS behavior.
+ */
+export async function getNoteForActivity(
+  userId: string,
+  activityId: string,
+): Promise<NoteRow | null> {
+  if (!UUID_RE.test(activityId)) return null;
+  const rows = await sql<NoteRow[]>`
+    SELECT id, user_id, activity_id, body, entry_rationale, exit_conclusion,
+           created_at, updated_at, deleted_at
+    FROM public.notes
+    WHERE activity_id = ${activityId}::uuid
+      AND user_id     = ${userId}::uuid
+      AND deleted_at IS NULL
+    LIMIT 1
+  `;
+  return rows[0] ? normalizeNote(rows[0]) : null;
+}
+
+/**
+ * Fetch the N most recently-edited notes joined to their activity.
+ * Drives the dashboard "Recent notes" feed.
+ */
+export interface RecentNoteRow {
+  id: NoteId;
+  activityId: ActivityId;
+  body: string;
+  updatedAt: Iso8601;
+  // Joined from activity
+  activityName: string;
+  activityType: 'spread' | 'trade' | 'sale' | 'airdrop';
+}
+
+export async function listRecentNotes(
+  userId: string,
+  limit: number,
+): Promise<RecentNoteRow[]> {
+  const rows = await sql<RecentNoteRow[]>`
+    SELECT n.id,
+           n.activity_id,
+           n.body,
+           n.updated_at,
+           a.name AS activity_name,
+           a.type AS activity_type
+    FROM public.notes n
+    JOIN public.activity a ON a.id = n.activity_id
+    WHERE n.user_id = ${userId}::uuid
+      AND n.deleted_at IS NULL
+      AND a.deleted_at IS NULL
+      AND length(trim(n.body)) > 0
+    ORDER BY n.updated_at DESC
+    LIMIT ${limit}
+  `;
+  return rows.map((r) => ({
+    ...r,
+    updatedAt: (dateToIso(r.updatedAt) ?? '') as Iso8601,
+  }));
+}
+
+/**
+ * Lookup error class returned by upsertNote when an optimistic-concurrency
+ * check fails. The caller (the PATCH API route) should map this to a 409.
+ */
+export class NoteVersionConflict extends Error {
+  constructor(
+    public readonly current: NoteRow,
+  ) {
+    super('Note version conflict — refetch and retry');
+    this.name = 'NoteVersionConflict';
+  }
+}
+
+/**
+ * Create or update the note for an activity.
+ *
+ * - If no note exists → INSERT and return the new row.
+ * - If a note exists and no `expectedVersion` is passed → blind UPDATE.
+ * - If a note exists and `expectedVersion` is passed → UPDATE only if
+ *   the current `updated_at` matches; otherwise throw `NoteVersionConflict`
+ *   with the current row attached.
+ *
+ * The owner check is enforced by the WHERE clause on user_id; passing a
+ * mismatched userId silently no-ops (the upsert path will then fail the
+ * activity_id FK lookup or hit RLS in production).
+ *
+ * @returns the latest note row after the write.
+ */
+export async function upsertNote(
+  userId: string,
+  activityId: string,
+  body: string,
+  expectedVersion?: Iso8601,
+): Promise<NoteRow> {
+  if (!UUID_RE.test(activityId)) {
+    throw new Error('activityId must be a UUID');
+  }
+
+  // Verify ownership of the activity first — otherwise a user could
+  // attach a note to someone else's activity if RLS isn't enforced
+  // (which is the case for local single-user, non-RLS-bypass path).
+  const owner = await sql<{ id: string }[]>`
+    SELECT id FROM public.activity
+    WHERE id = ${activityId}::uuid
+      AND user_id = ${userId}::uuid
+      AND deleted_at IS NULL
+    LIMIT 1
+  `;
+  if (owner.length === 0) {
+    throw new Error('Activity not found or not owned by you');
+  }
+
+  // Probe existing note for the activity.
+  const existing = await sql<NoteRow[]>`
+    SELECT id, user_id, activity_id, body, entry_rationale, exit_conclusion,
+           created_at, updated_at, deleted_at
+    FROM public.notes
+    WHERE activity_id = ${activityId}::uuid
+      AND deleted_at IS NULL
+    LIMIT 1
+  `;
+
+  if (!existing[0]) {
+    // No row yet — insert.
+    const [created] = await sql<NoteRow[]>`
+      INSERT INTO public.notes (user_id, activity_id, body)
+      VALUES (${userId}::uuid, ${activityId}::uuid, ${body})
+      RETURNING id, user_id, activity_id, body, entry_rationale, exit_conclusion,
+                created_at, updated_at, deleted_at
+    `;
+    return normalizeNote(created);
+  }
+
+  const current = normalizeNote(existing[0]);
+  if (expectedVersion !== undefined && current.updatedAt !== expectedVersion) {
+    throw new NoteVersionConflict(current);
+  }
+
+  // Update body. tg_set_updated_at trigger bumps updated_at automatically.
+  const [updated] = await sql<NoteRow[]>`
+    UPDATE public.notes
+    SET body = ${body}
+    WHERE id = ${current.id}::uuid
+      AND user_id = ${userId}::uuid
+      AND deleted_at IS NULL
+    RETURNING id, user_id, activity_id, body, entry_rationale, exit_conclusion,
+              created_at, updated_at, deleted_at
+  `;
+  if (!updated) {
+    // Should not happen — the activity owner check above already verified.
+    throw new Error('Note vanished mid-update');
+  }
+  return normalizeNote(updated);
+}
+
+/**
+ * Hard-delete a note. Used rarely — the cascade from activity deletion
+ * normally handles the cleanup automatically. Returns true if a row was
+ * deleted.
+ */
+export async function deleteNote(
+  userId: string,
+  noteId: string,
+): Promise<boolean> {
+  if (!UUID_RE.test(noteId)) return false;
+  const rows = await sql`
+    DELETE FROM public.notes
+    WHERE id = ${noteId}::uuid
+      AND user_id = ${userId}::uuid
+    RETURNING id
+  `;
+  return rows.length > 0;
+}

@@ -8,6 +8,8 @@ import {
   WizardTextarea,
 } from "@/components/wizard/wizard-field";
 import { cn } from "@/lib/utils";
+import { requireUser } from "@/lib/auth/server";
+import { getActivity } from "@/lib/db/activity";
 
 // Stepper label set: the label at index 2 ("Details") is shown regardless of
 // path. When the user took the Manual branch, this page is step 3 of 4 but
@@ -23,6 +25,8 @@ const SIDES = ["long", "short"] as const;
 // entry arrives with an empty bag. We always render the same form.
 type Search = Promise<{ [key: string]: string | string[] | undefined }>;
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 function getStr(
   sp: Awaited<Search>,
   key: string,
@@ -34,38 +38,111 @@ function getStr(
 }
 
 /**
+ * datetime-local <input> wants `YYYY-MM-DDTHH:mm` in local time.
+ * Postgres gives us a UTC ISO string. Convert.
+ */
+function isoToDateTimeLocal(iso: string | null): string {
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (!Number.isFinite(d.getTime())) return "";
+  const pad = (n: number) => n.toString().padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+/**
  * Trade details step. Uses a native GET form whose action is the review
  * page — submitting the form just appends every named input value to the
  * URL. Server-component-friendly, no client JS needed for happy path.
+ *
+ * Edit mode: when `?edit=<uuid>` is present, the page fetches the existing
+ * trade and pre-fills the form with its values. The wizard's other URL
+ * params still take precedence — that's intentional so users can step
+ * back from review and see their in-progress edits, not the stale DB row.
+ * The `edit` flag rides through hidden inputs to the server action which
+ * dispatches to the update path instead of create.
  */
 export default async function TradeFieldsPage(props: {
   searchParams: Search;
 }) {
   const sp = await props.searchParams;
+  const editId = getStr(sp, "edit");
 
+  // If edit mode, fetch the existing trade to seed defaults. Treat
+  // ownership-failure / non-trade type as a silent fallback to create mode —
+  // the wizard then renders an empty form. Keeps the URL hackable but
+  // harmless.
+  let dbDefaults: Partial<{
+    exchange: string;
+    symbol: string;
+    instrument: string;
+    side: string;
+    capital: string;
+    qty: string;
+    entryPrice: string;
+    exitPrice: string;
+    fees: string;
+    openedAt: string;
+    closedAt: string;
+    note: string;
+    regimeTags: string;
+    serial: string;
+  }> = {};
+  let editValid = false;
+
+  if (editId && UUID_RE.test(editId)) {
+    const { id: userId } = await requireUser();
+    const activity = await getActivity(userId, editId);
+    if (activity && activity.subtype.type === "trade") {
+      const t = activity.subtype.row;
+      // exchange in the DB is the catalog code (lowercase); the wizard's
+      // <option> values are title-cased. Map back.
+      const exchangeLabel = mapExchangeCodeToLabel(t.exchange);
+      const instrumentLabel = t.instrumentKind === "dated_future" ? "future" : t.instrumentKind;
+      dbDefaults = {
+        exchange: exchangeLabel,
+        symbol: t.symbol,
+        instrument: instrumentLabel,
+        side: t.side,
+        capital: activity.capitalDeployedUsd ?? "",
+        qty: t.qty,
+        entryPrice: t.avgEntryPrice,
+        exitPrice: t.avgExitPrice ?? "",
+        fees: activity.feesUsd,
+        openedAt: isoToDateTimeLocal(activity.openedAt),
+        closedAt: isoToDateTimeLocal(activity.closedAt),
+        note: t.entryThesis ?? "",
+        regimeTags: activity.regimeTags.join(", "),
+        serial: activity.id.slice(0, 4).toUpperCase(),
+      };
+      editValid = true;
+    }
+  }
+
+  // URL > DB > empty. URL overrides DB so back-from-review keeps user edits.
   const defaults = {
-    exchange: getStr(sp, "exchange", "Binance"),
-    symbol: getStr(sp, "symbol"),
-    instrument: getStr(sp, "instrument", "perp"),
-    side: getStr(sp, "side", "long"),
-    capital: getStr(sp, "capital"),
-    entryPrice: getStr(sp, "entryPrice"),
-    exitPrice: getStr(sp, "exitPrice"),
-    qty: getStr(sp, "qty"),
-    fees: getStr(sp, "fees"),
-    openedAt: getStr(sp, "openedAt"),
-    closedAt: getStr(sp, "closedAt"),
-    note: getStr(sp, "note"),
-    regimeTags: getStr(sp, "regimeTags"),
+    exchange: getStr(sp, "exchange") || dbDefaults.exchange || "Binance",
+    symbol: getStr(sp, "symbol") || dbDefaults.symbol || "",
+    instrument: getStr(sp, "instrument") || dbDefaults.instrument || "perp",
+    side: getStr(sp, "side") || dbDefaults.side || "long",
+    capital: getStr(sp, "capital") || dbDefaults.capital || "",
+    entryPrice: getStr(sp, "entryPrice") || dbDefaults.entryPrice || "",
+    exitPrice: getStr(sp, "exitPrice") || dbDefaults.exitPrice || "",
+    qty: getStr(sp, "qty") || dbDefaults.qty || "",
+    fees: getStr(sp, "fees") || dbDefaults.fees || "",
+    openedAt: getStr(sp, "openedAt") || dbDefaults.openedAt || "",
+    closedAt: getStr(sp, "closedAt") || dbDefaults.closedAt || "",
+    note: getStr(sp, "note") || dbDefaults.note || "",
+    regimeTags: getStr(sp, "regimeTags") || dbDefaults.regimeTags || "",
     source: getStr(sp, "source"),
   };
 
-  // Back goes to the right place depending on how the user arrived. If
-  // `source=<fill-id>` is in the URL, they came from the picker; otherwise
-  // they came from the manual branch of the source step.
-  const backHref = defaults.source
-    ? "/add/trade/pick"
-    : "/add/trade/source";
+  // Back goes to the right place depending on how the user arrived. Edits
+  // can't go back any further than the detail page they came from.
+  const backHref = editValid
+    ? `/trades/${editId}`
+    : defaults.source
+      ? "/add/trade/pick"
+      : "/add/trade/source";
 
   return (
     <WizardShell
@@ -73,21 +150,39 @@ export default async function TradeFieldsPage(props: {
       step={3}
       totalSteps={4}
       stepLabels={STEP_LABELS}
-      title="Trade details"
+      title={editValid ? "Edit trade" : "Trade details"}
       subtitle={
-        defaults.source
-          ? "Pre-filled from your exchange fill. Edit anything that doesn't look right."
-          : "Type in what happened. You can always edit this later from the trade detail page."
+        editValid
+          ? "Editing existing trade. Change anything; the values you leave alone stay put."
+          : defaults.source
+            ? "Pre-filled from your exchange fill. Edit anything that doesn't look right."
+            : "Type in what happened. You can always edit this later from the trade detail page."
       }
     >
+      {editValid && (
+        <aside
+          className="mb-6 rounded-md border border-warn/30 bg-warn/5 px-4 py-2.5 text-[12px] text-warn"
+          role="status"
+        >
+          <span className="font-semibold uppercase tracking-[0.14em] text-[10px]">
+            Editing
+          </span>
+          {" — "}
+          <span className="font-serif italic">
+            trade #{dbDefaults.serial}. Changes save back to the same record.
+          </span>
+        </aside>
+      )}
       <form
         id="trade-fields-form"
         action="/add/trade/review"
         method="get"
         className="flex flex-col gap-7"
       >
-        {/* Pass-through fields so navigating back from review preserves
-            the trade's source attribution. */}
+        {/* Pass-through fields. `edit` propagates so the server action
+            knows to update instead of insert. `source` keeps the fill
+            attribution when arriving from the picker. */}
+        {editValid && <input type="hidden" name="edit" value={editId} />}
         {defaults.source && (
           <input type="hidden" name="source" value={defaults.source} />
         )}
@@ -307,6 +402,18 @@ function SectionLabel({ children }: { children: React.ReactNode }) {
       {children}
     </h2>
   );
+}
+
+/** Inverse of activity.ts's mapExchangeLabelToCode. */
+function mapExchangeCodeToLabel(code: string): string {
+  const map: Record<string, string> = {
+    binance: "Binance",
+    bybit: "Bybit",
+    hyperliquid: "Hyperliquid",
+    kraken: "Coinbase",
+    okx: "OKX",
+  };
+  return map[code] ?? "Other";
 }
 
 function RadioRow({

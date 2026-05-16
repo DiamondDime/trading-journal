@@ -500,7 +500,8 @@ export const ListActivitiesQuery = z.object({
 
 /**
  * UpdateActivityBody — common-field edits for any activity type.
- * Subtype-specific edits land in Wave 6.
+ * Subtype-specific edits land in Wave 6 via the wizard edit flow; the PATCH
+ * API stays scoped to these "safe across all types" fields.
  */
 export const UpdateActivityBody = z
   .object({
@@ -510,3 +511,41 @@ export const UpdateActivityBody = z
     status:      ActivityStatusSchema.optional(),
   })
   .strict();
+
+// ============================================================================
+// Note schemas
+// ============================================================================
+
+/**
+ * CreateNoteBody — POST /api/notes. Either creates the (one) note for an
+ * activity or updates it when one already exists. The upsert semantics live
+ * in upsertNote; the API route validates payload here.
+ */
+export const CreateNoteBody = z
+  .object({
+    activity_id: z.string().uuid(),
+    body:        z.string().max(50_000),
+  })
+  .strict();
+
+export type CreateNoteData = z.infer<typeof CreateNoteBody>;
+
+/**
+ * UpdateNoteBody — PATCH /api/notes/[id]. `version` is the client's last-
+ * known `updated_at`; the upsert path compares for optimistic concurrency
+ * and returns 409 on mismatch.
+ */
+export const UpdateNoteBody = z
+  .object({
+    body:    z.string().max(50_000),
+    version: z.string().datetime().optional(),
+  })
+  .strict();
+
+export type UpdateNoteData = z.infer<typeof UpdateNoteBody>;
+
+/** GET /api/notes?activity_id=<uuid> */
+export const ListNotesQuery = z
+  .object({
+    activity_id: z.string().uuid(),
+  });

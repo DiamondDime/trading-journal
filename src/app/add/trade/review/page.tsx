@@ -8,6 +8,8 @@ import { logTrade } from "../actions";
 const STEP_LABELS = ["Source", "Pick", "Details", "Review"] as const;
 
 // Field names the form passes through. Stays in sync with /fields/page.tsx.
+// `edit` is the UUID of an existing trade when this is an edit-mode submit;
+// the server action dispatches to the update path when present.
 const TRADE_FIELDS = [
   "exchange",
   "symbol",
@@ -23,6 +25,7 @@ const TRADE_FIELDS = [
   "note",
   "regimeTags",
   "source",
+  "edit",
 ] as const;
 
 type Search = Promise<{ [key: string]: string | string[] | undefined }>;
@@ -154,6 +157,7 @@ export default async function TradeReviewPage(props: { searchParams: Search }) {
       )
     )
   ).toString()}`;
+  const isEditing = getStr(sp, "edit") !== "";
 
   const headlineTone = net >= 0 ? "up" : "down";
   const aprLabel =
@@ -167,8 +171,12 @@ export default async function TradeReviewPage(props: { searchParams: Search }) {
       step={4}
       totalSteps={4}
       stepLabels={STEP_LABELS}
-      title="Look it over"
-      subtitle="One last pass before this hits your journal. Edit any row to bounce back to the form."
+      title={isEditing ? "Confirm changes" : "Look it over"}
+      subtitle={
+        isEditing
+          ? "Saving these changes to the same record. Edit any row to bounce back to the form."
+          : "One last pass before this hits your journal. Edit any row to bounce back to the form."
+      }
     >
       <WizardErrorBanner error={getStr(sp, "error") || undefined} />
       {/* ── Hero preview ─────────────────────────────────────────────── */}
@@ -353,7 +361,7 @@ export default async function TradeReviewPage(props: { searchParams: Search }) {
             type="submit"
             className="inline-flex items-center gap-2 rounded-md border border-text bg-text px-5 py-2 font-mono text-[11px] uppercase tracking-[0.16em] text-app transition-colors hover:bg-text-secondary"
           >
-            Log trade
+            {isEditing ? "Save changes" : "Log trade"}
             <ArrowRight className="h-3 w-3" />
           </button>
         </div>
