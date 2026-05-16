@@ -9,7 +9,6 @@ const STEP_LABELS = ["Details", "Review"] as const;
 const AIRDROP_FIELDS = [
   "protocol",
   "asset",
-  "dropKind",
   "tokensClaimed",
   "claimDate",
   "usdValueAtClaim",
@@ -17,13 +16,6 @@ const AIRDROP_FIELDS = [
   "note",
   "regimeTags",
 ] as const;
-
-const DROP_KIND_LABELS: Record<string, string> = {
-  retro: "Retro",
-  loyalty: "Loyalty",
-  quest: "Quest",
-  other: "Other",
-};
 
 type Search = Promise<{ [key: string]: string | string[] | undefined }>;
 
@@ -78,7 +70,6 @@ export default async function AirdropReviewPage(props: {
   const v = {
     protocol: getStr(sp, "protocol"),
     asset: getStr(sp, "asset"),
-    dropKind: getStr(sp, "dropKind"),
     tokensClaimed: getStr(sp, "tokensClaimed"),
     claimDate: getStr(sp, "claimDate"),
     usdValueAtClaim: getStr(sp, "usdValueAtClaim", "0"),
@@ -171,11 +162,6 @@ export default async function AirdropReviewPage(props: {
           <WizardSummaryRow
             label="Token"
             value={v.asset || "—"}
-            editHref={editAllHref}
-          />
-          <WizardSummaryRow
-            label="Drop kind"
-            value={DROP_KIND_LABELS[v.dropKind] ?? v.dropKind ?? "—"}
             editHref={editAllHref}
           />
         </div>

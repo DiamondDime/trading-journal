@@ -11,8 +11,6 @@ import {
 import { cn } from "@/lib/utils";
 import { ManualBuilder } from "./manual-builder";
 
-export const dynamic = "force-static";
-
 const STEP_LABELS = ["Source", "Pick legs", "Type", "Fields", "Review"] as const;
 
 // Max suggestions to surface on the page. Keeps the panel scannable; the

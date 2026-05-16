@@ -202,7 +202,7 @@ export function Sidebar() {
           </p>
           <Link
             href="/add"
-            className="flex items-center gap-2.5 rounded-md px-2.5 py-1.5 text-[13px] font-medium text-signature hover:bg-signature/10 transition-colors"
+            className="flex items-center gap-2.5 rounded-md px-2.5 py-1.5 text-[13px] font-medium text-text hover:bg-subtle hover:text-text transition-colors"
           >
             <Plus className="h-3.5 w-3.5" />
             Log activity

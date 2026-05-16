@@ -9,7 +9,11 @@ import {
 } from "@/components/wizard/wizard-field";
 import { cn } from "@/lib/utils";
 
-const STEP_LABELS = ["Source", "Details", "Review"] as const;
+// Stepper label set: the label at index 2 ("Details") is shown regardless of
+// path. When the user took the Manual branch, this page is step 3 of 4 but
+// effectively skips step 2 ("Pick"); the labelling is slightly off in that
+// case but the step counter still reads "Step 3 of 4" — acceptable for v1.
+const STEP_LABELS = ["Source", "Pick", "Details", "Review"] as const;
 
 const EXCHANGES = ["Binance", "Bybit", "Hyperliquid", "Coinbase", "OKX", "Other"] as const;
 const INSTRUMENTS = ["perp", "spot", "future"] as const;
@@ -66,8 +70,8 @@ export default async function TradeFieldsPage(props: {
   return (
     <WizardShell
       type="trade"
-      step={2}
-      totalSteps={3}
+      step={3}
+      totalSteps={4}
       stepLabels={STEP_LABELS}
       title="Trade details"
       subtitle={

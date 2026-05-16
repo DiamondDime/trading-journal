@@ -20,5 +20,5 @@ export async function logSpread(formData: FormData): Promise<void> {
   console.log("[logSpread] would persist:", payload);
 
   const newSpreadId = "sp-032";
-  redirect(`/spreads/${newSpreadId}`);
+  redirect(`/spreads/${newSpreadId}?from=wizard`);
 }

@@ -15,8 +15,7 @@ import {
   fmtUsd,
   type SaleRow,
 } from "@/lib/data/archive-data";
-
-export const dynamic = "force-static";
+import { WizardPreviewBanner } from "@/components/wizard/wizard-preview-banner";
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -132,10 +131,13 @@ function deriveSaleExecution(sale: SaleRow): {
 
 export default async function SaleDetailPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string }>;
+  searchParams: Promise<{ from?: string }>;
 }) {
   const { id } = await params;
+  const sp = await searchParams;
   const activity = getActivityById(id);
 
   if (!activity || activity.type !== "sale") {
@@ -152,6 +154,7 @@ export default async function SaleDetailPage({
       <Sidebar />
       <main className="flex-1 overflow-y-auto">
         <article className="mx-auto max-w-4xl px-6 py-14 md:py-20">
+          <WizardPreviewBanner from={sp.from} />
           {/* ── meta row ──────────────────────────────────────────────── */}
           <div className="flex items-center justify-between font-mono text-xs text-text-tertiary">
             <span>{s.serial}</span>
@@ -159,7 +162,7 @@ export default async function SaleDetailPage({
               <span className="inline-flex items-center gap-1.5 rounded-full bg-subtle px-2.5 py-0.5">
                 <span className="h-1.5 w-1.5 rounded-full bg-text-tertiary" />
                 <span className="text-[10px] font-semibold uppercase tracking-[0.12em]">
-                  Vested
+                  {s.status[0].toUpperCase() + s.status.slice(1)}
                 </span>
               </span>
               <span>{s.closedLabel}, 2026</span>

@@ -35,8 +35,12 @@ const WEEK_BUCKETS: { label: string; iso: string }[] = [
   { label: "May 16", iso: "2026-05-16" },
 ];
 
+// Series colors are chosen so none compete with the dashboard's signature
+// amber. The Spread series uses a neutral slate (`--chart-spread`) instead
+// of `--accent-signature` so the only amber on /spreads remains the Net P&L
+// hero KPI (and the brand "J" mark, which is a brand exception).
 const SERIES: { key: ActivityType; label: string; color: string }[] = [
-  { key: "spread",  label: "Spread",  color: "var(--accent-signature)" },
+  { key: "spread",  label: "Spread",  color: "var(--chart-spread)" },
   { key: "trade",   label: "Trade",   color: "var(--accent-info)" },
   { key: "sale",    label: "Sale",    color: "var(--accent-brand)" },
   { key: "airdrop", label: "Airdrop", color: "var(--accent-up)" },

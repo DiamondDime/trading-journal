@@ -452,6 +452,41 @@ Single-design-doc, multi-plan-doc execution. Each chunk gets its own `docs/specs
 6. **Open-source repo setup** — rename, license, README, CONTRIBUTING, docker-compose, GitHub workflows, demo deploy.
 7. **Phase 5 worker** (the deferred backend) — ccxt-based ingestion, fills → Postgres, position aggregation, matcher invocation. Unblocks "from-exchange" UX for users.
 
+## v1 implementation deviations (accepted, documented 2026-05-16)
+
+The Wave 2–4 UI build shipped working software for all four activity types but with the following deliberate simplifications. Each is fixed in a later phase, listed against the original spec section.
+
+### Routes
+- **Archive path**: spec says `/archive` (top-level); implementation ships `/spreads/archive`. `/trades`, `/sales`, `/airdrops` are 307-redirects to `/spreads/archive?activity=<type>`. **Phase 7** rename: `/archive` as canonical, `/spreads/archive` becomes the redirect.
+- **Spread wizard URL shape**: spec says deep-nested `/add/spread/<subtype>/<variant>/<step>`; implementation ships flat `/add/spread/<step>` with subtype/variant carried in search params. Shareable URLs still work; deep-linking to "I want to log a cash-carry funding spread" requires a query string instead of a URL path. **Phase 7** restructure if user research shows this matters.
+
+### Wizard step counts
+- **Sale wizard**: spec called for 5 steps (token → allocation → vesting → claims → journal). Implementation ships 2 (`fields` → `review`). Fields collapsed into one form. **Phase 5** will reintroduce the vesting and claims steps once `claim_events` JSONB is wired and the timeline visualization lands.
+- **Airdrop wizard**: spec called for 3 steps (token → claim → journal). Implementation ships 2 (`fields` → `review`). The `drop_kind` field was removed entirely — the schema doesn't store it. **Phase 5** will add `snapshot_date`, `eligibility_reason`, `claim_tx_hash` once they're surfaced on `activity_airdrop`.
+- **Trade wizard**: ships 4 steps (`source` → `pick` → `fields` → `review`). The Source step is an extra branch point not in the spec; it lets the user choose between exchange-imported and manual paths up front. Acceptable; matches Spread's pattern.
+
+### Detail pages
+- **Sale vesting timeline visualization**: spec calls this the "centerpiece" of the Sale detail page. Implementation ships an allocation table instead. **Phase 5** will build the timeline component (TGE marker + cliff bar + linear-vest gradient + vested-today %).
+- **Spread legs decomposition**: detail page derives leg rows by parsing the `venues` string (e.g. `"Bitmex + Coinbase"` → 2 legs). Works for the 16 fixtures; breaks for user-entered spreads with 3+ venues or unusual formatting. **Phase 5** wires `spread_leg` table reads and removes the string parsing.
+- **Trade detail decomposition**: entry/exit/qty/fees inferred from a per-asset base-price table because fixtures only store aggregates. **Phase 5** binds to `activity_trade.avg_entry_price` etc.
+
+### Persistence
+- **No DB writes yet** — all four wizards' `actions.ts` files log the payload and redirect to a fixture ID (`tr-005` / `sa-003` / `ad-003` / `sp-032`). The redirect carries `?from=wizard`, which the detail page reads to render a "Preview only" banner. **Phase 5** wires real `activity_*` writes, returns the new row's UUID, removes the banner.
+- **Draft auto-save on deep steps**: not implemented. Wizard state lives in URL search params only. **Phase 5** adds draft rows for the picker's selected legs.
+
+### Fixture data
+- **Fixture APR / MTM values are display-only**. The wizard's Review step computes APR live from the spec formula (`net_pnl / capital × 365/days × 100`); fixture rows store pre-computed headline values that don't necessarily match. Once Phase 5 DB writes land, headlines are computed at write time from the canonical formula and the discrepancy disappears.
+
+### Design system
+- **Two amber moments per screen** on the dashboard: hero KPI + sidebar brand-J mark. The brand mark is exempt from the "one moment per screen" rule. Other amber sites (equity-curve chart, Log-activity link) were demoted to neutral.
+
+### What's NOT a deviation
+- Wizard primitives (`wizard-shell`, `wizard-stepper`, `wizard-nav`, `wizard-field`, `wizard-radio-card`, `wizard-summary-row`, `wizard-preview-banner`) all reusable across the four flows.
+- Matcher rules (5 of 5 implemented): cash-and-carry, cross-exchange, funding capture, calendar, dex-cex. DEX-CEX takes precedence when one leg is DEX and the other CEX.
+- `getActivityHref` is the single routing source of truth.
+- All five wizard routes that read searchParams render dynamically (not `force-static`).
+- Archive filter state syncs to URL bidirectionally — copy-link works.
+
 ## Out of scope for v1 (intentionally deferred)
 
 - **Multi-user-per-instance** — single tenant is the default; multi-user opt-in is a v1.1 toggle.

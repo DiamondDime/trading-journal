@@ -4,7 +4,7 @@ import { WizardShell } from "@/components/wizard/wizard-shell";
 import { WizardSummaryRow } from "@/components/wizard/wizard-summary-row";
 import { logTrade } from "../actions";
 
-const STEP_LABELS = ["Source", "Details", "Review"] as const;
+const STEP_LABELS = ["Source", "Pick", "Details", "Review"] as const;
 
 // Field names the form passes through. Stays in sync with /fields/page.tsx.
 const TRADE_FIELDS = [
@@ -163,8 +163,8 @@ export default async function TradeReviewPage(props: { searchParams: Search }) {
   return (
     <WizardShell
       type="trade"
-      step={3}
-      totalSteps={3}
+      step={4}
+      totalSteps={4}
       stepLabels={STEP_LABELS}
       title="Look it over"
       subtitle="One last pass before this hits your journal. Edit any row to bounce back to the form."

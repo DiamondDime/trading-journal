@@ -15,8 +15,7 @@ import {
   fmtUsd,
   type TradeRow,
 } from "@/lib/data/archive-data";
-
-export const dynamic = "force-static";
+import { WizardPreviewBanner } from "@/components/wizard/wizard-preview-banner";
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -87,10 +86,13 @@ function deriveExecution(trade: TradeRow): {
 
 export default async function TradeDetailPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string }>;
+  searchParams: Promise<{ from?: string }>;
 }) {
   const { id } = await params;
+  const sp = await searchParams;
   const activity = getActivityById(id);
 
   if (!activity || activity.type !== "trade") {
@@ -106,6 +108,7 @@ export default async function TradeDetailPage({
       <Sidebar />
       <main className="flex-1 overflow-y-auto">
         <article className="mx-auto max-w-4xl px-6 py-14 md:py-20">
+          <WizardPreviewBanner from={sp.from} />
           {/* ── meta row ──────────────────────────────────────────────── */}
           <div className="flex items-center justify-between font-mono text-xs text-text-tertiary">
             <span>{t.serial}</span>

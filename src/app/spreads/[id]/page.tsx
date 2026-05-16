@@ -16,8 +16,7 @@ import {
   type SpreadRow,
 } from "@/lib/data/archive-data";
 import { cn } from "@/lib/utils";
-
-export const dynamic = "force-static";
+import { WizardPreviewBanner } from "@/components/wizard/wizard-preview-banner";
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -134,10 +133,13 @@ function parseTargetDelta(note: string): string | null {
 
 export default async function SpreadDetailPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string }>;
+  searchParams: Promise<{ from?: string }>;
 }) {
   const { id } = await params;
+  const sp = await searchParams;
   const activity = getActivityById(id);
 
   if (!activity || activity.type !== "spread") {
@@ -163,6 +165,7 @@ export default async function SpreadDetailPage({
 
   return (
     <article className="mx-auto max-w-4xl px-6 py-14 md:py-20">
+          <WizardPreviewBanner from={sp.from} />
           {/* ── meta row ──────────────────────────────────────────────── */}
           <div className="flex items-center justify-between font-mono text-xs text-text-tertiary">
             <span>{s.serial}</span>

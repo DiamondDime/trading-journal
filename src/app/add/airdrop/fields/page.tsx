@@ -6,16 +6,8 @@ import {
   WizardInput,
   WizardTextarea,
 } from "@/components/wizard/wizard-field";
-import { cn } from "@/lib/utils";
 
 const STEP_LABELS = ["Details", "Review"] as const;
-
-const DROP_KINDS = [
-  { value: "retro", label: "Retro" },
-  { value: "loyalty", label: "Loyalty" },
-  { value: "quest", label: "Quest" },
-  { value: "other", label: "Other" },
-] as const;
 
 type Search = Promise<{ [key: string]: string | string[] | undefined }>;
 
@@ -42,7 +34,6 @@ export default async function AirdropFieldsPage(props: {
   const defaults = {
     protocol: getStr(sp, "protocol"),
     asset: getStr(sp, "asset"),
-    dropKind: getStr(sp, "dropKind", "retro"),
     tokensClaimed: getStr(sp, "tokensClaimed"),
     claimDate: getStr(sp, "claimDate"),
     usdValueAtClaim: getStr(sp, "usdValueAtClaim"),
@@ -66,15 +57,6 @@ export default async function AirdropFieldsPage(props: {
         method="get"
         className="flex flex-col gap-7"
       >
-        {/* ── Kind ───────────────────────────────────────────────────── */}
-        <SectionLabel>Kind</SectionLabel>
-        <RadioGrid
-          legend="Drop kind"
-          name="dropKind"
-          options={DROP_KINDS.map((k) => ({ value: k.value, label: k.label }))}
-          defaultValue={defaults.dropKind}
-        />
-
         {/* ── Protocol + token ─────────────────────────────────────── */}
         <SectionLabel>Protocol &amp; token</SectionLabel>
         <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
@@ -232,56 +214,5 @@ function SectionLabel({ children }: { children: React.ReactNode }) {
     <h2 className="border-b border-border-subtle pb-2 font-serif text-[11px] font-semibold uppercase tracking-[0.18em] text-text-tertiary">
       {children}
     </h2>
-  );
-}
-
-function RadioGrid({
-  legend,
-  name,
-  options,
-  defaultValue,
-}: {
-  legend: string;
-  name: string;
-  options: { value: string; label: string }[];
-  defaultValue: string;
-}) {
-  const id = `radio-${name}`;
-  return (
-    <fieldset className="flex flex-col gap-1.5">
-      <legend
-        id={id}
-        className="mb-0.5 font-mono text-[10px] uppercase tracking-[0.16em] text-text-tertiary"
-      >
-        {legend}
-        <span className="ml-1.5 text-text-disabled">· required</span>
-      </legend>
-      <div
-        role="radiogroup"
-        aria-labelledby={id}
-        className="grid grid-cols-2 gap-2 md:grid-cols-4"
-      >
-        {options.map((opt) => (
-          <label
-            key={opt.value}
-            className={cn(
-              "flex cursor-pointer items-center justify-center rounded-md border px-3 py-2 font-mono text-[11px] uppercase tracking-[0.14em] transition-colors",
-              "border-border bg-surface text-text-secondary hover:border-border-strong hover:text-text",
-              "has-[input:checked]:border-text has-[input:checked]:bg-subtle has-[input:checked]:text-text"
-            )}
-          >
-            <input
-              type="radio"
-              name={name}
-              value={opt.value}
-              defaultChecked={defaultValue === opt.value}
-              required
-              className="sr-only"
-            />
-            {opt.label}
-          </label>
-        ))}
-      </div>
-    </fieldset>
   );
 }

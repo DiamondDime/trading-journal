@@ -14,8 +14,7 @@ import {
   fmtUsd,
   type AirdropRow,
 } from "@/lib/data/archive-data";
-
-export const dynamic = "force-static";
+import { WizardPreviewBanner } from "@/components/wizard/wizard-preview-banner";
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -89,10 +88,13 @@ function deriveAirdropExecution(drop: AirdropRow): {
 
 export default async function AirdropDetailPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string }>;
+  searchParams: Promise<{ from?: string }>;
 }) {
   const { id } = await params;
+  const sp = await searchParams;
   const activity = getActivityById(id);
 
   if (!activity || activity.type !== "airdrop") {
@@ -108,6 +110,7 @@ export default async function AirdropDetailPage({
       <Sidebar />
       <main className="flex-1 overflow-y-auto">
         <article className="mx-auto max-w-4xl px-6 py-14 md:py-20">
+          <WizardPreviewBanner from={sp.from} />
           {/* ── meta row ──────────────────────────────────────────────── */}
           <div className="flex items-center justify-between font-mono text-xs text-text-tertiary">
             <span>{a.serial}</span>
@@ -128,7 +131,7 @@ export default async function AirdropDetailPage({
               {a.asset} · {a.protocol} airdrop
             </h1>
             <p className="mt-3 text-base text-text-secondary">
-              Retro · {a.protocol} · {a.asset}
+              {a.protocol} · {a.asset}
             </p>
             <p className="mt-1 font-mono text-sm text-text-tertiary">
               {a.daysLabel} since claim
@@ -192,14 +195,6 @@ export default async function AirdropDetailPage({
                 </TableHeader>
                 <TableBody>
                   <ExecRow label="Protocol" value={a.protocol} mono />
-                  <ExecRow
-                    label="Drop kind"
-                    value={
-                      <span className="font-mono text-[11px] uppercase tracking-[0.14em] text-text-secondary">
-                        retro
-                      </span>
-                    }
-                  />
                   <ExecRow
                     label="Tokens claimed"
                     value={`${fmtTokens(exec.tokensClaimed)} ${a.asset}`}

@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
+import { useRouter, useSearchParams } from "next/navigation";
 import { ArrowRight, Plug } from "lucide-react";
 import {
   Table,
@@ -49,9 +50,28 @@ function fmtUsd(n: number, signed = false) {
  *
  * Client component because the row checkboxes need React state — every other
  * surface in this wizard is server-rendered.
+ *
+ * Selection is mirrored into the URL as `?selected=fill-a,fill-b`. This makes
+ * the pick step survive back-navigation from /add/spread/type — when the
+ * user clicks "Back" from the next step, the same checkboxes are still
+ * ticked. We hydrate from the URL on mount only; subsequent edits flow one
+ * way (state → URL) so the URL never overwrites in-progress changes.
  */
 export function ManualBuilder({ fills }: ManualBuilderProps) {
-  const [selected, setSelected] = React.useState<Set<string>>(new Set());
+  const router = useRouter();
+  const searchParams = useSearchParams();
+
+  // Hydrate once from the URL. Intentionally [] deps — re-reading later
+  // would let URL changes clobber the user's in-progress selection.
+  const initialSelected = React.useMemo(() => {
+    const v = searchParams.get("selected");
+    if (!v) return new Set<string>();
+    const validIds = new Set(fills.map((f) => f.id));
+    return new Set(v.split(",").filter((id) => id && validIds.has(id)));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  const [selected, setSelected] =
+    React.useState<Set<string>>(initialSelected);
 
   const toggle = React.useCallback((id: string) => {
     setSelected((prev) => {
@@ -61,6 +81,25 @@ export function ManualBuilder({ fills }: ManualBuilderProps) {
       return next;
     });
   }, []);
+
+  // Mirror selection → URL. Only call router.replace when the canonical
+  // query string actually differs from what's already in the URL; this
+  // prevents loops and avoids overwriting matching state on mount.
+  React.useEffect(() => {
+    const params = new URLSearchParams(searchParams.toString());
+    if (selected.size > 0) {
+      params.set("selected", [...selected].join(","));
+    } else {
+      params.delete("selected");
+    }
+    const next = params.toString();
+    const current = searchParams.toString();
+    if (next === current) return;
+    router.replace(next ? `?${next}` : "?", { scroll: false });
+    // searchParams is intentionally omitted from deps — we only re-run when
+    // local selection changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selected, router]);
 
   const count = selected.size;
   const canContinue = count >= 2;

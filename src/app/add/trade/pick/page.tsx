@@ -13,9 +13,7 @@ import {
 import { IMPORTED_FILLS } from "@/lib/data/exchange-fills-mock";
 import { cn } from "@/lib/utils";
 
-export const dynamic = "force-static";
-
-const STEP_LABELS = ["Source", "Details", "Review"] as const;
+const STEP_LABELS = ["Source", "Pick", "Details", "Review"] as const;
 
 function fmtUsd(n: number, signed = false) {
   const abs = Math.abs(n).toLocaleString("en-US", {
@@ -48,8 +46,8 @@ export default function TradePickPage() {
   return (
     <WizardShell
       type="trade"
-      step={1}
-      totalSteps={3}
+      step={2}
+      totalSteps={4}
       stepLabels={STEP_LABELS}
       title="Pick a trade from your exchange history"
       subtitle="These are the recent fills synced from your connected exchanges. Click one to pre-fill the form."

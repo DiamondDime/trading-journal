@@ -4,14 +4,14 @@ import { WizardNav } from "@/components/wizard/wizard-nav";
 
 export const dynamic = "force-static";
 
-const STEP_LABELS = ["Source", "Details", "Review"] as const;
+const STEP_LABELS = ["Source", "Pick", "Details", "Review"] as const;
 
 export default function TradeSourcePage() {
   return (
     <WizardShell
       type="trade"
       step={1}
-      totalSteps={3}
+      totalSteps={4}
       stepLabels={STEP_LABELS}
       title="Where's this trade from?"
       subtitle="Pick how you want to populate the form. Either path lands you on the same fields, just with more or less prefilled for you."

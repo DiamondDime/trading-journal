@@ -39,6 +39,10 @@
   --accent-info:         #2563eb;
   --accent-info-bg:      #eff6ff;
 
+  /* Chart-only neutral for the Spread series — kept off the signature amber
+     so the dashboard's "one amber moment" rule holds. Desaturated slate. */
+  --chart-spread:        #475569;
+
   /* shadcn token shims — mapped to our palette so primitives inherit */
   --background:           var(--bg-app);
   --foreground:           var(--text-primary);
@@ -91,6 +95,10 @@
   --accent-warn-bg:      rgba(251, 146, 60, 0.15);
   --accent-info:         #58a6ff;
   --accent-info-bg:      rgba(88, 166, 255, 0.15);
+
+  /* Chart-only neutral for the Spread series — desaturated slate that
+     reads neutrally on dark surfaces without competing with amber. */
+  --chart-spread:        #94a3b8;
 
   --background:           var(--bg-app);
   --foreground:           var(--text-primary);

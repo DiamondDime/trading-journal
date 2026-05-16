@@ -90,6 +90,8 @@ function ruleCashAndCarry(fills: ImportedTradeFill[]): MatcherSuggestion[] {
       const b = fills[j];
       if (a.asset !== b.asset) continue;
       if (a.exchange === b.exchange) continue;
+      // pairs across cex+dex are surfaced by ruleDexCex, not here
+      if (a.venueKind !== b.venueKind) continue;
 
       // Identify the spot-long leg and the short-derivative leg.
       const longSpot =

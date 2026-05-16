@@ -20,5 +20,5 @@ export async function logSale(formData: FormData): Promise<void> {
   // detail page renders real data on success. When persistence is wired,
   // this becomes the new row's UUID.
   const newSaleId = "sa-003";
-  redirect(`/sales/${newSaleId}`);
+  redirect(`/sales/${newSaleId}?from=wizard`);
 }

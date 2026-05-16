@@ -17,5 +17,5 @@ export async function logAirdrop(formData: FormData): Promise<void> {
   console.log("[logAirdrop] would persist:", payload);
 
   const newAirdropId = "ad-003";
-  redirect(`/airdrops/${newAirdropId}`);
+  redirect(`/airdrops/${newAirdropId}?from=wizard`);
 }

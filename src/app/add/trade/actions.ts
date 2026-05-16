@@ -21,5 +21,5 @@ export async function logTrade(formData: FormData): Promise<void> {
   // detail page renders real data on success. When persistence is wired,
   // this becomes the new row's UUID.
   const newTradeId = "tr-005";
-  redirect(`/trades/${newTradeId}`);
+  redirect(`/trades/${newTradeId}?from=wizard`);
 }

@@ -105,6 +105,84 @@ function toggleSetValue<T>(set: Set<T>, value: T): Set<T> {
   return next;
 }
 
+// ── URL <-> state codec ────────────────────────────────────────────────────
+// Single source of truth for archive filter URL params. `decodeFromUrl`
+// rehydrates the initial state when the page mounts (so direct links and
+// browser back/forward work). `buildUrlQuery` is the inverse — it produces a
+// canonical query string that mirrors current state, with keys omitted when
+// the value matches the default ("clean URLs" when nothing is filtered).
+
+type DecodedState = {
+  activity: Set<ActivityType>;
+  type: Set<SpreadType>;
+  asset: Set<Asset>;
+  status: Set<ActivityStatus>;
+  outcome: OutcomeFilter;
+  sort: { key: SortKey; dir: "asc" | "desc" };
+  q: string;
+};
+
+const VALID_SORT_KEYS: SortKey[] = [
+  "serial",
+  "closed",
+  "net_pnl",
+  "capital",
+  "days",
+  "headline_num",
+];
+
+function decodeFromUrl(sp: { get(key: string): string | null }): DecodedState {
+  const parseSet = <T extends string>(
+    key: string,
+    valid: readonly T[]
+  ): Set<T> => {
+    const v = sp.get(key);
+    if (!v) return new Set();
+    return new Set(
+      v.split(",").filter((x): x is T => valid.includes(x as T))
+    );
+  };
+
+  const outcomeRaw = sp.get("outcome");
+  const outcome: OutcomeFilter =
+    outcomeRaw === "winners" || outcomeRaw === "losers" ? outcomeRaw : "all";
+
+  // sort is encoded as "key:dir" (e.g. "net_pnl:asc"). Default is serial:desc.
+  const sortRaw = sp.get("sort") ?? "";
+  const [sortKeyRaw, sortDirRaw] = sortRaw.split(":");
+  const sortKey: SortKey = VALID_SORT_KEYS.includes(sortKeyRaw as SortKey)
+    ? (sortKeyRaw as SortKey)
+    : "serial";
+  const sortDir: "asc" | "desc" = sortDirRaw === "asc" ? "asc" : "desc";
+
+  return {
+    activity: parseSet("activity", ACTIVITY_TYPE_ORDER),
+    type: parseSet("type", TYPE_ORDER),
+    asset: parseSet("asset", ASSET_ORDER),
+    status: parseSet("status", STATUS_ORDER),
+    outcome,
+    sort: { key: sortKey, dir: sortDir },
+    q: sp.get("q") ?? "",
+  };
+}
+
+function buildUrlQuery(state: DecodedState): string {
+  const params = new URLSearchParams();
+  const writeSet = (key: string, set: Set<string>) => {
+    if (set.size > 0) params.set(key, [...set].join(","));
+  };
+  writeSet("activity", state.activity);
+  writeSet("type", state.type);
+  writeSet("asset", state.asset);
+  writeSet("status", state.status);
+  if (state.outcome !== "all") params.set("outcome", state.outcome);
+  if (state.sort.key !== "serial" || state.sort.dir !== "desc") {
+    params.set("sort", `${state.sort.key}:${state.sort.dir}`);
+  }
+  if (state.q) params.set("q", state.q);
+  return params.toString();
+}
+
 function rowAsset(a: Activity): Asset | null {
   if (a.type === "spread" || a.type === "trade" || a.type === "sale" || a.type === "airdrop") {
     return a.asset;
@@ -122,49 +200,70 @@ function rowSearchHaystack(a: Activity): string {
 }
 
 export function ArchiveBrowser({ data }: { data: Activity[] }) {
+  const router = useRouter();
   const searchParams = useSearchParams();
 
-  const initialActivityTypes = React.useMemo(() => {
-    const a = searchParams.get("activity");
-    if (!a) return new Set<ActivityType>();
-    return new Set(
-      a.split(",").filter((x): x is ActivityType =>
-        ACTIVITY_TYPE_ORDER.includes(x as ActivityType)
-      )
-    );
-  }, [searchParams]);
-
-  const initialSpreadTypes = React.useMemo(() => {
-    const t = searchParams.get("type");
-    if (!t) return new Set<SpreadType>();
-    return new Set(
-      t.split(",").filter((x): x is SpreadType =>
-        TYPE_ORDER.includes(x as SpreadType)
-      )
-    );
-  }, [searchParams]);
-
-  const initialOutcome = React.useMemo<OutcomeFilter>(() => {
-    const o = searchParams.get("outcome");
-    if (o === "winners" || o === "losers") return o;
-    return "all";
-  }, [searchParams]);
+  // Initial state is decoded from URL search params on mount only. Once
+  // mounted, chip toggles drive `router.replace` (see effect below) — we
+  // never re-derive state from the URL after that point, so navigating
+  // back/forward to the page does not clobber in-progress edits.
+  const initialState = React.useMemo(
+    () => decodeFromUrl(searchParams),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    []
+  );
 
   const [activityFilters, setActivityFilters] =
-    React.useState<Set<ActivityType>>(initialActivityTypes);
+    React.useState<Set<ActivityType>>(initialState.activity);
   const [spreadTypeFilters, setSpreadTypeFilters] =
-    React.useState<Set<SpreadType>>(initialSpreadTypes);
-  const [assetFilters, setAssetFilters] = React.useState<Set<Asset>>(new Set());
-  const [statusFilters, setStatusFilters] = React.useState<Set<ActivityStatus>>(
-    new Set()
+    React.useState<Set<SpreadType>>(initialState.type);
+  const [assetFilters, setAssetFilters] = React.useState<Set<Asset>>(
+    initialState.asset
   );
-  const [outcome, setOutcome] =
-    React.useState<OutcomeFilter>(initialOutcome);
-  const [search, setSearch] = React.useState("");
+  const [statusFilters, setStatusFilters] = React.useState<Set<ActivityStatus>>(
+    initialState.status
+  );
+  const [outcome, setOutcome] = React.useState<OutcomeFilter>(
+    initialState.outcome
+  );
+  const [search, setSearch] = React.useState(initialState.q);
   const [sort, setSort] = React.useState<{ key: SortKey; dir: "asc" | "desc" }>(
-    { key: "serial", dir: "desc" }
+    initialState.sort
   );
   const [view, setView] = React.useState<ViewMode>("table");
+
+  // Sync filter state → URL. Builds the canonical query string from current
+  // state and only calls router.replace if it differs from the URL the
+  // browser currently shows — this prevents both an infinite re-render loop
+  // and clobbering the URL on the very first render when the page was
+  // loaded with query params (state was decoded from those params, so the
+  // rebuilt query matches and we no-op).
+  React.useEffect(() => {
+    const next = buildUrlQuery({
+      activity: activityFilters,
+      type: spreadTypeFilters,
+      asset: assetFilters,
+      status: statusFilters,
+      outcome,
+      sort,
+      q: search,
+    });
+    const current = searchParams.toString();
+    if (next === current) return;
+    router.replace(next ? `?${next}` : "?", { scroll: false });
+    // We intentionally do not depend on `searchParams` here — router.replace
+    // updates it and we only care about state-driven changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    activityFilters,
+    spreadTypeFilters,
+    assetFilters,
+    statusFilters,
+    outcome,
+    sort,
+    search,
+    router,
+  ]);
 
   const clearAll = () => {
     setActivityFilters(new Set());
