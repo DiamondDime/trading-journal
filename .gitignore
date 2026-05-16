@@ -47,3 +47,6 @@ worker/.mypy_cache/
 # Supabase
 supabase/.branches
 supabase/.temp
+
+# Local-only scratch
+.tmp-screenshots/

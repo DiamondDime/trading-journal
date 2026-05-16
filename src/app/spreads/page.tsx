@@ -10,99 +10,32 @@ import { EquityCurveChart } from "@/components/spread/equity-curve-chart";
 import { FundingTicker } from "@/components/spread/funding-ticker";
 import { NotesFeed } from "@/components/spread/notes-feed";
 import { StrategyMix } from "@/components/spread/strategy-mix";
+import {
+  fmtCapital,
+  fmtUsd,
+  getRecentCloses,
+  getTotals,
+  SPREAD_TYPE_LABELS,
+} from "@/lib/data/archive-data";
 
 export const dynamic = "force-static";
 
-const recentCloses: SpreadListItem[] = [
-  {
-    serial: "#032",
-    name: "BTC cash-and-carry",
-    typeLabel: "Funding · Bitmex + Coinbase",
-    status: "closed",
-    headline: "+14.0%",
-    headlineUnit: "APR",
-    tone: "up",
-    summary: "$47,300 · 73d · −21% vs target",
-    href: "/spreads/demo",
-  },
-  {
-    serial: "#031",
-    name: "BTC calendar",
-    typeLabel: "Sep-26 / Dec-26 · Deribit",
-    status: "closed",
-    headline: "+152",
-    headlineUnit: "BPS/D",
-    tone: "up",
-    summary: "$3,140 · 32d · contango widening",
-    href: "/spreads/demo",
-  },
-  {
-    serial: "#030",
-    name: "ETH funding capture",
-    typeLabel: "Same venue · Bybit",
-    status: "closed",
-    headline: "+11.3%",
-    headlineUnit: "APR",
-    tone: "up",
-    summary: "$30,840 · 19d · −18% vs target",
-    href: "/spreads/demo",
-  },
-  {
-    serial: "#029",
-    name: "BTC perp arbitrage",
-    typeLabel: "Cross-exchange · Binance/Bybit",
-    status: "closed",
-    headline: "+4.3",
-    headlineUnit: "BPS",
-    tone: "up",
-    summary: "$5,420 · 47 min · clean exit",
-    href: "/spreads/demo",
-  },
-  {
-    serial: "#028",
-    name: "BTC cash-and-carry",
-    typeLabel: "Basis · Deribit Mar-26 + Bybit",
-    status: "expired",
-    headline: "+7.9%",
-    headlineUnit: "APR",
-    tone: "up",
-    summary: "$62,500 · 79d · held to expiry",
-    href: "/spreads/demo",
-  },
-  {
-    serial: "#027",
-    name: "PEPE DEX-CEX",
-    typeLabel: "OKX DEX + OKX perp",
-    status: "closed",
-    headline: "−59",
-    headlineUnit: "BPS",
-    tone: "down",
-    summary: "$8,420 · 11h · gas killed it",
-    href: "/spreads/demo",
-  },
-  {
-    serial: "#026",
-    name: "ETH funding capture",
-    typeLabel: "Cross venue · Binance/OKX",
-    status: "closed",
-    headline: "+18.2%",
-    headlineUnit: "APR",
-    tone: "up",
-    summary: "$22,400 · 14d · funding inversion",
-    href: "/spreads/demo",
-  },
-  {
-    serial: "#025",
-    name: "BTC perp arbitrage",
-    typeLabel: "Cross-exchange · Bybit/OKX",
-    status: "closed",
-    headline: "+7.1",
-    headlineUnit: "BPS",
-    tone: "up",
-    summary: "$4,180 · 22 min · widened spread",
-    href: "/spreads/demo",
-  },
-];
+const RECENT_COUNT = 8;
+const recentRows = getRecentCloses(RECENT_COUNT);
+const recentNetSum = recentRows.reduce((s, r) => s + r.netPnl, 0);
+const totals = getTotals();
+
+const recentCloses: SpreadListItem[] = recentRows.map((r) => ({
+  serial: r.serial,
+  name: r.name,
+  typeLabel: `${r.variant} · ${r.venues}`,
+  status: r.status,
+  headline: r.headlineLabel,
+  headlineUnit: r.headlineUnit,
+  tone: r.tone,
+  summary: `${fmtCapital(r.capital)} · ${r.daysLabel} · ${r.note}`,
+  href: r.href,
+}));
 
 export default function SpreadsPage() {
   return (
@@ -114,7 +47,7 @@ export default function SpreadsPage() {
             The book
           </h1>
           <p className="mt-2 font-serif text-sm italic text-text-tertiary">
-            Sixteen spreads archived · since Jan 8, 2026 · last close 38h ago
+            {totals.count} spreads archived · since Jan 12, 2026 · last close 2d ago
           </p>
         </div>
 
@@ -141,19 +74,19 @@ export default function SpreadsPage() {
           <KpiCard
             variant="hero"
             label="Net P&L · YTD"
-            value="+$4,051.62"
-            delta="↑ 7.2% vs Q1 · 21 weeks"
+            value={fmtUsd(totals.net, true)}
+            delta="↑ 7.2% vs Q1 · 18 weeks"
           />
           <KpiCard
             label="Trades closed"
-            value="16"
+            value={`${totals.count}`}
             delta="across 5 spread types"
           />
           <KpiCard
             label="Win rate"
-            value="87.5%"
+            value={`${totals.winRate.toFixed(1)}%`}
             tone="up"
-            delta="14 winners · 2 losers"
+            delta={`${totals.winners} winners · ${totals.losers} losers`}
           />
           <KpiCard
             label="Weighted APR"
@@ -163,15 +96,15 @@ export default function SpreadsPage() {
           />
           <KpiCard
             label="Best trade"
-            value="+$1,528"
+            value={fmtUsd(totals.best.netPnl, true)}
             tone="up"
-            delta="#031 · calendar · 32d"
+            delta={`${totals.best.serial} · ${SPREAD_TYPE_LABELS[totals.best.type].toLowerCase()} · ${totals.best.daysLabel}`}
           />
           <KpiCard
             label="Worst trade"
-            value="−$50"
+            value={fmtUsd(totals.worst.netPnl, true)}
             tone="down"
-            delta="#027 · DEX-CEX · gas"
+            delta={`${totals.worst.serial} · ${SPREAD_TYPE_LABELS[totals.worst.type].toLowerCase()} · ${totals.worst.note}`}
           />
         </section>
 
@@ -205,11 +138,11 @@ export default function SpreadsPage() {
                 Recent closes
               </h2>
               <span className="font-mono text-[11px] text-text-tertiary">
-                8 of 16 · $3,981 realized
+                {RECENT_COUNT} of {totals.count} · {fmtUsd(recentNetSum)} realized
               </span>
             </div>
             <Link
-              href="#"
+              href="/spreads/archive"
               className="flex items-center gap-1 font-mono text-[11px] uppercase tracking-[0.14em] text-text-tertiary hover:text-text"
             >
               The archive <ArrowRight className="h-3 w-3" />
@@ -248,8 +181,8 @@ export default function SpreadsPage() {
 
         {/* ── footer ────────────────────────────────────────────────────── */}
         <footer className="mt-8 flex items-center justify-between border-t border-border pt-5 font-mono text-[10px] uppercase tracking-[0.18em] text-text-tertiary">
-          <span>spread journal · v0.1 · since Jan 8, 2026</span>
-          <span>3 exchanges connected · 16 trades archived</span>
+          <span>spread journal · v0.1 · since Jan 12, 2026</span>
+          <span>3 exchanges connected · {totals.count} trades archived</span>
         </footer>
       </div>
     </div>

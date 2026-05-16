@@ -35,7 +35,7 @@ const sections: { label: string; items: NavItem[] }[] = [
     label: "Book",
     items: [
       { icon: BookOpen, label: "Overview", href: "/spreads" },
-      { icon: Archive, label: "The archive", href: "#", count: 16 },
+      { icon: Archive, label: "The archive", href: "/spreads/archive", count: 16 },
       { icon: CalendarDays, label: "Calendar view", href: "#" },
     ],
   },
@@ -63,14 +63,14 @@ const sections: { label: string; items: NavItem[] }[] = [
 ];
 
 const savedViews: { label: string; href: string; count: number; tone?: "up" | "down" }[] = [
-  { label: "All closed", href: "#", count: 16 },
-  { label: "Best closes", href: "#", count: 5, tone: "up" },
-  { label: "Underperformers", href: "#", count: 4, tone: "down" },
-  { label: "Funding captures", href: "#", count: 7 },
-  { label: "Cash-and-carry", href: "#", count: 8 },
-  { label: "Calendar spreads", href: "#", count: 3 },
-  { label: "Cross-exchange", href: "#", count: 5 },
-  { label: "DEX-CEX", href: "#", count: 1 },
+  { label: "All closed", href: "/spreads/archive", count: 16 },
+  { label: "Winners", href: "/spreads/archive?outcome=winners", count: 14, tone: "up" },
+  { label: "Losers", href: "/spreads/archive?outcome=losers", count: 2, tone: "down" },
+  { label: "Cash-and-carry", href: "/spreads/archive?type=cash_carry", count: 5 },
+  { label: "Funding captures", href: "/spreads/archive?type=funding", count: 5 },
+  { label: "Cross-exchange", href: "/spreads/archive?type=cross_exchange", count: 3 },
+  { label: "Calendar spreads", href: "/spreads/archive?type=calendar", count: 2 },
+  { label: "DEX-CEX", href: "/spreads/archive?type=dex_cex", count: 1 },
 ];
 
 export function Sidebar() {
