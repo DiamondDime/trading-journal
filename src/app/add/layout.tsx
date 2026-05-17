@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { X } from "lucide-react";
+import { getT } from "@/lib/i18n/server";
 
 export const metadata = {
   title: "New activity · Crypto Journal",
@@ -10,11 +11,12 @@ export const metadata = {
  * Cancel link on the right (always returns to /spreads, the dashboard).
  * Each step page lays out its own breadcrumb + stepper via WizardShell.
  */
-export default function AddLayout({
+export default async function AddLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
+  const t = await getT();
   return (
     <div className="min-h-screen w-full bg-app">
       {/* ── top bar ─────────────────────────────────────────────────────── */}
@@ -30,7 +32,7 @@ export default function AddLayout({
               </span>
             </div>
             <span className="font-serif text-[13px] italic font-medium text-text">
-              Crypto Journal
+              {t("app.name")}
             </span>
           </Link>
 
@@ -39,7 +41,7 @@ export default function AddLayout({
             className="inline-flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-[0.16em] text-text-tertiary transition-colors hover:text-text"
           >
             <X className="h-3 w-3" />
-            Cancel
+            {t("common.cancel")}
           </Link>
         </div>
       </div>

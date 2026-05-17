@@ -1,32 +1,39 @@
 import { WizardShell } from "@/components/wizard/wizard-shell";
 import { WizardRadioCardLink } from "@/components/wizard/wizard-radio-card";
 import { WizardNav } from "@/components/wizard/wizard-nav";
+import { getT } from "@/lib/i18n/server";
 
-export const dynamic = "force-static";
+export const dynamic = "force-dynamic";
 
-const STEP_LABELS = ["Source", "Pick", "Details", "Review"] as const;
+export default async function TradeSourcePage() {
+  const t = await getT();
+  const STEP_LABELS = [
+    t("wizard.trade.stepLabels.source"),
+    t("wizard.trade.stepLabels.pick"),
+    t("wizard.trade.stepLabels.details"),
+    t("wizard.trade.stepLabels.review"),
+  ] as const;
 
-export default function TradeSourcePage() {
   return (
     <WizardShell
       type="trade"
       step={1}
       totalSteps={4}
       stepLabels={STEP_LABELS}
-      title="Where's this trade from?"
-      subtitle="Pick how you want to populate the form. Either path lands you on the same fields, just with more or less prefilled for you."
+      title={t("wizard.trade.source.title")}
+      subtitle={t("wizard.trade.source.subtitle")}
     >
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
         <WizardRadioCardLink
-          caption="Auto"
-          title="From a connected exchange"
-          description="Pick from your imported fills. Pre-fills exchange, symbol, side, entry, exit, qty, fees, and dates."
+          caption={t("wizard.trade.source.auto.caption")}
+          title={t("wizard.trade.source.auto.title")}
+          description={t("wizard.trade.source.auto.description")}
           href="/add/trade/pick"
         />
         <WizardRadioCardLink
-          caption="Manual"
-          title="Manual entry"
-          description="Type in the details yourself. Use this for trades from exchanges we don't support yet, or anything that isn't in your synced fills."
+          caption={t("wizard.trade.source.manual.caption")}
+          title={t("wizard.trade.source.manual.title")}
+          description={t("wizard.trade.source.manual.description")}
           href="/add/trade/fields"
         />
       </div>

@@ -12,8 +12,7 @@ import {
 } from "@/components/ui/table";
 import { IMPORTED_FILLS } from "@/lib/data/exchange-fills-mock";
 import { cn } from "@/lib/utils";
-
-const STEP_LABELS = ["Source", "Pick", "Details", "Review"] as const;
+import { getT } from "@/lib/i18n/server";
 
 function fmtUsd(n: number, signed = false) {
   const abs = Math.abs(n).toLocaleString("en-US", {
@@ -42,40 +41,48 @@ function fmtQty(n: number) {
   return n.toLocaleString("en-US", { maximumFractionDigits: 4 });
 }
 
-export default function TradePickPage() {
+export default async function TradePickPage() {
+  const t = await getT();
+  const STEP_LABELS = [
+    t("wizard.trade.stepLabels.source"),
+    t("wizard.trade.stepLabels.pick"),
+    t("wizard.trade.stepLabels.details"),
+    t("wizard.trade.stepLabels.review"),
+  ] as const;
+
   return (
     <WizardShell
       type="trade"
       step={2}
       totalSteps={4}
       stepLabels={STEP_LABELS}
-      title="Pick a trade from your exchange history"
-      subtitle="These are the recent fills synced from your connected exchanges. Click one to pre-fill the form."
+      title={t("wizard.trade.pick.title")}
+      subtitle={t("wizard.trade.pick.subtitle")}
     >
       <div className="overflow-hidden rounded-md border border-border bg-surface">
         <Table>
           <TableHeader>
             <TableRow className="hover:bg-transparent">
               <TableHead className="font-serif text-[10px] font-semibold uppercase tracking-[0.16em] text-text-tertiary">
-                Symbol
+                {t("wizard.trade.pick.columns.symbol")}
               </TableHead>
               <TableHead className="font-serif text-[10px] font-semibold uppercase tracking-[0.16em] text-text-tertiary">
-                Side
+                {t("wizard.trade.pick.columns.side")}
               </TableHead>
               <TableHead className="text-right font-serif text-[10px] font-semibold uppercase tracking-[0.16em] text-text-tertiary">
-                Entry → Exit
+                {t("wizard.trade.pick.columns.entryExit")}
               </TableHead>
               <TableHead className="text-right font-serif text-[10px] font-semibold uppercase tracking-[0.16em] text-text-tertiary">
-                Qty
+                {t("wizard.trade.pick.columns.qty")}
               </TableHead>
               <TableHead className="text-right font-serif text-[10px] font-semibold uppercase tracking-[0.16em] text-text-tertiary">
-                Held
+                {t("wizard.trade.pick.columns.held")}
               </TableHead>
               <TableHead className="font-serif text-[10px] font-semibold uppercase tracking-[0.16em] text-text-tertiary">
-                Closed
+                {t("wizard.trade.pick.columns.closed")}
               </TableHead>
               <TableHead className="text-right font-serif text-[10px] font-semibold uppercase tracking-[0.16em] text-text-tertiary">
-                P&amp;L
+                {t("wizard.trade.pick.columns.pnl")}
               </TableHead>
             </TableRow>
           </TableHeader>
@@ -105,7 +112,11 @@ export default function TradePickPage() {
                     <Link
                       href={href}
                       className="flex flex-col gap-0.5 px-4 py-3"
-                      aria-label={`Pick ${f.symbol} ${f.side} on ${f.exchange}`}
+                      aria-label={t("wizard.trade.pick.rowAriaLabel", {
+                        symbol: f.symbol,
+                        side: f.side,
+                        exchange: f.exchange,
+                      })}
                     >
                       <span className="font-serif text-[14px] font-medium text-text">
                         {f.symbol}
@@ -174,12 +185,12 @@ export default function TradePickPage() {
       </div>
 
       <p className="mt-6 text-center font-mono text-[10px] uppercase tracking-[0.18em] text-text-tertiary">
-        Couldn&apos;t find it?{" "}
+        {t("wizard.trade.pick.notFound")}{" "}
         <Link
           href="/add/trade/fields"
           className="underline-offset-4 hover:text-text hover:underline"
         >
-          → Enter manually
+          {t("wizard.trade.pick.enterManually")}
         </Link>
       </p>
 

@@ -2,8 +2,7 @@ import Link from "next/link";
 import { ArrowLeft, ArrowRight } from "lucide-react";
 import { WizardShell } from "@/components/wizard/wizard-shell";
 import { cn } from "@/lib/utils";
-
-const STEP_LABELS = ["Source", "Pick legs", "Type", "Fields", "Review"] as const;
+import { getT } from "@/lib/i18n/server";
 
 type Search = Promise<{ [key: string]: string | string[] | undefined }>;
 
@@ -40,39 +39,6 @@ interface TypeOption {
   description: string;
 }
 
-const SPREAD_TYPES: readonly TypeOption[] = [
-  {
-    value: "cash_carry",
-    title: "Cash-and-carry",
-    description:
-      "Long spot + short derivative on the same asset. Captures basis or funding while staying market-neutral.",
-  },
-  {
-    value: "funding",
-    title: "Funding capture",
-    description:
-      "Spot leg + short perp on the same venue. Pure funding yield with no basis drift.",
-  },
-  {
-    value: "cross_exchange",
-    title: "Cross-exchange",
-    description:
-      "Same instrument, opposite sides on two venues. Captures price dislocations between exchanges.",
-  },
-  {
-    value: "calendar",
-    title: "Calendar",
-    description:
-      "Two futures with different expiries on the same venue. Trade the term structure.",
-  },
-  {
-    value: "dex_cex",
-    title: "DEX-CEX",
-    description:
-      "One on-chain leg, one centralised. Captures liquidity-fragmentation premia at the cost of gas + slippage.",
-  },
-];
-
 /**
  * Step 3 — Spread type picker.
  *
@@ -82,9 +48,46 @@ const SPREAD_TYPES: readonly TypeOption[] = [
  */
 export default async function SpreadTypePage(props: { searchParams: Search }) {
   const sp = await props.searchParams;
+  const t = await getT();
   const legs = parseLegsCsv(sp);
   const matcher = getStr(sp, "matcher"); // "auto" | "manual" | ""
   const preSelected = getStr(sp, "spreadType");
+
+  const STEP_LABELS = [
+    t("wizard.spread.stepLabels.source"),
+    t("wizard.spread.stepLabels.pickLegs"),
+    t("wizard.spread.stepLabels.type"),
+    t("wizard.spread.stepLabels.fields"),
+    t("wizard.spread.stepLabels.review"),
+  ] as const;
+
+  const SPREAD_TYPES: readonly TypeOption[] = [
+    {
+      value: "cash_carry",
+      title: t("wizard.spread.type.options.cashCarry.title"),
+      description: t("wizard.spread.type.options.cashCarry.description"),
+    },
+    {
+      value: "funding",
+      title: t("wizard.spread.type.options.funding.title"),
+      description: t("wizard.spread.type.options.funding.description"),
+    },
+    {
+      value: "cross_exchange",
+      title: t("wizard.spread.type.options.crossExchange.title"),
+      description: t("wizard.spread.type.options.crossExchange.description"),
+    },
+    {
+      value: "calendar",
+      title: t("wizard.spread.type.options.calendar.title"),
+      description: t("wizard.spread.type.options.calendar.description"),
+    },
+    {
+      value: "dex_cex",
+      title: t("wizard.spread.type.options.dexCex.title"),
+      description: t("wizard.spread.type.options.dexCex.description"),
+    },
+  ];
 
   // Back goes back to the picker if we have legs, otherwise to the source step.
   const backHref = legs ? "/add/spread/pick" : "/add/spread/source";
@@ -95,11 +98,11 @@ export default async function SpreadTypePage(props: { searchParams: Search }) {
       step={3}
       totalSteps={5}
       stepLabels={STEP_LABELS}
-      title="What kind of spread is this?"
+      title={t("wizard.spread.type.title")}
       subtitle={
         preSelected
-          ? "Pre-selected from the matcher's suggestion. Switch it if the auto-detection is off."
-          : "Pick the spread shape that best describes the legs you selected. The fields step adapts to your choice."
+          ? t("wizard.spread.type.subtitlePreSelected")
+          : t("wizard.spread.type.subtitleDefault")
       }
     >
       <form
@@ -113,7 +116,7 @@ export default async function SpreadTypePage(props: { searchParams: Search }) {
         {matcher && <input type="hidden" name="matcher" value={matcher} />}
 
         <fieldset className="grid grid-cols-1 gap-3 md:grid-cols-2">
-          <legend className="sr-only">Spread type</legend>
+          <legend className="sr-only">{t("wizard.spread.type.legend")}</legend>
           {SPREAD_TYPES.map((opt) => (
             <label
               key={opt.value}
@@ -147,13 +150,13 @@ export default async function SpreadTypePage(props: { searchParams: Search }) {
             className="inline-flex items-center gap-1.5 font-mono text-[11px] uppercase tracking-[0.16em] text-text-tertiary transition-colors hover:text-text"
           >
             <ArrowLeft className="h-3 w-3" />
-            Back
+            {t("wizard.spread.type.back")}
           </Link>
           <button
             type="submit"
             className="inline-flex items-center gap-2 rounded-md border border-text bg-text px-4 py-2 font-mono text-[11px] uppercase tracking-[0.16em] text-app transition-colors hover:bg-text-secondary"
           >
-            Continue
+            {t("wizard.spread.type.continue")}
             <ArrowRight className="h-3 w-3" />
           </button>
         </div>

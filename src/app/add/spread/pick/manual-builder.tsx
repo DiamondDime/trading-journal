@@ -14,6 +14,7 @@ import {
 } from "@/components/ui/table";
 import type { ImportedTradeFill } from "@/lib/data/exchange-fills-mock";
 import { cn } from "@/lib/utils";
+import { useT } from "@/lib/i18n/client";
 
 interface ManualBuilderProps {
   fills: ImportedTradeFill[];
@@ -60,6 +61,7 @@ function fmtUsd(n: number, signed = false) {
 export function ManualBuilder({ fills }: ManualBuilderProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const t = useT();
 
   // Hydrate once from the URL. Intentionally [] deps — re-reading later
   // would let URL changes clobber the user's in-progress selection.
@@ -114,17 +116,17 @@ export function ManualBuilder({ fills }: ManualBuilderProps) {
       <header className="mb-3 flex items-baseline justify-between">
         <div>
           <h3 className="font-serif text-[15px] font-medium text-text">
-            Build it yourself
+            {t("wizard.spread.manual.heading")}
           </h3>
           <p className="mt-0.5 font-serif text-[12px] italic text-text-tertiary">
-            Tick two or more fills to compose them into a spread.
+            {t("wizard.spread.manual.subheading")}
           </p>
         </div>
         <span
           aria-live="polite"
           className="font-mono text-[10px] uppercase tracking-[0.14em] text-text-tertiary"
         >
-          {count} selected
+          {t("wizard.spread.manual.selectedCount", { count })}
         </span>
       </header>
 
@@ -136,43 +138,43 @@ export function ManualBuilder({ fills }: ManualBuilderProps) {
                 scope="col"
                 className="w-8 font-serif text-[10px] font-semibold uppercase tracking-[0.16em] text-text-tertiary"
               >
-                <span className="sr-only">Selected</span>
+                <span className="sr-only">{t("wizard.spread.manual.col.selected")}</span>
               </TableHead>
               <TableHead
                 scope="col"
                 className="font-serif text-[10px] font-semibold uppercase tracking-[0.16em] text-text-tertiary"
               >
-                Symbol
+                {t("wizard.spread.manual.col.symbol")}
               </TableHead>
               <TableHead
                 scope="col"
                 className="font-serif text-[10px] font-semibold uppercase tracking-[0.16em] text-text-tertiary"
               >
-                Side
+                {t("wizard.spread.manual.col.side")}
               </TableHead>
               <TableHead
                 scope="col"
                 className="text-right font-serif text-[10px] font-semibold uppercase tracking-[0.16em] text-text-tertiary"
               >
-                Qty
+                {t("wizard.spread.manual.col.qty")}
               </TableHead>
               <TableHead
                 scope="col"
                 className="text-right font-serif text-[10px] font-semibold uppercase tracking-[0.16em] text-text-tertiary"
               >
-                Entry → Exit
+                {t("wizard.spread.manual.col.entryExit")}
               </TableHead>
               <TableHead
                 scope="col"
                 className="font-serif text-[10px] font-semibold uppercase tracking-[0.16em] text-text-tertiary"
               >
-                Closed
+                {t("wizard.spread.manual.col.closed")}
               </TableHead>
               <TableHead
                 scope="col"
                 className="text-right font-serif text-[10px] font-semibold uppercase tracking-[0.16em] text-text-tertiary"
               >
-                P&amp;L
+                {t("wizard.spread.manual.col.pnl")}
               </TableHead>
             </TableRow>
           </TableHeader>
@@ -197,7 +199,11 @@ export function ManualBuilder({ fills }: ManualBuilderProps) {
                       checked={checked}
                       onChange={() => toggle(f.id)}
                       onClick={(e) => e.stopPropagation()}
-                      aria-label={`Select ${f.symbol} ${f.side} on ${f.exchange}`}
+                      aria-label={t("wizard.spread.manual.rowAria", {
+                        symbol: f.symbol,
+                        side: f.side,
+                        exchange: f.exchange,
+                      })}
                       className="h-3.5 w-3.5 rounded border-border accent-signature"
                     />
                   </TableCell>
@@ -270,10 +276,10 @@ export function ManualBuilder({ fills }: ManualBuilderProps) {
             className="font-mono text-[10px] uppercase tracking-[0.16em] text-text-tertiary"
             aria-live="polite"
           >
-            {count} {count === 1 ? "leg" : "legs"} selected
+            {t.plural("wizard.spread.manual.legsSelected", count)}
             {count < 2 && (
               <span className="ml-2 text-text-disabled">
-                · select at least one more
+                {t("wizard.spread.manual.selectMore")}
               </span>
             )}
           </p>
@@ -282,13 +288,13 @@ export function ManualBuilder({ fills }: ManualBuilderProps) {
               href={continueHref}
               className="inline-flex items-center gap-2 rounded-md border border-text bg-text px-4 py-2 font-mono text-[11px] uppercase tracking-[0.16em] text-app transition-colors hover:bg-text-secondary"
             >
-              Use selected legs
+              {t("wizard.spread.manual.useSelected")}
               <ArrowRight className="h-3 w-3" />
             </Link>
           ) : (
             <span className="inline-flex items-center gap-2 rounded-md border border-border bg-subtle px-4 py-2 font-mono text-[11px] uppercase tracking-[0.16em] text-text-disabled">
               <Plug className="h-3 w-3" />
-              Need ≥2 legs
+              {t("wizard.spread.manual.needTwo")}
             </span>
           )}
         </div>
