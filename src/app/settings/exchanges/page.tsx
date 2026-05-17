@@ -1,8 +1,14 @@
 import { requireUser } from "@/lib/auth/server";
 import { sql } from "@/lib/db/client";
+import {
+  listExchangeCatalog,
+  filterReferralExchanges,
+  type CatalogExchange,
+} from "@/lib/db/exchanges";
 import { AddExchangeDialog } from "@/components/settings/add-exchange-dialog";
 import { ExchangesTable } from "@/components/settings/exchanges-table";
 import { EmptyExchanges } from "@/components/settings/empty-exchanges";
+import { ReferralSection } from "@/components/settings/referral-section";
 import type {
   ExchangeConnectionRow,
   CatalogEntry,
@@ -33,24 +39,37 @@ async function loadConnections(
   `;
 }
 
-async function loadCatalog(): Promise<CatalogEntry[]> {
-  return sql<CatalogEntry[]>`
-    SELECT code, display_name, venue_type, auth_mode
-    FROM public.exchange_catalog
-    ORDER BY display_name ASC
-  `;
+/**
+ * Adapt the DB-shaped `CatalogExchange` to the UI-shaped `CatalogEntry`
+ * the existing client components expect. Same fields, different field
+ * names (`kind` vs `venueType`) for historical reasons — keep the
+ * translation in one place so the components don't need to know about
+ * both shapes.
+ */
+function toCatalogEntry(e: CatalogExchange): CatalogEntry {
+  return {
+    code: e.code,
+    displayName: e.displayName,
+    venueType: e.kind,
+    authMode: e.authMode,
+    requiresPassphrase: e.requiresPassphrase,
+    logoUrl: e.logoUrl,
+    referralUrl: e.referralUrl,
+    referralBlurb: e.referralBlurb,
+    supportsSpot: e.supportsSpot,
+    supportsPerp: e.supportsPerp,
+  };
 }
 
 export default async function ExchangesSettingsPage() {
   const user = await requireUser();
   const [connections, catalog] = await Promise.all([
     loadConnections(user.id),
-    loadCatalog(),
+    listExchangeCatalog(),
   ]);
 
-  // v1 supported exchanges per spec
-  const v1Codes = new Set(["binance", "bybit", "hyperliquid"]);
-  const v1Catalog = catalog.filter((c) => v1Codes.has(c.code));
+  const referrals = filterReferralExchanges(catalog);
+  const catalogEntries = catalog.map(toCatalogEntry);
 
   const hasAny = connections.length > 0;
 
@@ -66,13 +85,33 @@ export default async function ExchangesSettingsPage() {
             Connect your accounts to auto-import fills.
           </p>
         </div>
-        {hasAny && <AddExchangeDialog catalog={v1Catalog} />}
+        {hasAny && <AddExchangeDialog catalog={catalogEntries} />}
       </div>
 
+      {/* Recommended (referral) rail — sits above the connected table per
+          Wave 12C spec. Hidden completely if there's no chrome at all on
+          the page (empty + no partners would just be noise). */}
+      {(referrals.length > 0 || hasAny) && (
+        <ReferralSection referrals={referrals} />
+      )}
+
       {hasAny ? (
-        <ExchangesTable connections={connections} catalog={catalog} />
+        <div className="space-y-3">
+          <div>
+            <h3 className="font-serif text-[18px] font-medium leading-tight text-text">
+              Connected exchanges
+            </h3>
+            <p className="mt-1 font-serif text-[13px] italic text-text-secondary">
+              Linked accounts auto-importing fills.
+            </p>
+          </div>
+          <ExchangesTable
+            connections={connections}
+            catalog={catalogEntries}
+          />
+        </div>
       ) : (
-        <EmptyExchanges catalog={v1Catalog} />
+        <EmptyExchanges catalog={catalogEntries} />
       )}
 
       {hasAny && (

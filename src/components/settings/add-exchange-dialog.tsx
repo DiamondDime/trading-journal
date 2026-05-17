@@ -21,6 +21,7 @@ import {
   WizardField,
   WizardInput,
 } from "@/components/wizard/wizard-field";
+import { ExchangeLogo } from "@/components/settings/exchange-logo";
 import type { CatalogEntry } from "@/components/settings/exchange-types";
 
 interface Props {
@@ -35,6 +36,7 @@ const initialCreds = {
   label: "",
   apiKey: "",
   apiSecret: "",
+  passphrase: "",
 };
 
 export function AddExchangeDialog({ catalog, variant = "default" }: Props) {
@@ -77,6 +79,7 @@ export function AddExchangeDialog({ catalog, variant = "default" }: Props) {
   const labelFieldId = React.useId();
   const apiKeyFieldId = React.useId();
   const apiSecretFieldId = React.useId();
+  const passphraseFieldId = React.useId();
   const errorId = React.useId();
 
   async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
@@ -86,6 +89,13 @@ export function AddExchangeDialog({ catalog, variant = "default" }: Props) {
     setSubmitting(true);
 
     try {
+      // Only send a passphrase when the chosen venue actually expects one.
+      // The API accepts `passphrase` as optional (zod schema) but bouncing
+      // a stray empty string through encryptCredential would still allocate
+      // a useless ciphertext row — keep the wire clean.
+      const needsPassphrase = selectedExchange.requiresPassphrase;
+      const trimmedPass = creds.passphrase.trim();
+
       const res = await fetch("/api/exchanges", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -96,6 +106,9 @@ export function AddExchangeDialog({ catalog, variant = "default" }: Props) {
             mode: "api_key",
             api_key: creds.apiKey,
             api_secret: creds.apiSecret,
+            ...(needsPassphrase && trimmedPass.length > 0
+              ? { passphrase: trimmedPass }
+              : {}),
           },
         }),
       });
@@ -156,7 +169,7 @@ export function AddExchangeDialog({ catalog, variant = "default" }: Props) {
         )}
       </DialogTrigger>
 
-      <DialogContent className="sm:max-w-[520px]">
+      <DialogContent className="sm:max-w-[640px]">
         <DialogHeader>
           <DialogEyebrow>
             {step === "pick" ? "Step 1 of 2 · Exchange" : "Step 2 of 2 · Credentials"}
@@ -192,6 +205,7 @@ export function AddExchangeDialog({ catalog, variant = "default" }: Props) {
             labelFieldId={labelFieldId}
             apiKeyFieldId={apiKeyFieldId}
             apiSecretFieldId={apiSecretFieldId}
+            passphraseFieldId={passphraseFieldId}
             onBack={onBack}
             onSubmit={onSubmit}
           />
@@ -215,35 +229,44 @@ function ExchangePickStep({
   return (
     <>
       <DialogBody>
-        <div className="grid grid-cols-1 gap-2.5">
+        {/* The picker scrolls within the dialog body once the grid overflows
+            — keeps the footer (Cancel) always reachable even at 20+ venues. */}
+        <div
+          role="radiogroup"
+          aria-label="Exchange"
+          className="grid max-h-[420px] grid-cols-2 gap-2 overflow-y-auto pr-1"
+        >
           {catalog.map((c) => (
             <button
               key={c.code}
               type="button"
+              role="radio"
+              aria-checked={false}
               onClick={() => onPick(c.code)}
               className={cn(
-                "group flex items-center justify-between rounded-md border border-border bg-surface px-4 py-3.5 text-left transition-all",
+                "group flex items-center gap-3 rounded-md border border-border bg-surface px-3 py-2.5 text-left transition-all",
                 "hover:border-border-strong hover:bg-subtle",
-                "focus:outline-none focus:ring-1 focus:ring-text focus:ring-offset-2 focus:ring-offset-surface",
+                "focus:outline-none focus-visible:ring-1 focus-visible:ring-text focus-visible:ring-offset-1 focus-visible:ring-offset-surface",
               )}
+              data-testid={`pick-exchange-${c.code}`}
             >
-              <div className="flex flex-col leading-tight">
-                <span className="font-serif text-[16px] font-medium text-text">
+              <ExchangeLogo
+                code={c.code}
+                displayName={c.displayName}
+                logoUrl={c.logoUrl}
+                size="sm"
+              />
+              <div className="min-w-0 flex-1 leading-tight">
+                <div className="truncate font-serif text-[14px] font-medium text-text">
                   {c.displayName}
-                </span>
-                <span className="font-mono text-[10px] uppercase tracking-[0.16em] text-text-tertiary">
-                  {c.venueType} · {c.authMode === "api_key" ? "API key" : "Wallet"}
-                </span>
+                </div>
+                <div className="mt-0.5 truncate font-mono text-[9px] uppercase tracking-[0.16em] text-text-tertiary">
+                  {capabilityCaption(c)}
+                </div>
               </div>
-              <span className="font-mono text-[10px] uppercase tracking-[0.18em] text-text-tertiary opacity-0 transition-opacity group-hover:opacity-100">
-                Select →
-              </span>
             </button>
           ))}
         </div>
-        <p className="mt-4 font-mono text-[10px] uppercase tracking-[0.16em] text-text-tertiary">
-          More exchanges land in a future release · v1 supports three.
-        </p>
       </DialogBody>
 
       <DialogFooter>
@@ -261,6 +284,19 @@ function ExchangePickStep({
   );
 }
 
+/**
+ * "perps · spot" / "wallet · perps" — the mono caption beneath the venue
+ * name. Order: perps first (this is a spread journal), then spot, then
+ * auth-mode hint for the DEX entries.
+ */
+function capabilityCaption(c: CatalogEntry): string {
+  const caps: string[] = [];
+  if (c.supportsPerp) caps.push("perps");
+  if (c.supportsSpot) caps.push("spot");
+  if (c.authMode === "wallet_address") caps.push("wallet");
+  return caps.length > 0 ? caps.join(" · ") : c.venueType;
+}
+
 /* ------------------------------------------------------------------ Step 2 */
 
 interface CredentialsStepProps {
@@ -273,6 +309,7 @@ interface CredentialsStepProps {
   labelFieldId: string;
   apiKeyFieldId: string;
   apiSecretFieldId: string;
+  passphraseFieldId: string;
   onBack: () => void;
   onSubmit: (e: React.FormEvent<HTMLFormElement>) => void;
 }
@@ -287,6 +324,7 @@ function CredentialsStep({
   labelFieldId,
   apiKeyFieldId,
   apiSecretFieldId,
+  passphraseFieldId,
   onBack,
   onSubmit,
 }: CredentialsStepProps) {
@@ -298,10 +336,13 @@ function CredentialsStep({
     if (el instanceof HTMLInputElement) el.focus();
   }, [labelFieldId]);
 
+  const needsPassphrase = exchange?.requiresPassphrase ?? false;
+
   const canSubmit =
     creds.label.trim().length > 0 &&
     creds.apiKey.length >= 8 &&
     creds.apiSecret.length >= 8 &&
+    (!needsPassphrase || creds.passphrase.length >= 1) &&
     !submitting;
 
   return (
@@ -376,6 +417,29 @@ function CredentialsStep({
             disabled={submitting}
           />
         </WizardField>
+
+        {needsPassphrase && (
+          <WizardField
+            label="Passphrase"
+            htmlFor={passphraseFieldId}
+            helper={`${exchange?.displayName ?? "This exchange"} requires the passphrase you set when creating the API key.`}
+            required
+          >
+            <WizardInput
+              id={passphraseFieldId}
+              type="password"
+              value={creds.passphrase}
+              onChange={(e) =>
+                setCreds((p) => ({ ...p, passphrase: e.target.value }))
+              }
+              required
+              autoComplete="new-password"
+              spellCheck={false}
+              disabled={submitting}
+              data-testid="passphrase-field"
+            />
+          </WizardField>
+        )}
 
         <div className="rounded-md border border-border-subtle bg-inset p-3">
           <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-text-tertiary">

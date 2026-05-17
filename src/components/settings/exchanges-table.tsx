@@ -1,5 +1,6 @@
 import { cn } from "@/lib/utils";
 import { ExchangeRowActions } from "@/components/settings/exchange-row-actions";
+import { ExchangeLogo } from "@/components/settings/exchange-logo";
 import type {
   CatalogEntry,
   ExchangeConnectionRow,
@@ -32,7 +33,11 @@ const STATUS_TONE: Record<ConnectionStatus, string> = {
 };
 
 export function ExchangesTable({ connections, catalog }: Props) {
-  const displayName = new Map(catalog.map((c) => [c.code, c.displayName]));
+  // Index catalog rows by code so we can render the logo + display name per
+  // connection in O(1). If the connection points at a code missing from the
+  // catalog (e.g. an exchange that was removed), we degrade to the raw code
+  // and a null-logo fallback so the row still renders.
+  const byCode = new Map(catalog.map((c) => [c.code, c]));
 
   return (
     <div className="overflow-hidden rounded-md border border-border bg-surface">
@@ -49,7 +54,9 @@ export function ExchangesTable({ connections, catalog }: Props) {
         </thead>
         <tbody>
           {connections.map((row) => {
-            const name = displayName.get(row.exchangeCode) ?? row.exchangeCode;
+            const meta = byCode.get(row.exchangeCode);
+            const name = meta?.displayName ?? row.exchangeCode;
+            const logoUrl = meta?.logoUrl ?? null;
             const fills = Number(row.fillsSynced ?? 0);
             return (
               <tr
@@ -57,15 +64,23 @@ export function ExchangesTable({ connections, catalog }: Props) {
                 className="border-b border-border-subtle last:border-b-0 hover:bg-subtle/40"
               >
                 <TableCell>
-                  <div className="flex flex-col leading-tight">
-                    <span className="font-serif text-[15px] font-medium text-text">
-                      {name}
-                    </span>
-                    <span className="font-mono text-[10px] uppercase tracking-[0.16em] text-text-tertiary">
-                      {row.connectionType === "wallet_address"
-                        ? `wallet · ${row.walletChain ?? "—"}`
-                        : `api key · ${row.apiKeyHint ?? "—"}`}
-                    </span>
+                  <div className="flex items-center gap-3">
+                    <ExchangeLogo
+                      code={row.exchangeCode}
+                      displayName={name}
+                      logoUrl={logoUrl}
+                      size="sm"
+                    />
+                    <div className="flex flex-col leading-tight">
+                      <span className="font-serif text-[15px] font-medium text-text">
+                        {name}
+                      </span>
+                      <span className="font-mono text-[10px] uppercase tracking-[0.16em] text-text-tertiary">
+                        {row.connectionType === "wallet_address"
+                          ? `wallet · ${row.walletChain ?? "—"}`
+                          : `api key · ${row.apiKeyHint ?? "—"}`}
+                      </span>
+                    </div>
                   </div>
                 </TableCell>
                 <TableCell>

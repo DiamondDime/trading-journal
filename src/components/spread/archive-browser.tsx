@@ -413,6 +413,8 @@ export function ArchiveBrowser({ data }: { data: Activity[] }) {
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Search activity, venue, note…"
+              aria-label="Search archive activities"
+              type="search"
               className="w-56 bg-transparent text-[12px] text-text placeholder:text-text-tertiary focus:outline-none"
             />
             {search && (
@@ -796,8 +798,19 @@ function SortableHeader({
   align?: "left" | "right";
 }) {
   const active = sort.key === k;
+  // aria-sort communicates current sort to screen readers. "none" on inactive
+  // columns is mandatory per WAI-ARIA so AT distinguishes "sortable but not
+  // currently sorted" from "not sortable at all".
+  const ariaSort: "ascending" | "descending" | "none" = active
+    ? sort.dir === "asc"
+      ? "ascending"
+      : "descending"
+    : "none";
   return (
-    <TableHead className={align === "right" ? "text-right" : "text-left"}>
+    <TableHead
+      aria-sort={ariaSort}
+      className={align === "right" ? "text-right" : "text-left"}
+    >
       <button
         onClick={() => onSort(k)}
         className={cn(

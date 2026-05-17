@@ -42,8 +42,16 @@ const ASSET_LITERALS = new Set<Asset>([
 ]);
 
 function asAsset(s: string | null | undefined): Asset {
+  // primary_symbol comes in three shapes depending on activity type:
+  //   spread:           "BTC"           (bare base symbol)
+  //   trade:            "BTC-PERP", "ETH-USDT", "BTC-USDT-PERP"
+  //   sale / airdrop:   "PYTH"          (token ticker)
+  // Strip the quote / suffix so "{BASE}-..." resolves to "{BASE}" before the
+  // whitelist check — otherwise SOL-PERP, ETH-USDT, BTC-PERP all collide with
+  // the BTC fallback below and pollute the asset filter.
   const upper = (s ?? "").toUpperCase();
-  return ASSET_LITERALS.has(upper as Asset) ? (upper as Asset) : "BTC";
+  const base = upper.includes("-") ? upper.split("-")[0] : upper;
+  return ASSET_LITERALS.has(base as Asset) ? (base as Asset) : "BTC";
 }
 
 function asActivityStatus(s: string): ActivityStatus {
