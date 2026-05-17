@@ -8,8 +8,7 @@ import {
 } from "@/components/wizard/wizard-field";
 import { requireUser } from "@/lib/auth/server";
 import { getActivity } from "@/lib/db/activity";
-
-const STEP_LABELS = ["Details", "Review"] as const;
+import { getT } from "@/lib/i18n/server";
 
 type Search = Promise<{ [key: string]: string | string[] | undefined }>;
 
@@ -40,8 +39,14 @@ function isoToDate(iso: string | null): string {
 export default async function AirdropFieldsPage(props: {
   searchParams: Search;
 }) {
+  const t = await getT();
   const sp = await props.searchParams;
   const editId = getStr(sp, "edit");
+
+  const STEP_LABELS = [
+    t("wizard.airdrop.fields.stepLabels.details"),
+    t("wizard.airdrop.fields.stepLabels.review"),
+  ] as const;
 
   let dbDefaults: Partial<{
     protocol: string;
@@ -95,11 +100,15 @@ export default async function AirdropFieldsPage(props: {
       step={1}
       totalSteps={2}
       stepLabels={STEP_LABELS}
-      title={editValid ? "Edit airdrop" : "Airdrop details"}
+      title={
+        editValid
+          ? t("wizard.airdrop.fields.titleEdit")
+          : t("wizard.airdrop.fields.title")
+      }
       subtitle={
         editValid
-          ? "Editing existing airdrop. Cost basis stays $0; everything else is fair game."
-          : "Free tokens still count. Capture what you claimed, when, and the spot value at claim — the rest is mark-to-market upside."
+          ? t("wizard.airdrop.fields.subtitleEdit")
+          : t("wizard.airdrop.fields.subtitle")
       }
     >
       {editValid && (
@@ -108,11 +117,13 @@ export default async function AirdropFieldsPage(props: {
           role="status"
         >
           <span className="font-semibold uppercase tracking-[0.14em] text-[10px]">
-            Editing
+            {t("wizard.airdrop.fields.editingBadge")}
           </span>
           {" — "}
           <span className="font-serif italic">
-            airdrop #{dbDefaults.serial}. Changes save back to the same record.
+            {t("wizard.airdrop.fields.editingNotePrefix")}
+            {dbDefaults.serial}
+            {t("wizard.airdrop.fields.editingNoteSuffix")}
           </span>
         </aside>
       )}
@@ -125,29 +136,33 @@ export default async function AirdropFieldsPage(props: {
         {editValid && <input type="hidden" name="edit" value={editId} />}
 
         {/* ── Protocol + token ─────────────────────────────────────── */}
-        <SectionLabel>Protocol &amp; token</SectionLabel>
+        <SectionLabel>{t("wizard.airdrop.fields.section.protocolToken")}</SectionLabel>
         <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
-          <WizardField label="Protocol" htmlFor="protocol" required>
+          <WizardField
+            label={t("wizard.airdrop.fields.protocol.label")}
+            htmlFor="protocol"
+            required
+          >
             <WizardInput
               id="protocol"
               name="protocol"
               defaultValue={defaults.protocol}
-              placeholder="Jito"
+              placeholder={t("wizard.airdrop.fields.protocol.placeholder")}
               required
               autoComplete="off"
             />
           </WizardField>
           <WizardField
-            label="Token symbol"
+            label={t("wizard.airdrop.fields.asset.label")}
             htmlFor="asset"
-            helper="Ticker, uppercase"
+            helper={t("wizard.airdrop.fields.asset.helper")}
             required
           >
             <WizardInput
               id="asset"
               name="asset"
               defaultValue={defaults.asset}
-              placeholder="JTO"
+              placeholder={t("wizard.airdrop.fields.asset.placeholder")}
               required
               autoComplete="off"
               style={{ textTransform: "uppercase" }}
@@ -156,12 +171,12 @@ export default async function AirdropFieldsPage(props: {
         </div>
 
         {/* ── Claim ─────────────────────────────────────────────────── */}
-        <SectionLabel>Claim</SectionLabel>
+        <SectionLabel>{t("wizard.airdrop.fields.section.claim")}</SectionLabel>
         <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
           <WizardField
-            label="Tokens claimed"
+            label={t("wizard.airdrop.fields.tokensClaimed.label")}
             htmlFor="tokensClaimed"
-            helper="What you actually received"
+            helper={t("wizard.airdrop.fields.tokensClaimed.helper")}
             required
           >
             <WizardInput
@@ -176,7 +191,11 @@ export default async function AirdropFieldsPage(props: {
               required
             />
           </WizardField>
-          <WizardField label="Claim date" htmlFor="claimDate" required>
+          <WizardField
+            label={t("wizard.airdrop.fields.claimDate.label")}
+            htmlFor="claimDate"
+            required
+          >
             <WizardInput
               id="claimDate"
               name="claimDate"
@@ -186,9 +205,9 @@ export default async function AirdropFieldsPage(props: {
             />
           </WizardField>
           <WizardField
-            label="USD value at claim"
+            label={t("wizard.airdrop.fields.usdValueAtClaim.label")}
             htmlFor="usdValueAtClaim"
-            helper="Spot value the moment you claimed. Tax record."
+            helper={t("wizard.airdrop.fields.usdValueAtClaim.helper")}
             required
           >
             <WizardInput
@@ -204,9 +223,9 @@ export default async function AirdropFieldsPage(props: {
             />
           </WizardField>
           <WizardField
-            label="Current price"
+            label={t("wizard.airdrop.fields.currentPriceUsd.label")}
             htmlFor="currentPriceUsd"
-            helper="USD per token, for MTM calc"
+            helper={t("wizard.airdrop.fields.currentPriceUsd.helper")}
             required
           >
             <WizardInput
@@ -224,24 +243,24 @@ export default async function AirdropFieldsPage(props: {
         </div>
 
         {/* ── Thesis + tags ─────────────────────────────────────────── */}
-        <SectionLabel>Thesis &amp; tags</SectionLabel>
+        <SectionLabel>{t("wizard.airdrop.fields.section.thesisTags")}</SectionLabel>
         <WizardField
-          label="Note"
+          label={t("wizard.airdrop.fields.note.label")}
           htmlFor="note"
-          helper="Why this protocol caught the drop, why you held or sold, any context."
+          helper={t("wizard.airdrop.fields.note.helper")}
         >
           <WizardTextarea
             id="note"
             name="note"
             rows={4}
             defaultValue={defaults.note}
-            placeholder="Solana ecosystem usage. Claimed and held; thesis is L1 expansion…"
+            placeholder={t("wizard.airdrop.fields.note.placeholder")}
           />
         </WizardField>
         <WizardField
-          label="Regime tags"
+          label={t("wizard.airdrop.fields.regimeTags.label")}
           htmlFor="regimeTags"
-          helper="Comma-separated. e.g. solana-narrative, oracle-narrative"
+          helper={t("wizard.airdrop.fields.regimeTags.helper")}
         >
           <WizardInput
             id="regimeTags"
@@ -259,13 +278,13 @@ export default async function AirdropFieldsPage(props: {
             className="inline-flex items-center gap-1.5 font-mono text-[11px] uppercase tracking-[0.16em] text-text-tertiary transition-colors hover:text-text"
           >
             <ArrowLeft className="h-3 w-3" />
-            Back
+            {t("wizard.airdrop.fields.nav.back")}
           </Link>
           <button
             type="submit"
             className="inline-flex items-center gap-2 rounded-md border border-text bg-text px-4 py-2 font-mono text-[11px] uppercase tracking-[0.16em] text-app transition-colors hover:bg-text-secondary"
           >
-            Review
+            {t("wizard.airdrop.fields.nav.review")}
             <ArrowRight className="h-3 w-3" />
           </button>
         </div>

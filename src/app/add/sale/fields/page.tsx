@@ -9,15 +9,10 @@ import {
 import { cn } from "@/lib/utils";
 import { requireUser } from "@/lib/auth/server";
 import { getActivity } from "@/lib/db/activity";
+import { getT } from "@/lib/i18n/server";
 
-const STEP_LABELS = ["Details", "Review"] as const;
-
-const SALE_KINDS = [
-  { value: "ido", label: "IDO" },
-  { value: "launchpad", label: "Launchpad" },
-  { value: "premarket", label: "Premarket" },
-  { value: "otc", label: "OTC" },
-] as const;
+// Canonical enum values for sale_kind. Labels resolved via i18n at render.
+const SALE_KINDS = ["ido", "launchpad", "premarket", "otc"] as const;
 
 type Search = Promise<{ [key: string]: string | string[] | undefined }>;
 
@@ -90,6 +85,11 @@ function vestingScheduleToInputs(
 export default async function SaleFieldsPage(props: {
   searchParams: Search;
 }) {
+  const t = await getT();
+  const STEP_LABELS = [
+    t("wizard.sale.stepLabels.details"),
+    t("wizard.sale.stepLabels.review"),
+  ] as const;
   const sp = await props.searchParams;
   const editId = getStr(sp, "edit");
 
@@ -159,11 +159,11 @@ export default async function SaleFieldsPage(props: {
       step={1}
       totalSteps={2}
       stepLabels={STEP_LABELS}
-      title={editValid ? "Edit sale" : "Sale details"}
+      title={editValid ? t("wizard.sale.fields.titleEdit") : t("wizard.sale.fields.title")}
       subtitle={
         editValid
-          ? "Editing existing sale. Vesting schedule and MTM price can change here too."
-          : "Token allocations from launchpads, IDOs, premarkets, and OTC desks. Capture the schedule once — vesting math comes off these numbers."
+          ? t("wizard.sale.fields.subtitleEdit")
+          : t("wizard.sale.fields.subtitle")
       }
     >
       {editValid && (
@@ -172,11 +172,11 @@ export default async function SaleFieldsPage(props: {
           role="status"
         >
           <span className="font-semibold uppercase tracking-[0.14em] text-[10px]">
-            Editing
+            {t("wizard.sale.fields.editingBadge")}
           </span>
           {" — "}
           <span className="font-serif italic">
-            sale #{dbDefaults.serial}. Changes save back to the same record.
+            {t("wizard.sale.fields.editingNote", { serial: dbDefaults.serial ?? "" })}
           </span>
         </aside>
       )}
@@ -189,43 +189,47 @@ export default async function SaleFieldsPage(props: {
         {editValid && <input type="hidden" name="edit" value={editId} />}
 
         {/* ── Kind ───────────────────────────────────────────────────── */}
-        <SectionLabel>Kind</SectionLabel>
+        <SectionLabel>{t("wizard.sale.fields.sections.kind")}</SectionLabel>
         <RadioGrid
-          legend="Sale kind"
+          legend={t("wizard.sale.fields.kindLegend")}
+          requiredLabel={t("wizard.sale.fields.requiredHint")}
           name="saleKind"
-          options={SALE_KINDS.map((k) => ({ value: k.value, label: k.label }))}
+          options={SALE_KINDS.map((k) => ({
+            value: k,
+            label: t(`wizard.sale.fields.kinds.${k}`),
+          }))}
           defaultValue={defaults.saleKind}
         />
 
         {/* ── Venue + token ─────────────────────────────────────────── */}
-        <SectionLabel>Venue &amp; token</SectionLabel>
+        <SectionLabel>{t("wizard.sale.fields.sections.venueToken")}</SectionLabel>
         <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
           <WizardField
-            label="Venue"
+            label={t("wizard.sale.fields.venue.label")}
             htmlFor="venue"
-            helper="Launchpad, IDO platform, OTC desk"
+            helper={t("wizard.sale.fields.venue.helper")}
             required
           >
             <WizardInput
               id="venue"
               name="venue"
               defaultValue={defaults.venue}
-              placeholder="Binance Launchpad"
+              placeholder={t("wizard.sale.fields.venue.placeholder")}
               required
               autoComplete="off"
             />
           </WizardField>
           <WizardField
-            label="Token symbol"
+            label={t("wizard.sale.fields.asset.label")}
             htmlFor="asset"
-            helper="Ticker, uppercase"
+            helper={t("wizard.sale.fields.asset.helper")}
             required
           >
             <WizardInput
               id="asset"
               name="asset"
               defaultValue={defaults.asset}
-              placeholder="EIGEN"
+              placeholder={t("wizard.sale.fields.asset.placeholder")}
               required
               autoComplete="off"
               style={{ textTransform: "uppercase" }}
@@ -234,12 +238,12 @@ export default async function SaleFieldsPage(props: {
         </div>
 
         {/* ── Allocation ───────────────────────────────────────────── */}
-        <SectionLabel>Allocation</SectionLabel>
+        <SectionLabel>{t("wizard.sale.fields.sections.allocation")}</SectionLabel>
         <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
           <WizardField
-            label="USD paid"
+            label={t("wizard.sale.fields.usdPaid.label")}
             htmlFor="usdPaid"
-            helper="What you wired in for the allocation"
+            helper={t("wizard.sale.fields.usdPaid.helper")}
             required
           >
             <WizardInput
@@ -255,9 +259,9 @@ export default async function SaleFieldsPage(props: {
             />
           </WizardField>
           <WizardField
-            label="Tokens allocated"
+            label={t("wizard.sale.fields.tokensAllocated.label")}
             htmlFor="tokensAllocated"
-            helper="Total tokens at the bonded price"
+            helper={t("wizard.sale.fields.tokensAllocated.helper")}
             required
           >
             <WizardInput
@@ -275,9 +279,9 @@ export default async function SaleFieldsPage(props: {
         </div>
 
         {/* ── Vesting schedule ──────────────────────────────────────── */}
-        <SectionLabel>Vesting schedule</SectionLabel>
+        <SectionLabel>{t("wizard.sale.fields.sections.vesting")}</SectionLabel>
         <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
-          <WizardField label="TGE date" htmlFor="tgeDate" required>
+          <WizardField label={t("wizard.sale.fields.tgeDate.label")} htmlFor="tgeDate" required>
             <WizardInput
               id="tgeDate"
               name="tgeDate"
@@ -287,9 +291,9 @@ export default async function SaleFieldsPage(props: {
             />
           </WizardField>
           <WizardField
-            label="TGE unlock %"
+            label={t("wizard.sale.fields.tgeUnlockPct.label")}
             htmlFor="tgeUnlockPct"
-            helper="% of allocation unlocked at TGE; remainder vests"
+            helper={t("wizard.sale.fields.tgeUnlockPct.helper")}
             required
           >
             <WizardInput
@@ -306,9 +310,9 @@ export default async function SaleFieldsPage(props: {
             />
           </WizardField>
           <WizardField
-            label="Vesting cliff"
+            label={t("wizard.sale.fields.vestingCliff.label")}
             htmlFor="vestingCliffMonths"
-            helper="Months. 0 if no cliff"
+            helper={t("wizard.sale.fields.vestingCliff.helper")}
           >
             <WizardInput
               id="vestingCliffMonths"
@@ -322,9 +326,9 @@ export default async function SaleFieldsPage(props: {
             />
           </WizardField>
           <WizardField
-            label="Vesting duration"
+            label={t("wizard.sale.fields.vestingDuration.label")}
             htmlFor="vestingDurationMonths"
-            helper="Months. 0 if fully unlocked at TGE"
+            helper={t("wizard.sale.fields.vestingDuration.helper")}
           >
             <WizardInput
               id="vestingDurationMonths"
@@ -340,12 +344,12 @@ export default async function SaleFieldsPage(props: {
         </div>
 
         {/* ── Mark-to-market ────────────────────────────────────────── */}
-        <SectionLabel>Mark-to-market</SectionLabel>
+        <SectionLabel>{t("wizard.sale.fields.sections.mtm")}</SectionLabel>
         <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
           <WizardField
-            label="Current price"
+            label={t("wizard.sale.fields.currentPrice.label")}
             htmlFor="currentPriceUsd"
-            helper="USD per token, for MTM calc"
+            helper={t("wizard.sale.fields.currentPrice.helper")}
             required
           >
             <WizardInput
@@ -360,7 +364,12 @@ export default async function SaleFieldsPage(props: {
               required
             />
           </WizardField>
-          <WizardField label="Opened at" htmlFor="openedAt" helper="When you paid" required>
+          <WizardField
+            label={t("wizard.sale.fields.openedAt.label")}
+            htmlFor="openedAt"
+            helper={t("wizard.sale.fields.openedAt.helper")}
+            required
+          >
             <WizardInput
               id="openedAt"
               name="openedAt"
@@ -372,30 +381,30 @@ export default async function SaleFieldsPage(props: {
         </div>
 
         {/* ── Thesis + tags ─────────────────────────────────────────── */}
-        <SectionLabel>Thesis &amp; tags</SectionLabel>
+        <SectionLabel>{t("wizard.sale.fields.sections.thesis")}</SectionLabel>
         <WizardField
-          label="Note"
+          label={t("wizard.sale.fields.note.label")}
           htmlFor="note"
-          helper="Why this allocation? What's the narrative? Markdown welcome."
+          helper={t("wizard.sale.fields.note.helper")}
         >
           <WizardTextarea
             id="note"
             name="note"
             rows={4}
             defaultValue={defaults.note}
-            placeholder="Restaking narrative entry. TGE pop, hold to first cliff…"
+            placeholder={t("wizard.sale.fields.note.placeholder")}
           />
         </WizardField>
         <WizardField
-          label="Regime tags"
+          label={t("wizard.sale.fields.regimeTags.label")}
           htmlFor="regimeTags"
-          helper="Comma-separated. e.g. restaking-narrative, l2-narrative"
+          helper={t("wizard.sale.fields.regimeTags.helper")}
         >
           <WizardInput
             id="regimeTags"
             name="regimeTags"
             defaultValue={defaults.regimeTags}
-            placeholder="restaking-narrative"
+            placeholder={t("wizard.sale.fields.regimeTags.placeholder")}
             autoComplete="off"
           />
         </WizardField>
@@ -407,13 +416,13 @@ export default async function SaleFieldsPage(props: {
             className="inline-flex items-center gap-1.5 font-mono text-[11px] uppercase tracking-[0.16em] text-text-tertiary transition-colors hover:text-text"
           >
             <ArrowLeft className="h-3 w-3" />
-            Back
+            {t("wizard.sale.fields.back")}
           </Link>
           <button
             type="submit"
             className="inline-flex items-center gap-2 rounded-md border border-text bg-text px-4 py-2 font-mono text-[11px] uppercase tracking-[0.16em] text-app transition-colors hover:bg-text-secondary"
           >
-            Review
+            {t("wizard.sale.fields.continueToReview")}
             <ArrowRight className="h-3 w-3" />
           </button>
         </div>
@@ -438,11 +447,13 @@ function SectionLabel({ children }: { children: React.ReactNode }) {
  */
 function RadioGrid({
   legend,
+  requiredLabel,
   name,
   options,
   defaultValue,
 }: {
   legend: string;
+  requiredLabel: string;
   name: string;
   options: { value: string; label: string }[];
   defaultValue: string;
@@ -455,7 +466,7 @@ function RadioGrid({
         className="mb-0.5 font-mono text-[10px] uppercase tracking-[0.16em] text-text-tertiary"
       >
         {legend}
-        <span className="ml-1.5 text-text-disabled">· required</span>
+        <span className="ml-1.5 text-text-disabled">{requiredLabel}</span>
       </legend>
       <div
         role="radiogroup"

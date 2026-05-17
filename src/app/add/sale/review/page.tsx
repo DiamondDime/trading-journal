@@ -3,9 +3,8 @@ import { ArrowLeft, ArrowRight } from "lucide-react";
 import { WizardShell } from "@/components/wizard/wizard-shell";
 import { WizardSummaryRow } from "@/components/wizard/wizard-summary-row";
 import { WizardErrorBanner } from "@/components/wizard/wizard-error-banner";
+import { getT } from "@/lib/i18n/server";
 import { logSale } from "../actions";
-
-const STEP_LABELS = ["Details", "Review"] as const;
 
 const SALE_FIELDS = [
   "saleKind",
@@ -24,12 +23,7 @@ const SALE_FIELDS = [
   "edit",
 ] as const;
 
-const SALE_KIND_LABELS: Record<string, string> = {
-  ido: "IDO",
-  launchpad: "Launchpad",
-  premarket: "Premarket",
-  otc: "OTC",
-};
+const SALE_KINDS = ["ido", "launchpad", "premarket", "otc"] as const;
 
 type Search = Promise<{ [key: string]: string | string[] | undefined }>;
 
@@ -78,6 +72,14 @@ function fmtTokens(n: number): string {
 }
 
 export default async function SaleReviewPage(props: { searchParams: Search }) {
+  const t = await getT();
+  const STEP_LABELS = [
+    t("wizard.sale.stepLabels.details"),
+    t("wizard.sale.stepLabels.review"),
+  ] as const;
+  const SALE_KIND_LABELS: Record<string, string> = Object.fromEntries(
+    SALE_KINDS.map((k) => [k, t(`wizard.sale.fields.kinds.${k}`)]),
+  );
   const sp = await props.searchParams;
 
   const v = {
@@ -125,11 +127,11 @@ export default async function SaleReviewPage(props: { searchParams: Search }) {
       step={2}
       totalSteps={2}
       stepLabels={STEP_LABELS}
-      title={isEditing ? "Confirm changes" : "Look it over"}
+      title={isEditing ? t("wizard.sale.review.titleEdit") : t("wizard.sale.review.title")}
       subtitle={
         isEditing
-          ? "Saving these changes to the same record. Edit any row to bounce back to the form."
-          : "One last pass before this hits your journal. Edit any row to bounce back to the form."
+          ? t("wizard.sale.review.subtitleEdit")
+          : t("wizard.sale.review.subtitle")
       }
     >
       <WizardErrorBanner error={getStr(sp, "error") || undefined} />
@@ -137,7 +139,7 @@ export default async function SaleReviewPage(props: { searchParams: Search }) {
       <section className="border-y border-border py-10">
         <div className="flex flex-col gap-2">
           <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-text-tertiary">
-            Mark-to-market · preview
+            {t("wizard.sale.review.heroCaption")}
           </p>
           <div className="flex items-baseline gap-3">
             <span
@@ -147,11 +149,11 @@ export default async function SaleReviewPage(props: { searchParams: Search }) {
               {usdPaid > 0 ? fmtMultiplier(multiplier) : "—"}
             </span>
             <span className="font-serif text-xl font-normal text-text-tertiary">
-              MTM
+              {t("wizard.sale.review.mtmLabel")}
             </span>
           </div>
           <p className="mt-2 font-mono text-[13px] text-text-secondary">
-            Net{" "}
+            {t("wizard.sale.review.netPrefix")}{" "}
             <span
               className={
                 headlineTone === "up"
@@ -161,11 +163,11 @@ export default async function SaleReviewPage(props: { searchParams: Search }) {
             >
               {fmtUsd(netPnl, true)}
             </span>{" "}
-            on {fmtUsd(usdPaid)} paid
+            {t("wizard.sale.review.onPaid", { paid: fmtUsd(usdPaid) })}
             {tokens > 0 && (
               <>
                 {" · "}
-                {fmtTokens(tokens)} {v.asset || "tokens"}
+                {fmtTokens(tokens)} {v.asset || t("wizard.sale.review.tokensFallback")}
               </>
             )}
           </p>
@@ -175,103 +177,111 @@ export default async function SaleReviewPage(props: { searchParams: Search }) {
       {/* ── Field summary ─────────────────────────────────────────────── */}
       <section className="mt-10">
         <h2 className="mb-2 font-serif text-[11px] font-semibold uppercase tracking-[0.18em] text-text-tertiary">
-          Sale
+          {t("wizard.sale.review.sections.sale")}
         </h2>
         <div>
           <WizardSummaryRow
-            label="Kind"
+            label={t("wizard.sale.review.rows.kind")}
             value={SALE_KIND_LABELS[v.saleKind] ?? v.saleKind ?? "—"}
             editHref={editAllHref}
           />
           <WizardSummaryRow
-            label="Venue"
+            label={t("wizard.sale.review.rows.venue")}
             value={v.venue || "—"}
             editHref={editAllHref}
           />
           <WizardSummaryRow
-            label="Token"
+            label={t("wizard.sale.review.rows.token")}
             value={v.asset || "—"}
             editHref={editAllHref}
           />
         </div>
 
         <h2 className="mb-2 mt-8 font-serif text-[11px] font-semibold uppercase tracking-[0.18em] text-text-tertiary">
-          Allocation
+          {t("wizard.sale.review.sections.allocation")}
         </h2>
         <div>
           <WizardSummaryRow
-            label="USD paid"
+            label={t("wizard.sale.review.rows.usdPaid")}
             value={usdPaid > 0 ? fmtUsd(usdPaid) : "—"}
             editHref={editAllHref}
           />
           <WizardSummaryRow
-            label="Tokens allocated"
+            label={t("wizard.sale.review.rows.tokensAllocated")}
             value={fmtTokens(tokens)}
             editHref={editAllHref}
           />
           <WizardSummaryRow
-            label="Current price"
+            label={t("wizard.sale.review.rows.currentPrice")}
             value={currentPrice > 0 ? fmtUsd(currentPrice) : "—"}
             editHref={editAllHref}
           />
           <WizardSummaryRow
-            label="Current value"
+            label={t("wizard.sale.review.rows.currentValue")}
             value={currentValue > 0 ? fmtUsd(currentValue) : "—"}
           />
           <WizardSummaryRow
-            label="MTM ×"
+            label={t("wizard.sale.review.rows.mtmMultiplier")}
             value={usdPaid > 0 ? fmtMultiplier(multiplier) : "—"}
             tone={multiplier >= 1 ? "up" : "down"}
           />
           <WizardSummaryRow
-            label="Net P&L"
+            label={t("wizard.sale.review.rows.netPnl")}
             value={fmtUsd(netPnl, true)}
             tone={netPnl >= 0 ? "up" : "down"}
           />
         </div>
 
         <h2 className="mb-2 mt-8 font-serif text-[11px] font-semibold uppercase tracking-[0.18em] text-text-tertiary">
-          Vesting
+          {t("wizard.sale.review.sections.vesting")}
         </h2>
         <div>
           <WizardSummaryRow
-            label="TGE date"
+            label={t("wizard.sale.review.rows.tgeDate")}
             value={fmtDate(v.tgeDate)}
             editHref={editAllHref}
           />
           <WizardSummaryRow
-            label="TGE unlock %"
+            label={t("wizard.sale.review.rows.tgeUnlockPct")}
             value={tgeUnlock > 0 ? `${tgeUnlock}%` : "—"}
             editHref={editAllHref}
           />
           <WizardSummaryRow
-            label="Vesting cliff"
-            value={cliffMonths > 0 ? `${cliffMonths}mo` : "none"}
+            label={t("wizard.sale.review.rows.vestingCliff")}
+            value={
+              cliffMonths > 0
+                ? t("wizard.sale.review.monthsValue", { months: cliffMonths })
+                : t("wizard.sale.review.noneValue")
+            }
             editHref={editAllHref}
           />
           <WizardSummaryRow
-            label="Vesting duration"
-            value={durationMonths > 0 ? `${durationMonths}mo` : "none"}
+            label={t("wizard.sale.review.rows.vestingDuration")}
+            value={
+              durationMonths > 0
+                ? t("wizard.sale.review.monthsValue", { months: durationMonths })
+                : t("wizard.sale.review.noneValue")
+            }
             editHref={editAllHref}
           />
         </div>
 
         <h2 className="mb-2 mt-8 font-serif text-[11px] font-semibold uppercase tracking-[0.18em] text-text-tertiary">
-          Thesis &amp; tags
+          {t("wizard.sale.review.sections.thesis")}
         </h2>
         <div>
           <WizardSummaryRow
-            label="Opened"
+            label={t("wizard.sale.review.rows.opened")}
             value={fmtDate(v.openedAt)}
             editHref={editAllHref}
           />
           <WizardSummaryRow
-            label="Regime tags"
+            label={t("wizard.sale.review.rows.regimeTags")}
             value={v.regimeTags || "—"}
             editHref={editAllHref}
           />
           <WizardSummaryRow
-            label="Note"
+            label={t("wizard.sale.review.rows.note")}
             value={v.note || "—"}
             editHref={editAllHref}
             mono={false}
@@ -291,13 +301,13 @@ export default async function SaleReviewPage(props: { searchParams: Search }) {
             className="inline-flex items-center gap-1.5 font-mono text-[11px] uppercase tracking-[0.16em] text-text-tertiary transition-colors hover:text-text"
           >
             <ArrowLeft className="h-3 w-3" />
-            Back
+            {t("wizard.sale.review.back")}
           </Link>
           <button
             type="submit"
             className="inline-flex items-center gap-2 rounded-md border border-text bg-text px-5 py-2 font-mono text-[11px] uppercase tracking-[0.16em] text-app transition-colors hover:bg-text-secondary"
           >
-            {isEditing ? "Save changes" : "Log sale"}
+            {isEditing ? t("wizard.sale.review.saveChanges") : t("wizard.sale.review.logSale")}
             <ArrowRight className="h-3 w-3" />
           </button>
         </div>

@@ -10,12 +10,7 @@ import {
 import { cn } from "@/lib/utils";
 import { requireUser } from "@/lib/auth/server";
 import { getActivity } from "@/lib/db/activity";
-
-// Stepper label set: the label at index 2 ("Details") is shown regardless of
-// path. When the user took the Manual branch, this page is step 3 of 4 but
-// effectively skips step 2 ("Pick"); the labelling is slightly off in that
-// case but the step counter still reads "Step 3 of 4" — acceptable for v1.
-const STEP_LABELS = ["Source", "Pick", "Details", "Review"] as const;
+import { getT } from "@/lib/i18n/server";
 
 const EXCHANGES = ["Binance", "Bybit", "Hyperliquid", "Coinbase", "OKX", "Other"] as const;
 const INSTRUMENTS = ["perp", "spot", "future"] as const;
@@ -64,8 +59,32 @@ function isoToDateTimeLocal(iso: string | null): string {
 export default async function TradeFieldsPage(props: {
   searchParams: Search;
 }) {
+  const t = await getT();
   const sp = await props.searchParams;
   const editId = getStr(sp, "edit");
+
+  // Stepper label set: the label at index 2 ("Details") is shown regardless of
+  // path. When the user took the Manual branch, this page is step 3 of 4 but
+  // effectively skips step 2 ("Pick"); the labelling is slightly off in that
+  // case but the step counter still reads "Step 3 of 4" — acceptable for v1.
+  const STEP_LABELS = [
+    t("wizard.trade.stepLabels.source"),
+    t("wizard.trade.stepLabels.pick"),
+    t("wizard.trade.stepLabels.details"),
+    t("wizard.trade.stepLabels.review"),
+  ] as const;
+
+  const requiredCue = t("wizard.trade.fields.requiredCue");
+
+  const instrumentLabels: Record<(typeof INSTRUMENTS)[number], string> = {
+    perp: t("wizard.trade.fields.instrument.perp"),
+    spot: t("wizard.trade.fields.instrument.spot"),
+    future: t("wizard.trade.fields.instrument.future"),
+  };
+  const sideLabels: Record<(typeof SIDES)[number], string> = {
+    long: t("wizard.trade.fields.side.long"),
+    short: t("wizard.trade.fields.side.short"),
+  };
 
   // If edit mode, fetch the existing trade to seed defaults. Treat
   // ownership-failure / non-trade type as a silent fallback to create mode —
@@ -93,24 +112,24 @@ export default async function TradeFieldsPage(props: {
     const { id: userId } = await requireUser();
     const activity = await getActivity(userId, editId);
     if (activity && activity.subtype.type === "trade") {
-      const t = activity.subtype.row;
+      const tr = activity.subtype.row;
       // exchange in the DB is the catalog code (lowercase); the wizard's
       // <option> values are title-cased. Map back.
-      const exchangeLabel = mapExchangeCodeToLabel(t.exchange);
-      const instrumentLabel = t.instrumentKind === "dated_future" ? "future" : t.instrumentKind;
+      const exchangeLabel = mapExchangeCodeToLabel(tr.exchange);
+      const instrumentLabel = tr.instrumentKind === "dated_future" ? "future" : tr.instrumentKind;
       dbDefaults = {
         exchange: exchangeLabel,
-        symbol: t.symbol,
+        symbol: tr.symbol,
         instrument: instrumentLabel,
-        side: t.side,
+        side: tr.side,
         capital: activity.capitalDeployedUsd ?? "",
-        qty: t.qty,
-        entryPrice: t.avgEntryPrice,
-        exitPrice: t.avgExitPrice ?? "",
+        qty: tr.qty,
+        entryPrice: tr.avgEntryPrice,
+        exitPrice: tr.avgExitPrice ?? "",
         fees: activity.feesUsd,
         openedAt: isoToDateTimeLocal(activity.openedAt),
         closedAt: isoToDateTimeLocal(activity.closedAt),
-        note: t.entryThesis ?? "",
+        note: tr.entryThesis ?? "",
         regimeTags: activity.regimeTags.join(", "),
         serial: activity.id.slice(0, 4).toUpperCase(),
       };
@@ -150,13 +169,13 @@ export default async function TradeFieldsPage(props: {
       step={3}
       totalSteps={4}
       stepLabels={STEP_LABELS}
-      title={editValid ? "Edit trade" : "Trade details"}
+      title={editValid ? t("wizard.trade.fields.titleEdit") : t("wizard.trade.fields.titleCreate")}
       subtitle={
         editValid
-          ? "Editing existing trade. Change anything; the values you leave alone stay put."
+          ? t("wizard.trade.fields.subtitleEdit")
           : defaults.source
-            ? "Pre-filled from your exchange fill. Edit anything that doesn't look right."
-            : "Type in what happened. You can always edit this later from the trade detail page."
+            ? t("wizard.trade.fields.subtitleFromFill")
+            : t("wizard.trade.fields.subtitleManual")
       }
     >
       {editValid && (
@@ -165,11 +184,11 @@ export default async function TradeFieldsPage(props: {
           role="status"
         >
           <span className="font-semibold uppercase tracking-[0.14em] text-[10px]">
-            Editing
+            {t("wizard.trade.fields.editingBadge")}
           </span>
           {" — "}
           <span className="font-serif italic">
-            trade #{dbDefaults.serial}. Changes save back to the same record.
+            {t("wizard.trade.fields.editingDetail", { serial: dbDefaults.serial ?? "" })}
           </span>
         </aside>
       )}
@@ -188,9 +207,9 @@ export default async function TradeFieldsPage(props: {
         )}
 
         {/* ── Venue + symbol ─────────────────────────────────────────── */}
-        <SectionLabel>Venue</SectionLabel>
+        <SectionLabel>{t("wizard.trade.fields.sections.venue")}</SectionLabel>
         <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
-          <WizardField label="Exchange" htmlFor="exchange" required>
+          <WizardField label={t("wizard.trade.fields.labels.exchange")} htmlFor="exchange" required>
             <WizardSelect
               id="exchange"
               name="exchange"
@@ -205,9 +224,9 @@ export default async function TradeFieldsPage(props: {
             </WizardSelect>
           </WizardField>
           <WizardField
-            label="Symbol"
+            label={t("wizard.trade.fields.labels.symbol")}
             htmlFor="symbol"
-            helper="e.g. BTC-PERP, ETH-USD, SOL-PERP"
+            helper={t("wizard.trade.fields.helpers.symbol")}
             required
           >
             <WizardInput
@@ -222,20 +241,25 @@ export default async function TradeFieldsPage(props: {
         </div>
 
         {/* ── Instrument + side ──────────────────────────────────────── */}
-        <SectionLabel>Shape</SectionLabel>
+        <SectionLabel>{t("wizard.trade.fields.sections.shape")}</SectionLabel>
         <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
           <RadioRow
-            legend="Instrument"
+            legend={t("wizard.trade.fields.labels.instrument")}
             name="instrument"
-            options={INSTRUMENTS.map((i) => ({ value: i, label: i }))}
+            requiredCue={requiredCue}
+            options={INSTRUMENTS.map((i) => ({
+              value: i,
+              label: instrumentLabels[i],
+            }))}
             defaultValue={defaults.instrument}
           />
           <RadioRow
-            legend="Side"
+            legend={t("wizard.trade.fields.labels.side")}
             name="side"
+            requiredCue={requiredCue}
             options={SIDES.map((s) => ({
               value: s,
-              label: s,
+              label: sideLabels[s],
               tone: s === "long" ? "up" : "down",
             }))}
             defaultValue={defaults.side}
@@ -243,12 +267,12 @@ export default async function TradeFieldsPage(props: {
         </div>
 
         {/* ── Numbers ────────────────────────────────────────────────── */}
-        <SectionLabel>Numbers</SectionLabel>
+        <SectionLabel>{t("wizard.trade.fields.sections.numbers")}</SectionLabel>
         <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
           <WizardField
-            label="Capital deployed"
+            label={t("wizard.trade.fields.labels.capital")}
             htmlFor="capital"
-            helper="USD"
+            helper={t("wizard.trade.fields.helpers.usd")}
             required
           >
             <WizardInput
@@ -263,7 +287,12 @@ export default async function TradeFieldsPage(props: {
               required
             />
           </WizardField>
-          <WizardField label="Quantity" htmlFor="qty" helper="Position size in base units" required>
+          <WizardField
+            label={t("wizard.trade.fields.labels.qty")}
+            htmlFor="qty"
+            helper={t("wizard.trade.fields.helpers.qty")}
+            required
+          >
             <WizardInput
               id="qty"
               name="qty"
@@ -276,7 +305,12 @@ export default async function TradeFieldsPage(props: {
               required
             />
           </WizardField>
-          <WizardField label="Entry price" htmlFor="entryPrice" helper="USD" required>
+          <WizardField
+            label={t("wizard.trade.fields.labels.entryPrice")}
+            htmlFor="entryPrice"
+            helper={t("wizard.trade.fields.helpers.usd")}
+            required
+          >
             <WizardInput
               id="entryPrice"
               name="entryPrice"
@@ -289,7 +323,12 @@ export default async function TradeFieldsPage(props: {
               required
             />
           </WizardField>
-          <WizardField label="Exit price" htmlFor="exitPrice" helper="USD" required>
+          <WizardField
+            label={t("wizard.trade.fields.labels.exitPrice")}
+            htmlFor="exitPrice"
+            helper={t("wizard.trade.fields.helpers.usd")}
+            required
+          >
             <WizardInput
               id="exitPrice"
               name="exitPrice"
@@ -303,9 +342,9 @@ export default async function TradeFieldsPage(props: {
             />
           </WizardField>
           <WizardField
-            label="Fees"
+            label={t("wizard.trade.fields.labels.fees")}
             htmlFor="fees"
-            helper="Total USD round-trip fees"
+            helper={t("wizard.trade.fields.helpers.fees")}
           >
             <WizardInput
               id="fees"
@@ -321,9 +360,9 @@ export default async function TradeFieldsPage(props: {
         </div>
 
         {/* ── Timing ─────────────────────────────────────────────────── */}
-        <SectionLabel>Timing</SectionLabel>
+        <SectionLabel>{t("wizard.trade.fields.sections.timing")}</SectionLabel>
         <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
-          <WizardField label="Opened at" htmlFor="openedAt" required>
+          <WizardField label={t("wizard.trade.fields.labels.openedAt")} htmlFor="openedAt" required>
             <WizardInput
               id="openedAt"
               name="openedAt"
@@ -332,7 +371,7 @@ export default async function TradeFieldsPage(props: {
               required
             />
           </WizardField>
-          <WizardField label="Closed at" htmlFor="closedAt" required>
+          <WizardField label={t("wizard.trade.fields.labels.closedAt")} htmlFor="closedAt" required>
             <WizardInput
               id="closedAt"
               name="closedAt"
@@ -344,24 +383,24 @@ export default async function TradeFieldsPage(props: {
         </div>
 
         {/* ── Note + tags ────────────────────────────────────────────── */}
-        <SectionLabel>Thesis &amp; tags</SectionLabel>
+        <SectionLabel>{t("wizard.trade.fields.sections.thesisTags")}</SectionLabel>
         <WizardField
-          label="Note"
+          label={t("wizard.trade.fields.labels.note")}
           htmlFor="note"
-          helper="What was the thesis? What's worth remembering next time? Markdown welcome."
+          helper={t("wizard.trade.fields.helpers.note")}
         >
           <WizardTextarea
             id="note"
             name="note"
             rows={4}
             defaultValue={defaults.note}
-            placeholder="ETF inflow continuation. Stop under HTF support…"
+            placeholder={t("wizard.trade.fields.placeholders.note")}
           />
         </WizardField>
         <WizardField
-          label="Regime tags"
+          label={t("wizard.trade.fields.labels.regimeTags")}
           htmlFor="regimeTags"
-          helper="Comma-separated. e.g. risk-on, funding-positive, short-squeeze"
+          helper={t("wizard.trade.fields.helpers.regimeTags")}
         >
           <WizardInput
             id="regimeTags"
@@ -379,13 +418,13 @@ export default async function TradeFieldsPage(props: {
             className="inline-flex items-center gap-1.5 font-mono text-[11px] uppercase tracking-[0.16em] text-text-tertiary transition-colors hover:text-text"
           >
             <ArrowLeft className="h-3 w-3" />
-            Back
+            {t("wizard.trade.fields.back")}
           </Link>
           <button
             type="submit"
             className="inline-flex items-center gap-2 rounded-md border border-text bg-text px-4 py-2 font-mono text-[11px] uppercase tracking-[0.16em] text-app transition-colors hover:bg-text-secondary"
           >
-            Review
+            {t("wizard.trade.fields.review")}
             <ArrowRight className="h-3 w-3" />
           </button>
         </div>
@@ -421,11 +460,13 @@ function RadioRow({
   name,
   options,
   defaultValue,
+  requiredCue,
 }: {
   legend: string;
   name: string;
   options: { value: string; label: string; tone?: "up" | "down" }[];
   defaultValue: string;
+  requiredCue: string;
 }) {
   const id = `radio-${name}`;
   return (
@@ -435,7 +476,7 @@ function RadioRow({
         className="mb-0.5 font-mono text-[10px] uppercase tracking-[0.16em] text-text-tertiary"
       >
         {legend}
-        <span className="ml-1.5 text-text-disabled">· required</span>
+        <span className="ml-1.5 text-text-disabled">{requiredCue}</span>
       </legend>
       <div
         role="radiogroup"

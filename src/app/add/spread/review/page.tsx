@@ -21,8 +21,7 @@ import {
 import { cn } from "@/lib/utils";
 import { logSpread } from "../actions";
 import { WizardErrorBanner } from "@/components/wizard/wizard-error-banner";
-
-const STEP_LABELS = ["Source", "Pick legs", "Type", "Fields", "Review"] as const;
+import { getT } from "@/lib/i18n/server";
 
 // Field names round-tripped through the GET-form submit on /fields. Stays in
 // sync with that page's input names.
@@ -110,15 +109,28 @@ function daysBetween(a: string, b: string): number {
   return (tb - ta) / (1000 * 60 * 60 * 24);
 }
 
-function fmtDays(d: number): string {
+function fmtDays(
+  d: number,
+  t: Awaited<ReturnType<typeof getT>>
+): string {
   if (d === 0) return "—";
   if (d < 1) {
     const hours = d * 24;
-    if (hours < 1) return `${Math.round(hours * 60)} min`;
-    return `${hours.toFixed(1)}h`;
+    if (hours < 1)
+      return t("wizard.spread.review.duration.minutes", {
+        value: Math.round(hours * 60),
+      });
+    return t("wizard.spread.review.duration.hours", {
+      value: hours.toFixed(1),
+    });
   }
-  if (d < 30) return `${d.toFixed(1)}d`;
-  return `${d.toFixed(0)}d`;
+  if (d < 30)
+    return t("wizard.spread.review.duration.days", {
+      value: d.toFixed(1),
+    });
+  return t("wizard.spread.review.duration.days", {
+    value: d.toFixed(0),
+  });
 }
 
 const SPREAD_TYPE_VALUES: readonly string[] = [
@@ -134,6 +146,15 @@ function isSpreadType(v: string): v is MatcherSpreadType {
 
 export default async function SpreadReviewPage(props: { searchParams: Search }) {
   const sp = await props.searchParams;
+  const t = await getT();
+
+  const STEP_LABELS = [
+    t("wizard.spread.stepLabels.source"),
+    t("wizard.spread.stepLabels.pickLegs"),
+    t("wizard.spread.stepLabels.type"),
+    t("wizard.spread.stepLabels.fields"),
+    t("wizard.spread.stepLabels.review"),
+  ] as const;
 
   const legsStr = getStr(sp, "legs");
   const legIds = legsStr.split(",").filter(Boolean);
@@ -182,11 +203,11 @@ export default async function SpreadReviewPage(props: { searchParams: Search }) 
       step={5}
       totalSteps={5}
       stepLabels={STEP_LABELS}
-      title={isEditing ? "Confirm changes" : "Look it over"}
+      title={isEditing ? t("wizard.spread.review.titleEdit") : t("wizard.spread.review.titleNew")}
       subtitle={
         isEditing
-          ? "Saving these changes to the same record. Edit any row to bounce back to the fields step."
-          : "One last pass before this hits your journal. Edit any row to bounce back to the fields step."
+          ? t("wizard.spread.review.subtitleEdit")
+          : t("wizard.spread.review.subtitleNew")
       }
     >
       <WizardErrorBanner error={getStr(sp, "error") || undefined} />
@@ -194,7 +215,7 @@ export default async function SpreadReviewPage(props: { searchParams: Search }) 
       <section className="border-y border-border py-10">
         <div className="flex flex-col gap-2">
           <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-text-tertiary">
-            Realized {v.headlineUnit} · preview
+            {t("wizard.spread.review.heroCaption", { unit: v.headlineUnit })}
           </p>
           <div className="flex items-baseline gap-3">
             <span
@@ -208,7 +229,7 @@ export default async function SpreadReviewPage(props: { searchParams: Search }) 
             </span>
           </div>
           <p className="mt-2 font-mono text-[13px] text-text-secondary">
-            Net{" "}
+            {t("wizard.spread.review.netLead")}{" "}
             <span
               className={
                 headlineTone === "up"
@@ -218,11 +239,11 @@ export default async function SpreadReviewPage(props: { searchParams: Search }) 
             >
               {fmtUsd(netPnl, true)}
             </span>{" "}
-            on {fmtCapital(capital)} capital
+            {t("wizard.spread.review.netOnCapital", { capital: fmtCapital(capital) })}
             {days > 0 && (
               <>
                 {" · "}
-                {fmtDays(days)} held
+                {t("wizard.spread.review.heldSuffix", { duration: fmtDays(days, t) })}
               </>
             )}
           </p>
@@ -232,22 +253,22 @@ export default async function SpreadReviewPage(props: { searchParams: Search }) 
       {/* ── Identity ──────────────────────────────────────────────────────── */}
       <section className="mt-10">
         <h2 className="mb-2 font-serif text-[11px] font-semibold uppercase tracking-[0.18em] text-text-tertiary">
-          Identity
+          {t("wizard.spread.review.sections.identity")}
         </h2>
         <div>
           <WizardSummaryRow
-            label="Name"
+            label={t("wizard.spread.review.rows.name")}
             value={v.name || "—"}
             editHref={editAllHref}
             mono={false}
           />
           <WizardSummaryRow
-            label="Variant"
+            label={t("wizard.spread.review.rows.variant")}
             value={v.variant || "—"}
             editHref={editAllHref}
           />
           <WizardSummaryRow
-            label="Type"
+            label={t("wizard.spread.review.rows.type")}
             value={
               isSpreadType(v.spreadType)
                 ? SPREAD_TYPE_LABELS[v.spreadType]
@@ -257,10 +278,12 @@ export default async function SpreadReviewPage(props: { searchParams: Search }) 
           />
           {v.matcher && (
             <WizardSummaryRow
-              label="Source"
+              label={t("wizard.spread.review.rows.source")}
               value={
                 <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-text-tertiary">
-                  {v.matcher === "auto" ? "Matcher suggestion" : "Manual selection"}
+                  {v.matcher === "auto"
+                    ? t("wizard.spread.review.sourceValue.matcher")
+                    : t("wizard.spread.review.sourceValue.manual")}
                 </span>
               }
             />
@@ -271,34 +294,32 @@ export default async function SpreadReviewPage(props: { searchParams: Search }) 
       {/* ── Legs ──────────────────────────────────────────────────────────── */}
       <section className="mt-10">
         <h2 className="mb-2 font-serif text-[11px] font-semibold uppercase tracking-[0.18em] text-text-tertiary">
-          Legs ({legs.length})
+          {t("wizard.spread.review.legsHeading", { count: legs.length })}
         </h2>
         <p className="mb-3 font-serif text-[11px] italic leading-snug text-text-tertiary">
-          In v1, manual spreads store the aggregate numbers and thesis only —
-          this leg breakdown is for your reference. Individual leg rows are
-          auto-populated when the worker matches exchange fills (Phase 7).
+          {t("wizard.spread.review.v1ManualNote")}
         </p>
         <div className="overflow-hidden rounded-md border border-border bg-surface">
           <Table>
             <TableHeader>
               <TableRow className="hover:bg-transparent">
                 <TableHead scope="col" className="font-serif text-[10px] font-semibold uppercase tracking-[0.16em] text-text-tertiary">
-                  Symbol
+                  {t("wizard.spread.review.legsTable.symbol")}
                 </TableHead>
                 <TableHead scope="col" className="font-serif text-[10px] font-semibold uppercase tracking-[0.16em] text-text-tertiary">
-                  Venue
+                  {t("wizard.spread.review.legsTable.venue")}
                 </TableHead>
                 <TableHead scope="col" className="font-serif text-[10px] font-semibold uppercase tracking-[0.16em] text-text-tertiary">
-                  Side
+                  {t("wizard.spread.review.legsTable.side")}
                 </TableHead>
                 <TableHead scope="col" className="text-right font-serif text-[10px] font-semibold uppercase tracking-[0.16em] text-text-tertiary">
-                  Qty
+                  {t("wizard.spread.review.legsTable.qty")}
                 </TableHead>
                 <TableHead scope="col" className="text-right font-serif text-[10px] font-semibold uppercase tracking-[0.16em] text-text-tertiary">
-                  Entry → Exit
+                  {t("wizard.spread.review.legsTable.entryExit")}
                 </TableHead>
                 <TableHead scope="col" className="text-right font-serif text-[10px] font-semibold uppercase tracking-[0.16em] text-text-tertiary">
-                  Net P&amp;L
+                  {t("wizard.spread.review.legsTable.netPnl")}
                 </TableHead>
               </TableRow>
             </TableHeader>
@@ -361,22 +382,22 @@ export default async function SpreadReviewPage(props: { searchParams: Search }) 
       {/* ── Numbers + timing ──────────────────────────────────────────────── */}
       <section className="mt-10">
         <h2 className="mb-2 font-serif text-[11px] font-semibold uppercase tracking-[0.18em] text-text-tertiary">
-          Numbers
+          {t("wizard.spread.review.sections.numbers")}
         </h2>
         <div>
           <WizardSummaryRow
-            label="Capital"
+            label={t("wizard.spread.review.rows.capital")}
             value={capital > 0 ? fmtUsd(capital) : "—"}
             editHref={editAllHref}
           />
           <WizardSummaryRow
-            label="Net P&L"
+            label={t("wizard.spread.review.rows.netPnl")}
             value={fmtUsd(netPnl, true)}
             tone={netPnl >= 0 ? "up" : "down"}
             editHref={editAllHref}
           />
           <WizardSummaryRow
-            label={`Headline (${v.headlineUnit})`}
+            label={t("wizard.spread.review.rows.headline", { unit: v.headlineUnit })}
             value={headlineLabel}
             tone="signature"
             editHref={editAllHref}
@@ -384,36 +405,36 @@ export default async function SpreadReviewPage(props: { searchParams: Search }) 
         </div>
 
         <h2 className="mb-2 mt-8 font-serif text-[11px] font-semibold uppercase tracking-[0.18em] text-text-tertiary">
-          Timing
+          {t("wizard.spread.review.sections.timing")}
         </h2>
         <div>
           <WizardSummaryRow
-            label="Opened"
+            label={t("wizard.spread.review.rows.opened")}
             value={fmtDate(v.openedAt)}
             editHref={editAllHref}
           />
           <WizardSummaryRow
-            label="Closed"
+            label={t("wizard.spread.review.rows.closed")}
             value={fmtDate(v.closedAt)}
             editHref={editAllHref}
           />
           <WizardSummaryRow
-            label="Days held"
-            value={days > 0 ? fmtDays(days) : "—"}
+            label={t("wizard.spread.review.rows.daysHeld")}
+            value={days > 0 ? fmtDays(days, t) : "—"}
           />
         </div>
 
         <h2 className="mb-2 mt-8 font-serif text-[11px] font-semibold uppercase tracking-[0.18em] text-text-tertiary">
-          Thesis &amp; tags
+          {t("wizard.spread.review.sections.thesisAndTags")}
         </h2>
         <div>
           <WizardSummaryRow
-            label="Regime tags"
+            label={t("wizard.spread.review.rows.regimeTags")}
             value={v.regimeTags || "—"}
             editHref={editAllHref}
           />
           <WizardSummaryRow
-            label="Thesis"
+            label={t("wizard.spread.review.rows.thesis")}
             value={v.thesis || "—"}
             editHref={editAllHref}
             mono={false}
@@ -433,13 +454,13 @@ export default async function SpreadReviewPage(props: { searchParams: Search }) 
             className="inline-flex items-center gap-1.5 font-mono text-[11px] uppercase tracking-[0.16em] text-text-tertiary transition-colors hover:text-text"
           >
             <ArrowLeft className="h-3 w-3" />
-            Back
+            {t("wizard.spread.review.back")}
           </Link>
           <button
             type="submit"
             className="inline-flex items-center gap-2 rounded-md border border-text bg-text px-5 py-2 font-mono text-[11px] uppercase tracking-[0.16em] text-app transition-colors hover:bg-text-secondary"
           >
-            {isEditing ? "Save changes" : "Log spread"}
+            {isEditing ? t("wizard.spread.review.submitEdit") : t("wizard.spread.review.submitNew")}
             <ArrowRight className="h-3 w-3" />
           </button>
         </div>

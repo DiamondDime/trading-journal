@@ -4,8 +4,7 @@ import { WizardShell } from "@/components/wizard/wizard-shell";
 import { WizardSummaryRow } from "@/components/wizard/wizard-summary-row";
 import { WizardErrorBanner } from "@/components/wizard/wizard-error-banner";
 import { logTrade } from "../actions";
-
-const STEP_LABELS = ["Source", "Pick", "Details", "Review"] as const;
+import { getT } from "@/lib/i18n/server";
 
 // Field names the form passes through. Stays in sync with /fields/page.tsx.
 // `edit` is the UUID of an existing trade when this is an edit-mode submit;
@@ -115,7 +114,16 @@ function computePreview(
 }
 
 export default async function TradeReviewPage(props: { searchParams: Search }) {
+  const t = await getT();
   const sp = await props.searchParams;
+
+  const STEP_LABELS = [
+    t("wizard.trade.stepLabels.source"),
+    t("wizard.trade.stepLabels.pick"),
+    t("wizard.trade.stepLabels.details"),
+    t("wizard.trade.stepLabels.review"),
+  ] as const;
+
   const v = {
     exchange: getStr(sp, "exchange"),
     symbol: getStr(sp, "symbol"),
@@ -171,11 +179,11 @@ export default async function TradeReviewPage(props: { searchParams: Search }) {
       step={4}
       totalSteps={4}
       stepLabels={STEP_LABELS}
-      title={isEditing ? "Confirm changes" : "Look it over"}
+      title={isEditing ? t("wizard.trade.review.titleEdit") : t("wizard.trade.review.titleCreate")}
       subtitle={
         isEditing
-          ? "Saving these changes to the same record. Edit any row to bounce back to the form."
-          : "One last pass before this hits your journal. Edit any row to bounce back to the form."
+          ? t("wizard.trade.review.subtitleEdit")
+          : t("wizard.trade.review.subtitleCreate")
       }
     >
       <WizardErrorBanner error={getStr(sp, "error") || undefined} />
@@ -183,7 +191,7 @@ export default async function TradeReviewPage(props: { searchParams: Search }) {
       <section className="border-y border-border py-10">
         <div className="flex flex-col gap-2">
           <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-text-tertiary">
-            Realized APR · preview
+            {t("wizard.trade.review.heroCaption")}
           </p>
           <div className="flex items-baseline gap-3">
             <span
@@ -197,7 +205,7 @@ export default async function TradeReviewPage(props: { searchParams: Search }) {
             </span>
           </div>
           <p className="mt-2 font-mono text-[13px] text-text-secondary">
-            Net{" "}
+            {t("wizard.trade.review.netPrefix")}{" "}
             <span
               className={
                 headlineTone === "up"
@@ -207,11 +215,11 @@ export default async function TradeReviewPage(props: { searchParams: Search }) {
             >
               {fmtUsd(net, true)}
             </span>{" "}
-            on {fmtUsd(capital)} capital
+            {t("wizard.trade.review.onCapital", { capital: fmtUsd(capital) })}
             {days > 0 && (
               <>
                 {" · "}
-                {fmtDays(days)} held
+                {t("wizard.trade.review.heldSuffix", { days: fmtDays(days) })}
               </>
             )}
           </p>
@@ -221,26 +229,26 @@ export default async function TradeReviewPage(props: { searchParams: Search }) {
       {/* ── Field summary ─────────────────────────────────────────────── */}
       <section className="mt-10">
         <h2 className="mb-2 font-serif text-[11px] font-semibold uppercase tracking-[0.18em] text-text-tertiary">
-          Trade
+          {t("wizard.trade.review.sections.trade")}
         </h2>
         <div>
           <WizardSummaryRow
-            label="Exchange"
+            label={t("wizard.trade.review.labels.exchange")}
             value={v.exchange || "—"}
             editHref={editAllHref}
           />
           <WizardSummaryRow
-            label="Symbol"
+            label={t("wizard.trade.review.labels.symbol")}
             value={v.symbol || "—"}
             editHref={editAllHref}
           />
           <WizardSummaryRow
-            label="Instrument"
+            label={t("wizard.trade.review.labels.instrument")}
             value={v.instrument || "—"}
             editHref={editAllHref}
           />
           <WizardSummaryRow
-            label="Side"
+            label={t("wizard.trade.review.labels.side")}
             value={v.side || "—"}
             editHref={editAllHref}
             tone={v.side === "short" ? "down" : v.side === "long" ? "up" : "neutral"}
@@ -248,87 +256,87 @@ export default async function TradeReviewPage(props: { searchParams: Search }) {
         </div>
 
         <h2 className="mb-2 mt-8 font-serif text-[11px] font-semibold uppercase tracking-[0.18em] text-text-tertiary">
-          Numbers
+          {t("wizard.trade.review.sections.numbers")}
         </h2>
         <div>
           <WizardSummaryRow
-            label="Capital"
+            label={t("wizard.trade.review.labels.capital")}
             value={capital > 0 ? fmtUsd(capital) : "—"}
             editHref={editAllHref}
           />
           <WizardSummaryRow
-            label="Quantity"
+            label={t("wizard.trade.review.labels.qty")}
             value={qty > 0 ? qty.toLocaleString("en-US", { maximumSignificantDigits: 6 }) : "—"}
             editHref={editAllHref}
           />
           <WizardSummaryRow
-            label="Entry price"
+            label={t("wizard.trade.review.labels.entryPrice")}
             value={entry > 0 ? fmtUsd(entry) : "—"}
             editHref={editAllHref}
           />
           <WizardSummaryRow
-            label="Exit price"
+            label={t("wizard.trade.review.labels.exitPrice")}
             value={exit > 0 ? fmtUsd(exit) : "—"}
             editHref={editAllHref}
           />
           <WizardSummaryRow
-            label="Fees"
+            label={t("wizard.trade.review.labels.fees")}
             value={fees > 0 ? fmtUsd(fees) : "—"}
             editHref={editAllHref}
           />
           <WizardSummaryRow
-            label="Gross P&L"
+            label={t("wizard.trade.review.labels.grossPnl")}
             value={fmtUsd(gross, true)}
             tone={gross >= 0 ? "up" : "down"}
           />
           <WizardSummaryRow
-            label="Net P&L"
+            label={t("wizard.trade.review.labels.netPnl")}
             value={fmtUsd(net, true)}
             tone={net >= 0 ? "up" : "down"}
           />
         </div>
 
         <h2 className="mb-2 mt-8 font-serif text-[11px] font-semibold uppercase tracking-[0.18em] text-text-tertiary">
-          Timing
+          {t("wizard.trade.review.sections.timing")}
         </h2>
         <div>
           <WizardSummaryRow
-            label="Opened"
+            label={t("wizard.trade.review.labels.opened")}
             value={fmtDate(v.openedAt)}
             editHref={editAllHref}
           />
           <WizardSummaryRow
-            label="Closed"
+            label={t("wizard.trade.review.labels.closed")}
             value={fmtDate(v.closedAt)}
             editHref={editAllHref}
           />
           <WizardSummaryRow
-            label="Days held"
+            label={t("wizard.trade.review.labels.daysHeld")}
             value={days > 0 ? fmtDays(days) : "—"}
           />
         </div>
 
         <h2 className="mb-2 mt-8 font-serif text-[11px] font-semibold uppercase tracking-[0.18em] text-text-tertiary">
-          Thesis &amp; tags
+          {t("wizard.trade.review.sections.thesisTags")}
         </h2>
         <div>
           <WizardSummaryRow
-            label="Regime tags"
+            label={t("wizard.trade.review.labels.regimeTags")}
             value={v.regimeTags || "—"}
             editHref={editAllHref}
           />
           <WizardSummaryRow
-            label="Note"
+            label={t("wizard.trade.review.labels.note")}
             value={v.note || "—"}
             editHref={editAllHref}
             mono={false}
           />
           {v.source && (
             <WizardSummaryRow
-              label="Source"
+              label={t("wizard.trade.review.labels.source")}
               value={
                 <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-text-tertiary">
-                  Exchange fill · {v.source}
+                  {t("wizard.trade.review.exchangeFill", { source: v.source })}
                 </span>
               }
             />
@@ -355,13 +363,13 @@ export default async function TradeReviewPage(props: { searchParams: Search }) {
             className="inline-flex items-center gap-1.5 font-mono text-[11px] uppercase tracking-[0.16em] text-text-tertiary transition-colors hover:text-text"
           >
             <ArrowLeft className="h-3 w-3" />
-            Back
+            {t("wizard.trade.review.back")}
           </Link>
           <button
             type="submit"
             className="inline-flex items-center gap-2 rounded-md border border-text bg-text px-5 py-2 font-mono text-[11px] uppercase tracking-[0.16em] text-app transition-colors hover:bg-text-secondary"
           >
-            {isEditing ? "Save changes" : "Log trade"}
+            {isEditing ? t("wizard.trade.review.saveChanges") : t("wizard.trade.review.logTrade")}
             <ArrowRight className="h-3 w-3" />
           </button>
         </div>

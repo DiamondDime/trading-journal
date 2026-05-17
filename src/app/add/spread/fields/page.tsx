@@ -22,8 +22,7 @@ import { SPREAD_TYPE_LABELS, type MatcherSpreadType } from "@/lib/matcher/spread
 import { cn } from "@/lib/utils";
 import { requireUser } from "@/lib/auth/server";
 import { getActivity } from "@/lib/db/activity";
-
-const STEP_LABELS = ["Source", "Pick legs", "Type", "Fields", "Review"] as const;
+import { getT } from "@/lib/i18n/server";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -121,21 +120,30 @@ function fmtDateInput(iso: string): string {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
-function suggestName(legs: ImportedTradeFill[], spreadType: string): string {
+function suggestName(
+  legs: ImportedTradeFill[],
+  spreadType: string,
+  t: Awaited<ReturnType<typeof getT>>
+): string {
   if (legs.length === 0) return "";
   const asset = legs[0]?.asset ?? "";
   const venues = [...new Set(legs.map((l) => l.exchange))].join(" + ");
   const typeLabel =
-    isSpreadType(spreadType) ? SPREAD_TYPE_LABELS[spreadType] : "spread";
+    isSpreadType(spreadType)
+      ? SPREAD_TYPE_LABELS[spreadType]
+      : t("wizard.spread.fields.nameSuggestFallback");
   return `${asset} ${typeLabel.toLowerCase()} · ${venues}`;
 }
 
-function suggestSubtitle(spreadType: string): string {
-  if (spreadType === "cash_carry") return "Basis + funding";
-  if (spreadType === "funding") return "Funding";
-  if (spreadType === "cross_exchange") return "Perp arb";
-  if (spreadType === "calendar") return "Term structure";
-  if (spreadType === "dex_cex") return "DEX-CEX";
+function suggestSubtitle(
+  spreadType: string,
+  t: Awaited<ReturnType<typeof getT>>
+): string {
+  if (spreadType === "cash_carry") return t("wizard.spread.fields.variantSuggest.cashCarry");
+  if (spreadType === "funding") return t("wizard.spread.fields.variantSuggest.funding");
+  if (spreadType === "cross_exchange") return t("wizard.spread.fields.variantSuggest.crossExchange");
+  if (spreadType === "calendar") return t("wizard.spread.fields.variantSuggest.calendar");
+  if (spreadType === "dex_cex") return t("wizard.spread.fields.variantSuggest.dexCex");
   return "";
 }
 
@@ -168,7 +176,16 @@ function sumNetPnl(legs: ImportedTradeFill[]): number {
 
 export default async function SpreadFieldsPage(props: { searchParams: Search }) {
   const sp = await props.searchParams;
+  const t = await getT();
   const editId = getStr(sp, "edit");
+
+  const STEP_LABELS = [
+    t("wizard.spread.stepLabels.source"),
+    t("wizard.spread.stepLabels.pickLegs"),
+    t("wizard.spread.stepLabels.type"),
+    t("wizard.spread.stepLabels.fields"),
+    t("wizard.spread.stepLabels.review"),
+  ] as const;
 
   // Edit-mode pre-fill from DB. Manual spreads have no leg rows (the create
   // action skips them), so the legs table will be empty — that's OK and
@@ -218,8 +235,8 @@ export default async function SpreadFieldsPage(props: { searchParams: Search }) 
 
   // ── Defaults — pre-filled either from URL (matcher path) or derived ────────
   const defaults = {
-    name: getStr(sp, "name") || dbDefaults.name || suggestName(legs, spreadType),
-    variant: getStr(sp, "variant") || dbDefaults.variant || suggestSubtitle(spreadType),
+    name: getStr(sp, "name") || dbDefaults.name || suggestName(legs, spreadType, t),
+    variant: getStr(sp, "variant") || dbDefaults.variant || suggestSubtitle(spreadType, t),
     openedAt:
       getStr(sp, "openedAt") || dbDefaults.openedAt || fmtDateInput(earliestOpen(legs)),
     closedAt:
@@ -242,19 +259,19 @@ export default async function SpreadFieldsPage(props: { searchParams: Search }) 
         step={4}
         totalSteps={5}
         stepLabels={STEP_LABELS}
-        title="Pick some legs first"
-        subtitle="The fields step needs at least two legs to wire up. Go back to the picker."
+        title={t("wizard.spread.fields.empty.title")}
+        subtitle={t("wizard.spread.fields.empty.subtitle")}
       >
         <div className="rounded-md border border-dashed border-border bg-surface p-8 text-center">
           <p className="font-serif text-[14px] italic text-text-tertiary">
-            No legs selected yet.
+            {t("wizard.spread.fields.empty.body")}
           </p>
           <Link
             href="/add/spread/pick"
             className="mt-4 inline-flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-[0.16em] text-text underline-offset-4 hover:underline"
           >
             <ArrowLeft className="h-3 w-3" />
-            back to picker
+            {t("wizard.spread.fields.empty.backLink")}
           </Link>
         </div>
       </WizardShell>
@@ -281,11 +298,11 @@ export default async function SpreadFieldsPage(props: { searchParams: Search }) 
       step={4}
       totalSteps={5}
       stepLabels={STEP_LABELS}
-      title={editValid ? "Edit spread" : "Spread details"}
+      title={editValid ? t("wizard.spread.fields.titleEdit") : t("wizard.spread.fields.titleNew")}
       subtitle={
         editValid
-          ? "Editing existing spread. The original legs aren't carried in v1 manual spreads — change the numbers, thesis, or tags freely."
-          : "Confirm the legs, name the spread, and write what you were thinking when you put it on."
+          ? t("wizard.spread.fields.subtitleEdit")
+          : t("wizard.spread.fields.subtitleNew")
       }
     >
       {editValid && (
@@ -294,40 +311,42 @@ export default async function SpreadFieldsPage(props: { searchParams: Search }) 
           role="status"
         >
           <span className="font-semibold uppercase tracking-[0.14em] text-[10px]">
-            Editing
+            {t("wizard.spread.fields.editBanner.label")}
           </span>
           {" — "}
           <span className="font-serif italic">
-            spread #{dbDefaults.serial}. Changes save back to the same record.
+            {t("wizard.spread.fields.editBanner.body", {
+              serial: dbDefaults.serial ?? "",
+            })}
           </span>
         </aside>
       )}
       {/* ── Legs summary (read-only) ──────────────────────────────────────── */}
       <section className="mb-10">
         <h2 className="mb-3 font-serif text-[11px] font-semibold uppercase tracking-[0.18em] text-text-tertiary">
-          Legs
+          {t("wizard.spread.fields.sections.legs")}
         </h2>
         <div className="overflow-hidden rounded-md border border-border bg-surface">
           <Table>
             <TableHeader>
               <TableRow className="hover:bg-transparent">
                 <TableHead scope="col" className="font-serif text-[10px] font-semibold uppercase tracking-[0.16em] text-text-tertiary">
-                  Symbol
+                  {t("wizard.spread.fields.legsTable.symbol")}
                 </TableHead>
                 <TableHead scope="col" className="font-serif text-[10px] font-semibold uppercase tracking-[0.16em] text-text-tertiary">
-                  Venue
+                  {t("wizard.spread.fields.legsTable.venue")}
                 </TableHead>
                 <TableHead scope="col" className="font-serif text-[10px] font-semibold uppercase tracking-[0.16em] text-text-tertiary">
-                  Side
+                  {t("wizard.spread.fields.legsTable.side")}
                 </TableHead>
                 <TableHead scope="col" className="text-right font-serif text-[10px] font-semibold uppercase tracking-[0.16em] text-text-tertiary">
-                  Qty
+                  {t("wizard.spread.fields.legsTable.qty")}
                 </TableHead>
                 <TableHead scope="col" className="text-right font-serif text-[10px] font-semibold uppercase tracking-[0.16em] text-text-tertiary">
-                  Entry → Exit
+                  {t("wizard.spread.fields.legsTable.entryExit")}
                 </TableHead>
                 <TableHead scope="col" className="text-right font-serif text-[10px] font-semibold uppercase tracking-[0.16em] text-text-tertiary">
-                  Net P&amp;L
+                  {t("wizard.spread.fields.legsTable.netPnl")}
                 </TableHead>
               </TableRow>
             </TableHeader>
@@ -387,26 +406,26 @@ export default async function SpreadFieldsPage(props: { searchParams: Search }) 
         </div>
         {missing.length > 0 && (
           <p className="mt-2 font-mono text-[10px] uppercase tracking-[0.14em] text-down">
-            {missing.length} leg id{missing.length === 1 ? "" : "s"} couldn&apos;t be resolved: {missing.join(", ")}
+            {t.plural("wizard.spread.fields.missingLegs", missing.length, {
+              ids: missing.join(", "),
+            })}
           </p>
         )}
         <p className="mt-3 font-serif text-[12px] italic text-text-tertiary">
-          Spread type:{" "}
+          {t("wizard.spread.fields.spreadTypeLabel")}{" "}
           <span className="not-italic font-medium text-text">
             {isSpreadType(spreadType)
               ? SPREAD_TYPE_LABELS[spreadType]
-              : "Not picked yet"}
+              : t("wizard.spread.fields.spreadTypeNotPicked")}
           </span>
           {matcher === "auto" && (
             <span className="ml-2 rounded bg-signature/15 px-1.5 py-px font-mono text-[9px] not-italic uppercase tracking-[0.14em] text-signature">
-              matcher
+              {t("wizard.spread.fields.matcherBadge")}
             </span>
           )}
         </p>
         <p className="mt-2 font-serif text-[11px] italic leading-snug text-text-tertiary">
-          In v1, manual spreads store the aggregate numbers and your thesis
-          below. Individual leg rows are auto-populated when the worker matches
-          real exchange fills (Phase 7).
+          {t("wizard.spread.fields.v1ManualNote")}
         </p>
       </section>
 
@@ -425,39 +444,39 @@ export default async function SpreadFieldsPage(props: { searchParams: Search }) 
           <input type="hidden" name="spreadType" value={spreadType} />
         )}
 
-        <SectionLabel>Identity</SectionLabel>
+        <SectionLabel>{t("wizard.spread.fields.sections.identity")}</SectionLabel>
         <WizardField
-          label="Spread name"
+          label={t("wizard.spread.fields.name.label")}
           htmlFor="name"
-          helper="What you'd call this in your journal. Suggested from the legs above."
+          helper={t("wizard.spread.fields.name.helper")}
           required
         >
           <WizardInput
             id="name"
             name="name"
             defaultValue={defaults.name}
-            placeholder="BTC cash-and-carry · Binance + Coinbase"
+            placeholder={t("wizard.spread.fields.name.placeholder")}
             required
             autoComplete="off"
           />
         </WizardField>
         <WizardField
-          label="Variant"
+          label={t("wizard.spread.fields.variant.label")}
           htmlFor="variant"
-          helper="Short subtitle that distinguishes this from similar spreads. e.g. 'Funding', 'Sep-26 / Dec-26'."
+          helper={t("wizard.spread.fields.variant.helper")}
         >
           <WizardInput
             id="variant"
             name="variant"
             defaultValue={defaults.variant}
-            placeholder="Funding"
+            placeholder={t("wizard.spread.fields.variant.placeholder")}
             autoComplete="off"
           />
         </WizardField>
 
-        <SectionLabel>Timing</SectionLabel>
+        <SectionLabel>{t("wizard.spread.fields.sections.timing")}</SectionLabel>
         <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
-          <WizardField label="Opened at" htmlFor="openedAt" required>
+          <WizardField label={t("wizard.spread.fields.openedAt.label")} htmlFor="openedAt" required>
             <WizardInput
               id="openedAt"
               name="openedAt"
@@ -466,7 +485,7 @@ export default async function SpreadFieldsPage(props: { searchParams: Search }) 
               required
             />
           </WizardField>
-          <WizardField label="Closed at" htmlFor="closedAt" required>
+          <WizardField label={t("wizard.spread.fields.closedAt.label")} htmlFor="closedAt" required>
             <WizardInput
               id="closedAt"
               name="closedAt"
@@ -477,12 +496,12 @@ export default async function SpreadFieldsPage(props: { searchParams: Search }) 
           </WizardField>
         </div>
 
-        <SectionLabel>Numbers</SectionLabel>
+        <SectionLabel>{t("wizard.spread.fields.sections.numbers")}</SectionLabel>
         <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
           <WizardField
-            label="Capital deployed"
+            label={t("wizard.spread.fields.capital.label")}
             htmlFor="capital"
-            helper="USD on one side of the spread (legs hedge each other)"
+            helper={t("wizard.spread.fields.capital.helper")}
             required
           >
             <WizardInput
@@ -498,9 +517,9 @@ export default async function SpreadFieldsPage(props: { searchParams: Search }) 
             />
           </WizardField>
           <WizardField
-            label="Realized net P&L"
+            label={t("wizard.spread.fields.netPnl.label")}
             htmlFor="netPnl"
-            helper="USD, summed across legs"
+            helper={t("wizard.spread.fields.netPnl.helper")}
             required
           >
             <WizardInput
@@ -516,14 +535,14 @@ export default async function SpreadFieldsPage(props: { searchParams: Search }) 
           </WizardField>
         </div>
 
-        <SectionLabel>Headline</SectionLabel>
+        <SectionLabel>{t("wizard.spread.fields.sections.headline")}</SectionLabel>
         <div className="grid grid-cols-1 gap-5 md:grid-cols-[120px_1fr]">
           <fieldset className="flex flex-col gap-1.5">
             <legend className="mb-0.5 font-mono text-[10px] uppercase tracking-[0.16em] text-text-tertiary">
-              Unit
-              <span className="ml-1.5 text-text-disabled">· required</span>
+              {t("wizard.spread.fields.unit.legend")}
+              <span className="ml-1.5 text-text-disabled">{t("wizard.spread.fields.unit.requiredSuffix")}</span>
             </legend>
-            <div role="radiogroup" aria-label="Headline unit" className="grid grid-cols-2 gap-2">
+            <div role="radiogroup" aria-label={t("wizard.spread.fields.unit.ariaLabel")} className="grid grid-cols-2 gap-2">
               {(["APR", "BPS/D"] as const).map((u) => (
                 <label
                   key={u}
@@ -546,9 +565,9 @@ export default async function SpreadFieldsPage(props: { searchParams: Search }) 
             </div>
           </fieldset>
           <WizardField
-            label="Headline value"
+            label={t("wizard.spread.fields.headlineValue.label")}
             htmlFor="headlineValue"
-            helper="The realized number to feature on the detail page hero. e.g. 14.0 (APR %), 152 (bps/day)."
+            helper={t("wizard.spread.fields.headlineValue.helper")}
           >
             <WizardInput
               id="headlineValue"
@@ -562,24 +581,24 @@ export default async function SpreadFieldsPage(props: { searchParams: Search }) 
           </WizardField>
         </div>
 
-        <SectionLabel>Thesis &amp; tags</SectionLabel>
+        <SectionLabel>{t("wizard.spread.fields.sections.thesisAndTags")}</SectionLabel>
         <WizardField
-          label="Thesis"
+          label={t("wizard.spread.fields.thesis.label")}
           htmlFor="thesis"
-          helper="Why you put this spread on. The journal's most valuable field at review time."
+          helper={t("wizard.spread.fields.thesis.helper")}
         >
           <WizardTextarea
             id="thesis"
             name="thesis"
             rows={5}
             defaultValue={defaults.thesis}
-            placeholder="Opened into the BTC ETF-inflow narrative at 17.8% annualized funding. Exit when funding flips negative…"
+            placeholder={t("wizard.spread.fields.thesis.placeholder")}
           />
         </WizardField>
         <WizardField
-          label="Regime tags"
+          label={t("wizard.spread.fields.regimeTags.label")}
           htmlFor="regimeTags"
-          helper="Comma-separated. e.g. funding-positive, contango, risk-on"
+          helper={t("wizard.spread.fields.regimeTags.helper")}
         >
           <WizardInput
             id="regimeTags"
@@ -596,13 +615,13 @@ export default async function SpreadFieldsPage(props: { searchParams: Search }) 
             className="inline-flex items-center gap-1.5 font-mono text-[11px] uppercase tracking-[0.16em] text-text-tertiary transition-colors hover:text-text"
           >
             <ArrowLeft className="h-3 w-3" />
-            Back
+            {t("wizard.spread.fields.back")}
           </Link>
           <button
             type="submit"
             className="inline-flex items-center gap-2 rounded-md border border-text bg-text px-4 py-2 font-mono text-[11px] uppercase tracking-[0.16em] text-app transition-colors hover:bg-text-secondary"
           >
-            Review
+            {t("wizard.spread.fields.continue")}
             <ArrowRight className="h-3 w-3" />
           </button>
         </div>

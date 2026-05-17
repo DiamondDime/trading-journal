@@ -3,9 +3,8 @@ import { ArrowLeft, ArrowRight } from "lucide-react";
 import { WizardShell } from "@/components/wizard/wizard-shell";
 import { WizardSummaryRow } from "@/components/wizard/wizard-summary-row";
 import { WizardErrorBanner } from "@/components/wizard/wizard-error-banner";
+import { getT } from "@/lib/i18n/server";
 import { logAirdrop } from "../actions";
-
-const STEP_LABELS = ["Details", "Review"] as const;
 
 const AIRDROP_FIELDS = [
   "protocol",
@@ -67,7 +66,13 @@ function fmtTokens(n: number): string {
 export default async function AirdropReviewPage(props: {
   searchParams: Search;
 }) {
+  const t = await getT();
   const sp = await props.searchParams;
+
+  const STEP_LABELS = [
+    t("wizard.airdrop.review.stepLabels.details"),
+    t("wizard.airdrop.review.stepLabels.review"),
+  ] as const;
 
   const v = {
     protocol: getStr(sp, "protocol"),
@@ -109,11 +114,15 @@ export default async function AirdropReviewPage(props: {
       step={2}
       totalSteps={2}
       stepLabels={STEP_LABELS}
-      title={isEditing ? "Confirm changes" : "Look it over"}
+      title={
+        isEditing
+          ? t("wizard.airdrop.review.titleEdit")
+          : t("wizard.airdrop.review.title")
+      }
       subtitle={
         isEditing
-          ? "Saving these changes to the same record. Edit any row to bounce back to the form."
-          : "One last pass before this hits your journal. Edit any row to bounce back to the form."
+          ? t("wizard.airdrop.review.subtitleEdit")
+          : t("wizard.airdrop.review.subtitle")
       }
     >
       <WizardErrorBanner error={getStr(sp, "error") || undefined} />
@@ -121,7 +130,7 @@ export default async function AirdropReviewPage(props: {
       <section className="border-y border-border py-10">
         <div className="flex flex-col gap-2">
           <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-text-tertiary">
-            Mark-to-market · preview
+            {t("wizard.airdrop.review.hero.caption")}
           </p>
           <div className="flex items-baseline gap-3">
             <span
@@ -131,11 +140,11 @@ export default async function AirdropReviewPage(props: {
               {tokens > 0 && currentPrice > 0 ? fmtMultiplier(multiplier) : "—"}
             </span>
             <span className="font-serif text-xl font-normal text-text-tertiary">
-              MTM
+              {t("wizard.airdrop.review.hero.mtmLabel")}
             </span>
           </div>
           <p className="mt-2 font-mono text-[13px] text-text-secondary">
-            Net{" "}
+            {t("wizard.airdrop.review.hero.netPrefix")}{" "}
             <span
               className={
                 headlineTone === "up"
@@ -145,11 +154,12 @@ export default async function AirdropReviewPage(props: {
             >
               {fmtUsd(netPnl, true)}
             </span>{" "}
-            realized · cost basis $0
+            {t("wizard.airdrop.review.hero.realizedSuffix")}
             {tokens > 0 && (
               <>
                 {" · "}
-                {fmtTokens(tokens)} {v.asset || "tokens"}
+                {fmtTokens(tokens)}{" "}
+                {v.asset || t("wizard.airdrop.review.hero.tokensFallback")}
               </>
             )}
           </p>
@@ -159,72 +169,72 @@ export default async function AirdropReviewPage(props: {
       {/* ── Field summary ─────────────────────────────────────────────── */}
       <section className="mt-10">
         <h2 className="mb-2 font-serif text-[11px] font-semibold uppercase tracking-[0.18em] text-text-tertiary">
-          Airdrop
+          {t("wizard.airdrop.review.section.airdrop")}
         </h2>
         <div>
           <WizardSummaryRow
-            label="Protocol"
+            label={t("wizard.airdrop.review.row.protocol")}
             value={v.protocol || "—"}
             editHref={editAllHref}
           />
           <WizardSummaryRow
-            label="Token"
+            label={t("wizard.airdrop.review.row.token")}
             value={v.asset || "—"}
             editHref={editAllHref}
           />
         </div>
 
         <h2 className="mb-2 mt-8 font-serif text-[11px] font-semibold uppercase tracking-[0.18em] text-text-tertiary">
-          Claim
+          {t("wizard.airdrop.review.section.claim")}
         </h2>
         <div>
           <WizardSummaryRow
-            label="Tokens claimed"
+            label={t("wizard.airdrop.review.row.tokensClaimed")}
             value={fmtTokens(tokens)}
             editHref={editAllHref}
           />
           <WizardSummaryRow
-            label="Claim date"
+            label={t("wizard.airdrop.review.row.claimDate")}
             value={fmtDate(v.claimDate)}
             editHref={editAllHref}
           />
           <WizardSummaryRow
-            label="Value at claim"
+            label={t("wizard.airdrop.review.row.valueAtClaim")}
             value={valueAtClaim > 0 ? fmtUsd(valueAtClaim) : "—"}
             editHref={editAllHref}
           />
           <WizardSummaryRow
-            label="Current price"
+            label={t("wizard.airdrop.review.row.currentPrice")}
             value={currentPrice > 0 ? fmtUsd(currentPrice) : "—"}
             editHref={editAllHref}
           />
           <WizardSummaryRow
-            label="Current value"
+            label={t("wizard.airdrop.review.row.currentValue")}
             value={currentValue > 0 ? fmtUsd(currentValue) : "—"}
           />
           <WizardSummaryRow
-            label="MTM ×"
+            label={t("wizard.airdrop.review.row.mtmMultiplier")}
             value={tokens > 0 && currentPrice > 0 ? fmtMultiplier(multiplier) : "—"}
             tone={multiplier >= 1 ? "up" : "down"}
           />
           <WizardSummaryRow
-            label="Net P&L"
+            label={t("wizard.airdrop.review.row.netPnl")}
             value={fmtUsd(netPnl, true)}
             tone={netPnl >= 0 ? "up" : "down"}
           />
         </div>
 
         <h2 className="mb-2 mt-8 font-serif text-[11px] font-semibold uppercase tracking-[0.18em] text-text-tertiary">
-          Thesis &amp; tags
+          {t("wizard.airdrop.review.section.thesisTags")}
         </h2>
         <div>
           <WizardSummaryRow
-            label="Regime tags"
+            label={t("wizard.airdrop.review.row.regimeTags")}
             value={v.regimeTags || "—"}
             editHref={editAllHref}
           />
           <WizardSummaryRow
-            label="Note"
+            label={t("wizard.airdrop.review.row.note")}
             value={v.note || "—"}
             editHref={editAllHref}
             mono={false}
@@ -244,13 +254,15 @@ export default async function AirdropReviewPage(props: {
             className="inline-flex items-center gap-1.5 font-mono text-[11px] uppercase tracking-[0.16em] text-text-tertiary transition-colors hover:text-text"
           >
             <ArrowLeft className="h-3 w-3" />
-            Back
+            {t("wizard.airdrop.review.nav.back")}
           </Link>
           <button
             type="submit"
             className="inline-flex items-center gap-2 rounded-md border border-text bg-text px-5 py-2 font-mono text-[11px] uppercase tracking-[0.16em] text-app transition-colors hover:bg-text-secondary"
           >
-            {isEditing ? "Save changes" : "Log airdrop"}
+            {isEditing
+              ? t("wizard.airdrop.review.nav.saveChanges")
+              : t("wizard.airdrop.review.nav.logAirdrop")}
             <ArrowRight className="h-3 w-3" />
           </button>
         </div>
