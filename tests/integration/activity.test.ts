@@ -29,6 +29,7 @@ import {
   getActivityTypeCounts,
   getActivityTypeNetPnl,
   getRecentCloses,
+  getDailyPnl,
 } from '@/lib/db/activity';
 import {
   CreateTradeBody,
@@ -580,5 +581,79 @@ describe('dashboard aggregations', () => {
   it('getRecentCloses respects the limit argument', async () => {
     const rows = await getRecentCloses(TEST_USER_ID, 2);
     expect(rows.length).toBe(2);
+  });
+});
+
+// ============================================================================
+// getDailyPnl — heatmap aggregation
+// ============================================================================
+
+describe('getDailyPnl', () => {
+  beforeEach(async () => {
+    // Three activities on three different days. Two on the same day to verify
+    // aggregation.
+    await seedTradeActivity({
+      connectionId: testUser.connectionId,
+      netPnl: 100,
+      closedAt: '2026-05-10T12:00:00Z',
+    });
+    await seedTradeActivity({
+      connectionId: testUser.connectionId,
+      netPnl: -40,
+      closedAt: '2026-05-10T16:00:00Z',
+    });
+    await seedTradeActivity({
+      connectionId: testUser.connectionId,
+      netPnl: 250,
+      closedAt: '2026-05-12T09:00:00Z',
+    });
+    // Outside the window (after) — should not appear. The seed helper pins
+    // openedAt to 2026-04-25, so we use a closedAt well after that to satisfy
+    // chk_activity_dates.
+    await seedTradeActivity({
+      connectionId: testUser.connectionId,
+      netPnl: 999,
+      closedAt: '2026-06-01T09:00:00Z',
+    });
+  });
+
+  it('buckets activities by date and aggregates net P&L + count', async () => {
+    const rows = await getDailyPnl(TEST_USER_ID, '2026-05-09', '2026-05-15');
+    // Two distinct days have activity in range.
+    expect(rows).toHaveLength(2);
+    const may10 = rows.find((r) => r.date === '2026-05-10');
+    const may12 = rows.find((r) => r.date === '2026-05-12');
+    expect(may10).toBeDefined();
+    expect(may10!.netPnl).toBeCloseTo(60, 5); // 100 + -40
+    expect(may10!.count).toBe(2);
+    expect(may12).toBeDefined();
+    expect(may12!.netPnl).toBeCloseTo(250, 5);
+    expect(may12!.count).toBe(1);
+  });
+
+  it('excludes activities outside the date range', async () => {
+    const rows = await getDailyPnl(TEST_USER_ID, '2026-05-09', '2026-05-15');
+    // The June activity (999) must not leak in.
+    for (const r of rows) {
+      expect(r.netPnl).not.toBe(999);
+      expect(r.date >= '2026-05-09' && r.date <= '2026-05-15').toBe(true);
+    }
+  });
+
+  it('returns an empty array when no activities fall in the window', async () => {
+    const rows = await getDailyPnl(TEST_USER_ID, '2025-01-01', '2025-01-31');
+    expect(rows).toEqual([]);
+  });
+
+  it('does not leak across users', async () => {
+    const rows = await getDailyPnl(OTHER_USER_ID, '2026-05-09', '2026-05-15');
+    expect(rows).toEqual([]);
+  });
+
+  it('returns dates as YYYY-MM-DD strings, not timestamps', async () => {
+    const rows = await getDailyPnl(TEST_USER_ID, '2026-05-09', '2026-05-15');
+    for (const r of rows) {
+      expect(r.date).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    }
   });
 });
