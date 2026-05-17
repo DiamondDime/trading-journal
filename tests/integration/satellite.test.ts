@@ -26,6 +26,7 @@ import {
   listTagsForActivity,
   setTagsForActivity,
   listAllTagsForUser,
+  getTagAggregations,
   upsertExcursion,
   getExcursionForActivity,
   deleteExcursion,
@@ -245,6 +246,120 @@ describe('activity_tag', () => {
     await deleteActivity(TEST_USER_ID, a1);
     const all = await listAllTagsForUser(TEST_USER_ID);
     expect(all.find((r) => r.tag === 'orphan')).toBeUndefined();
+  });
+});
+
+// ===========================================================================
+// getTagAggregations — dashboard "Performance by tag" data source
+// ===========================================================================
+
+describe('getTagAggregations', () => {
+  it('returns empty when no tags exist', async () => {
+    const aggs = await getTagAggregations(TEST_USER_ID);
+    expect(aggs).toEqual([]);
+  });
+
+  it('aggregates count, win rate, profit factor, total pnl per tag', async () => {
+    // Build a fixture deck:
+    //   breakout: 3 activities. PnL +100, +200, -50. count=3, wins=2,
+    //   losses=1, totalPnl=250, avgPnl≈83.3, winRate=2/3≈0.667,
+    //   profitFactor = (100+200) / 50 = 6.0.
+    //
+    //   fade: 2 activities. PnL -100, -200. count=2, wins=0, losses=2,
+    //   totalPnl=-300, avgPnl=-150, winRate=0,
+    //   profitFactor = 0 / 300 = 0 (matches computeMoreMetrics convention —
+    //   "no wins" is a meaningful 0, not null; only "no losses" is null
+    //   because that's the division by zero case).
+    //
+    //   london: 1 activity. PnL +500. count=1, wins=1, losses=0,
+    //   profitFactor=null (no losses).
+    const a1 = await seedTradeActivity({ connectionId: testUser.connectionId, symbol: 'BTC-PERP', netPnl: 100 });
+    const a2 = await seedTradeActivity({ connectionId: testUser.connectionId, symbol: 'ETH-PERP', netPnl: 200 });
+    const a3 = await seedTradeActivity({ connectionId: testUser.connectionId, symbol: 'SOL-PERP', netPnl: -50 });
+    const a4 = await seedTradeActivity({ connectionId: testUser.connectionId, symbol: 'ARB-PERP', netPnl: -100 });
+    const a5 = await seedTradeActivity({ connectionId: testUser.connectionId, symbol: 'OP-PERP',  netPnl: -200 });
+    const a6 = await seedTradeActivity({ connectionId: testUser.connectionId, symbol: 'AVAX-PERP', netPnl: 500 });
+
+    await setTagsForActivity(TEST_USER_ID, a1, ['breakout']);
+    await setTagsForActivity(TEST_USER_ID, a2, ['breakout']);
+    await setTagsForActivity(TEST_USER_ID, a3, ['breakout']);
+    await setTagsForActivity(TEST_USER_ID, a4, ['fade']);
+    await setTagsForActivity(TEST_USER_ID, a5, ['fade']);
+    await setTagsForActivity(TEST_USER_ID, a6, ['london']);
+
+    const aggs = await getTagAggregations(TEST_USER_ID);
+    const byTag = Object.fromEntries(aggs.map((r) => [r.tag, r]));
+
+    expect(byTag.breakout.count).toBe(3);
+    expect(byTag.breakout.totalPnl).toBe(250);
+    expect(byTag.breakout.avgPnl).toBeCloseTo(250 / 3, 6);
+    expect(byTag.breakout.winRate).toBeCloseTo(2 / 3, 6);
+    expect(byTag.breakout.profitFactor).toBeCloseTo(300 / 50, 6);
+
+    expect(byTag.fade.count).toBe(2);
+    expect(byTag.fade.totalPnl).toBe(-300);
+    expect(byTag.fade.winRate).toBe(0);
+    // No wins + at least one loss → profitFactor = 0/grossLosses = 0.
+    // (computeMoreMetrics treats this the same way.)
+    expect(byTag.fade.profitFactor).toBe(0);
+
+    expect(byTag.london.count).toBe(1);
+    expect(byTag.london.profitFactor).toBeNull();
+  });
+
+  it('one activity with multiple tags contributes to each tag row', async () => {
+    // Tagged activity should show up in breakout AND london counts.
+    const id = await seedTradeActivity({ connectionId: testUser.connectionId, netPnl: 150 });
+    await setTagsForActivity(TEST_USER_ID, id, ['breakout', 'london']);
+
+    const aggs = await getTagAggregations(TEST_USER_ID);
+    const counts = Object.fromEntries(aggs.map((r) => [r.tag, r.count]));
+    expect(counts.breakout).toBe(1);
+    expect(counts.london).toBe(1);
+  });
+
+  it('excludes soft-deleted activities from aggregations', async () => {
+    const a1 = await seedTradeActivity({ connectionId: testUser.connectionId, netPnl: 100 });
+    const a2 = await seedTradeActivity({ connectionId: testUser.connectionId, netPnl: 200 });
+    await setTagsForActivity(TEST_USER_ID, a1, ['breakout']);
+    await setTagsForActivity(TEST_USER_ID, a2, ['breakout']);
+    await deleteActivity(TEST_USER_ID, a2);
+    const aggs = await getTagAggregations(TEST_USER_ID);
+    const breakout = aggs.find((r) => r.tag === 'breakout');
+    expect(breakout?.count).toBe(1);
+    expect(breakout?.totalPnl).toBe(100);
+  });
+
+  it('sorts by count desc then tag asc', async () => {
+    // Tag A: 2 activities. Tag B: 2 activities. Tag C: 1 activity.
+    // Expected order: A, B (alpha tiebreaker), C.
+    const a1 = await seedTradeActivity({ connectionId: testUser.connectionId, netPnl: 1 });
+    const a2 = await seedTradeActivity({ connectionId: testUser.connectionId, netPnl: 2 });
+    const a3 = await seedTradeActivity({ connectionId: testUser.connectionId, netPnl: 3 });
+    const a4 = await seedTradeActivity({ connectionId: testUser.connectionId, netPnl: 4 });
+    const a5 = await seedTradeActivity({ connectionId: testUser.connectionId, netPnl: 5 });
+    await setTagsForActivity(TEST_USER_ID, a1, ['alpha']);
+    await setTagsForActivity(TEST_USER_ID, a2, ['alpha']);
+    await setTagsForActivity(TEST_USER_ID, a3, ['bravo']);
+    await setTagsForActivity(TEST_USER_ID, a4, ['bravo']);
+    await setTagsForActivity(TEST_USER_ID, a5, ['charlie']);
+
+    const aggs = await getTagAggregations(TEST_USER_ID);
+    expect(aggs.map((r) => r.tag)).toEqual(['alpha', 'bravo', 'charlie']);
+  });
+
+  it('cross-user isolation', async () => {
+    const idA = await seedTradeActivity({ connectionId: testUser.connectionId, netPnl: 100 });
+    const idB = await seedTradeActivity({
+      userId: OTHER_USER_ID,
+      connectionId: otherUser.connectionId,
+      netPnl: -50,
+    });
+    await setTagsForActivity(TEST_USER_ID, idA, ['mine']);
+    await setTagsForActivity(OTHER_USER_ID, idB, ['theirs']);
+    const aggsA = await getTagAggregations(TEST_USER_ID);
+    expect(aggsA.map((r) => r.tag)).toEqual(['mine']);
+    expect(aggsA[0].totalPnl).toBe(100);
   });
 });
 

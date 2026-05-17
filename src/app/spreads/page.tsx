@@ -33,6 +33,8 @@ import {
   getDailyPnl,
   getAllClosedActivities,
 } from "@/lib/db/activity";
+import { getTagAggregations } from "@/lib/db/satellite";
+import { TagPerformanceTable } from "@/components/spread/tag-performance-table";
 import {
   computeDrawdown,
   computeStreaks,
@@ -219,6 +221,7 @@ export default async function SpreadsPage() {
     allRows,
     closedRows,
     dailyPnl,
+    tagAggs,
   ] = await Promise.all([
     getTotals(userId),
     getActivityTypeCounts(userId),
@@ -226,6 +229,7 @@ export default async function SpreadsPage() {
     listActivities(userId, { limit: 200, sortField: "closed_at", sortDir: "desc" }),
     getAllClosedActivities(userId),
     getDailyPnl(userId, heatmapStart, heatmapEnd),
+    getTagAggregations(userId),
   ]);
 
   const firstActivityYmd = totals.firstClose
@@ -626,24 +630,36 @@ export default async function SpreadsPage() {
           <RDistributionChart bins={rBins} />
         </section>
 
-        {/* ── performance by tag (Wave 10-2 placeholder) ─────────────────── */}
+        {/* ── performance by tag (Wave 10-2) ─────────────────────────────── */}
         <section className="mb-10 rounded-md border border-border bg-surface p-6">
           <div className="mb-4 flex items-baseline justify-between">
-            <h3 className="font-serif text-[12px] font-semibold uppercase tracking-[0.16em] text-text">
-              Performance by tag
-            </h3>
-            <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-text-tertiary">
-              coming soon
-            </span>
+            <div>
+              <h3 className="font-serif text-[12px] font-semibold uppercase tracking-[0.16em] text-text">
+                Performance by tag
+              </h3>
+              <p className="mt-1 font-serif text-[12px] italic text-text-tertiary">
+                Setup labels grouped by P&amp;L. An activity tagged twice counts
+                toward both rows.
+              </p>
+            </div>
+            {tagAggs.length > 0 && (
+              <span className="font-mono text-[11px] text-text-tertiary">
+                {tagAggs.length} distinct {tagAggs.length === 1 ? "tag" : "tags"}
+              </span>
+            )}
           </div>
-          <div className="flex flex-col items-center justify-center gap-2 rounded-md border border-dashed border-border bg-inset py-10">
-            <p className="font-serif text-sm italic text-text-secondary">
-              Tag-grouped metrics will appear here once you tag your trades.
-            </p>
-            <p className="font-mono text-[10px] uppercase tracking-[0.16em] text-text-tertiary">
-              regime · custom · counterparty
-            </p>
-          </div>
+          {tagAggs.length > 0 ? (
+            <TagPerformanceTable rows={tagAggs} topN={10} />
+          ) : (
+            <div className="flex flex-col items-center justify-center gap-2 rounded-md border border-dashed border-border bg-inset py-10">
+              <p className="font-serif text-sm italic text-text-secondary">
+                Tag-grouped metrics will appear here once you tag your trades.
+              </p>
+              <p className="font-mono text-[10px] uppercase tracking-[0.16em] text-text-tertiary">
+                regime · custom · counterparty
+              </p>
+            </div>
+          )}
         </section>
 
         {/* ── notes feed + activity mix ─────────────────────────────────── */}

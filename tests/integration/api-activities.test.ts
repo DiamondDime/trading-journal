@@ -20,6 +20,7 @@ import { POST as POST_SALE } from '@/app/api/activities/sale/route';
 import { POST as POST_AIRDROP } from '@/app/api/activities/airdrop/route';
 import { GET as GET_LIST } from '@/app/api/activities/route';
 import { GET as GET_ONE, DELETE as DELETE_ONE, PATCH as PATCH_ONE } from '@/app/api/activities/[id]/route';
+import { POST as POST_BACKFILL } from '@/app/api/activities/[id]/excursion/backfill/route';
 
 let testUser: Awaited<ReturnType<typeof seedTestUser>>;
 
@@ -307,6 +308,61 @@ describe('PATCH /api/activities/[id]', () => {
   it('returns 404 for a non-UUID id', async () => {
     const req = jsonReq('http://localhost/api/activities/x', { name: 'x' }, 'PATCH');
     const res = await PATCH_ONE(req, emptyCtx({ id: 'sa-001' }));
+    expect(res.status).toBe(404);
+  });
+});
+
+// ===========================================================================
+// POST /api/activities/[id]/excursion/backfill
+// ===========================================================================
+//
+// This is a deliberately-half-measure endpoint: v1 has no in-process job
+// queue. The route returns 202 + a manual-trigger message so the UI can
+// surface honest copy to the trader, but the Python worker is what actually
+// fetches klines + computes MAE/MFE.
+//
+// The tests cover:
+//   - happy path: 202 + envelope with `queued: false` + manual-trigger string
+//   - 404 on non-owned id (no enumeration leak)
+//   - 404 on non-UUID id
+
+describe('POST /api/activities/[id]/excursion/backfill', () => {
+  it('returns 202 with manual-trigger instructions on an owned activity', async () => {
+    const id = await seedTradeActivity({ connectionId: testUser.connectionId });
+    const req = jsonReq(
+      `http://localhost/api/activities/${id}/excursion/backfill`,
+      {},
+      'POST',
+    );
+    const res = await POST_BACKFILL(req, emptyCtx({ id }));
+    expect(res.status).toBe(202);
+    const body = await res.json();
+    expect(body.data.queued).toBe(false);
+    expect(body.data.activityId).toBe(id);
+    // Honest copy: must mention the CLI to run.
+    expect(body.data.message).toMatch(/pnpm worker:backfill-excursions/);
+    expect(body.data.message).toContain(id);
+  });
+
+  it('returns 404 for a UUID that the user does not own', async () => {
+    const req = jsonReq(
+      'http://localhost/api/activities/x/excursion/backfill',
+      {},
+      'POST',
+    );
+    // Random UUID that doesn't exist in the DB.
+    const ghostId = '00000000-0000-0000-0000-000000000000';
+    const res = await POST_BACKFILL(req, emptyCtx({ id: ghostId }));
+    expect(res.status).toBe(404);
+  });
+
+  it('returns 404 on a non-UUID id (no leak via parser error)', async () => {
+    const req = jsonReq(
+      'http://localhost/api/activities/x/excursion/backfill',
+      {},
+      'POST',
+    );
+    const res = await POST_BACKFILL(req, emptyCtx({ id: 'not-a-uuid' }));
     expect(res.status).toBe(404);
   });
 });

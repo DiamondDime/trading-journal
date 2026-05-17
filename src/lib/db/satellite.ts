@@ -199,6 +199,119 @@ export async function listAllTagsForUser(userId: string): Promise<UserTagCount[]
 }
 
 // ============================================================================
+// getTagAggregations — per-tag performance metrics for the dashboard
+// ============================================================================
+
+export interface TagAggregation {
+  tag: string;
+  count: number;
+  /** Fraction in [0, 1]. Activities with netPnl > 0 / activities with non-null netPnl. */
+  winRate: number;
+  /** Mean netPnlUsd (USD) over tagged activities with non-null netPnl. */
+  avgPnl: number;
+  /** Gross wins / |gross losses|. null when there are no losses (would be ∞). */
+  profitFactor: number | null;
+  /** Sum of netPnlUsd (USD). */
+  totalPnl: number;
+}
+
+/**
+ * Per-tag performance aggregations for the dashboard "Performance by tag"
+ * table.
+ *
+ * Subtle correctness notes:
+ *
+ *   1. An activity with N tags contributes to N rows in this output. That's
+ *      intentional — "trades tagged breakout" and "trades tagged london" can
+ *      overlap. The same is true for the count column: if a single trade is
+ *      tagged both, it counts as 1 toward each.
+ *
+ *   2. Activities with NULL net_pnl_usd (still open) are excluded by the
+ *      `net_pnl_usd IS NOT NULL` filter — including them would skew the
+ *      averages and is meaningless for "performance".
+ *
+ *   3. profitFactor uses FILTER (WHERE …) aggregates rather than CASE
+ *      expressions so the SUM hits exactly the rows that need it. When
+ *      there are no losses at all, dividing zero by zero produces NULL in
+ *      SQL — we coerce that to JS null on the read side rather than 0 so
+ *      the UI can render "—" / "∞" rather than misleading the trader.
+ *
+ *   4. winRate's denominator is rows with non-null net_pnl_usd. Sorting by
+ *      count desc then tag asc gives a stable display order across renders.
+ *
+ *   5. Soft-deleted activities (deleted_at IS NOT NULL) are excluded via
+ *      the JOIN. The CASCADE FK on activity_tag → activity won't fire for
+ *      soft-deletes since the row stays; the filter is what enforces
+ *      consistency.
+ */
+export async function getTagAggregations(
+  userId: string,
+): Promise<TagAggregation[]> {
+  const rows = await sql<{
+    tag: string;
+    count: string;
+    winCount: string;
+    lossCount: string;
+    pnlCount: string;
+    grossWins: string | null;
+    grossLosses: string | null; // accumulator stores positive sum of |losses|
+    totalPnl: string | null;
+  }[]>`
+    SELECT
+      t.tag                                                          AS tag,
+      count(*)::text                                                 AS count,
+      -- Activities (with non-null net_pnl_usd) tagged with this tag.
+      count(*) FILTER (
+        WHERE a.net_pnl_usd IS NOT NULL AND a.net_pnl_usd > 0
+      )::text                                                        AS win_count,
+      count(*) FILTER (
+        WHERE a.net_pnl_usd IS NOT NULL AND a.net_pnl_usd < 0
+      )::text                                                        AS loss_count,
+      count(*) FILTER (WHERE a.net_pnl_usd IS NOT NULL)::text        AS pnl_count,
+      sum(a.net_pnl_usd) FILTER (
+        WHERE a.net_pnl_usd > 0
+      )::text                                                        AS gross_wins,
+      -- ABS so the accumulator is positive — matches computeMoreMetrics.
+      sum(abs(a.net_pnl_usd)) FILTER (
+        WHERE a.net_pnl_usd < 0
+      )::text                                                        AS gross_losses,
+      sum(a.net_pnl_usd) FILTER (
+        WHERE a.net_pnl_usd IS NOT NULL
+      )::text                                                        AS total_pnl
+    FROM public.activity_tag t
+    JOIN public.activity a ON a.id = t.activity_id
+    WHERE t.user_id      = ${userId}::uuid
+      AND a.deleted_at IS NULL
+    GROUP BY t.tag
+    ORDER BY count(*) DESC, t.tag ASC
+  `;
+
+  return rows.map((r) => {
+    const count = Number(r.count);
+    const pnlCount = Number(r.pnlCount);
+    const winCount = Number(r.winCount);
+    const lossCount = Number(r.lossCount);
+    const grossWins = r.grossWins == null ? 0 : Number(r.grossWins);
+    const grossLosses = r.grossLosses == null ? 0 : Number(r.grossLosses);
+    const totalPnl = r.totalPnl == null ? 0 : Number(r.totalPnl);
+    return {
+      tag: r.tag,
+      count,
+      // winRate's denominator is rows with a known outcome (non-null
+      // net_pnl_usd). For tag rows where every activity is open / null pnl,
+      // winRate degrades to 0 — keep the column populated so the UI doesn't
+      // get a NaN.
+      winRate: pnlCount > 0 ? winCount / pnlCount : 0,
+      avgPnl: pnlCount > 0 ? totalPnl / pnlCount : 0,
+      profitFactor: lossCount > 0 ? grossWins / grossLosses : null,
+      totalPnl,
+      // winCount / lossCount intentionally not exported — the table only
+      // needs count + winRate. If a future caller needs them, expose then.
+    } satisfies TagAggregation;
+  });
+}
+
+// ============================================================================
 // activity_excursion — MAE/MFE/stop-loss
 // ============================================================================
 
