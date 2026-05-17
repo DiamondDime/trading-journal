@@ -34,7 +34,7 @@ import psycopg
 
 from csj_worker import db as dbx
 from csj_worker import excursions as excx
-from csj_worker.adapters import ExchangeAdapter
+from csj_worker.adapters import ExchangeAdapter, get_adapter
 from csj_worker.adapters.base import (
     AdapterAuthError,
     AdapterError,
@@ -73,20 +73,11 @@ def _env_int(name: str, default: int) -> int:
 def _get_adapter(exchange_code: str) -> ExchangeAdapter | None:
     """Return an adapter instance for a given exchange code, or None if unsupported.
 
-    Imports are local to keep startup cost small when the daemon only handles
-    one exchange in a given cycle.
+    Delegates to ``csj_worker.adapters.get_adapter`` which consults the
+    universal-adapter registry first, then the env-var legacy override
+    (``CSJ_USE_LEGACY_ADAPTER_<CODE>=1``).
     """
-    code = exchange_code.lower()
-    if code == "binance":
-        from csj_worker.adapters.binance import BinanceAdapter
-        return BinanceAdapter()
-    if code == "bybit":
-        from csj_worker.adapters.bybit import BybitAdapter
-        return BybitAdapter()
-    if code == "hyperliquid":
-        from csj_worker.adapters.hyperliquid import HyperliquidAdapter
-        return HyperliquidAdapter()
-    return None
+    return get_adapter(exchange_code)
 
 
 # ---------------------------------------------------------------------------

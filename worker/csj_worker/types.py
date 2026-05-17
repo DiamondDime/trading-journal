@@ -34,6 +34,7 @@ class Exchange(str, Enum):
     KRAKEN = "kraken"
     GATE = "gate"
     BINGX = "bingx"
+    HTX = "htx"
 
 
 class ExchangeKind(str, Enum):

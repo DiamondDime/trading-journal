@@ -77,22 +77,49 @@ class TestEnvInt:
 
 
 class TestGetAdapter:
-    """Adapter registry returns concrete classes for v1 exchanges only."""
+    """Adapter registry returns the universal adapter for v1 exchanges.
 
-    def test_returns_binance_adapter(self) -> None:
+    Post-Wave-12B: CEX adapters all funnel through ``CcxtUniversalAdapter``
+    driven by per-venue ``VenueConfig``. Hyperliquid stays bespoke (no ccxt
+    coverage). Legacy hand-built adapters are still reachable via the
+    ``CSJ_USE_LEGACY_ADAPTER_<CODE>=1`` env-var escape hatch.
+    """
+
+    def test_returns_universal_adapter_for_binance(self) -> None:
         adapter = worker_main._get_adapter("binance")
         assert adapter is not None
-        assert adapter.__class__.__name__ == "BinanceAdapter"
+        assert adapter.__class__.__name__ == "CcxtUniversalAdapter"
+        assert adapter.config.code == "binance"
 
-    def test_returns_bybit_adapter(self) -> None:
+    def test_returns_universal_adapter_for_bybit(self) -> None:
         adapter = worker_main._get_adapter("bybit")
         assert adapter is not None
-        assert adapter.__class__.__name__ == "BybitAdapter"
+        assert adapter.__class__.__name__ == "CcxtUniversalAdapter"
+        assert adapter.config.code == "bybit"
 
     def test_returns_hyperliquid_adapter(self) -> None:
         adapter = worker_main._get_adapter("hyperliquid")
         assert adapter is not None
         assert adapter.__class__.__name__ == "HyperliquidAdapter"
+
+    def test_returns_universal_adapter_for_all_v12b_exchanges(self) -> None:
+        # All 10 v1 CEX exchanges should resolve to the universal adapter.
+        for code in (
+            "binance",
+            "bybit",
+            "bingx",
+            "gate",
+            "mexc",
+            "kucoin",
+            "bitget",
+            "htx",
+            "okx",
+            "phemex",
+        ):
+            adapter = worker_main._get_adapter(code)
+            assert adapter is not None, code
+            assert adapter.__class__.__name__ == "CcxtUniversalAdapter", code
+            assert adapter.config.code == code
 
     def test_returns_none_for_unimplemented(self) -> None:
         assert worker_main._get_adapter("aster") is None
@@ -101,6 +128,26 @@ class TestGetAdapter:
     def test_is_case_insensitive(self) -> None:
         assert worker_main._get_adapter("BINANCE") is not None
         assert worker_main._get_adapter("Bybit") is not None
+
+    def test_legacy_override_env_var_returns_legacy_adapter(self) -> None:
+        # CSJ_USE_LEGACY_ADAPTER_BINANCE=1 returns the legacy hand-built
+        # BinanceAdapter instead of CcxtUniversalAdapter.
+        os.environ["CSJ_USE_LEGACY_ADAPTER_BINANCE"] = "1"
+        try:
+            adapter = worker_main._get_adapter("binance")
+            assert adapter is not None
+            assert adapter.__class__.__name__ == "BinanceAdapter"
+        finally:
+            os.environ.pop("CSJ_USE_LEGACY_ADAPTER_BINANCE", None)
+
+    def test_legacy_override_env_var_for_bybit(self) -> None:
+        os.environ["CSJ_USE_LEGACY_ADAPTER_BYBIT"] = "1"
+        try:
+            adapter = worker_main._get_adapter("bybit")
+            assert adapter is not None
+            assert adapter.__class__.__name__ == "BybitAdapter"
+        finally:
+            os.environ.pop("CSJ_USE_LEGACY_ADAPTER_BYBIT", None)
 
 
 class TestArgumentParser:

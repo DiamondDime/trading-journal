@@ -226,7 +226,7 @@ class TestConnect:
         coinm_client = _make_mock_client()
 
         with patch(
-            "csj_worker.adapters.binance._build_clients",
+            "csj_worker.adapters.legacy.binance._build_clients",
             return_value={"spot": spot_client, "usdm": usdm_client, "coinm": coinm_client},
         ):
             adapter = BinanceAdapter()
@@ -250,7 +250,7 @@ class TestConnect:
         coinm_client = _make_mock_client()
 
         with patch(
-            "csj_worker.adapters.binance._build_clients",
+            "csj_worker.adapters.legacy.binance._build_clients",
             return_value={"spot": spot_client, "usdm": usdm_client, "coinm": coinm_client},
         ):
             adapter = BinanceAdapter()
@@ -274,7 +274,7 @@ class TestConnect:
         coinm_client = _make_mock_client()
 
         with patch(
-            "csj_worker.adapters.binance._build_clients",
+            "csj_worker.adapters.legacy.binance._build_clients",
             return_value={"spot": spot_client, "usdm": usdm_client, "coinm": coinm_client},
         ):
             adapter = BinanceAdapter()
@@ -342,7 +342,7 @@ class TestFetchFills:
         coinm_client.fetch_my_trades = AsyncMock(return_value=[])
 
         with patch(
-            "csj_worker.adapters.binance._build_clients",
+            "csj_worker.adapters.legacy.binance._build_clients",
             return_value={"spot": spot_client, "usdm": usdm_client, "coinm": coinm_client},
         ):
             adapter = BinanceAdapter()
@@ -368,7 +368,7 @@ class TestFetchFills:
         coinm_client.fetch_my_trades = AsyncMock(return_value=[])
 
         with patch(
-            "csj_worker.adapters.binance._build_clients",
+            "csj_worker.adapters.legacy.binance._build_clients",
             return_value={"spot": spot_client, "usdm": usdm_client, "coinm": coinm_client},
         ):
             adapter = BinanceAdapter()
@@ -428,7 +428,7 @@ class TestFetchFills:
         coinm_client.fetch_my_trades = AsyncMock(return_value=[])
 
         with patch(
-            "csj_worker.adapters.binance._build_clients",
+            "csj_worker.adapters.legacy.binance._build_clients",
             return_value={"spot": spot_client, "usdm": usdm_client, "coinm": coinm_client},
         ):
             adapter = BinanceAdapter()
@@ -498,7 +498,7 @@ class TestFetchFundingEvents:
         spot_client = _make_mock_client()
 
         with patch(
-            "csj_worker.adapters.binance._build_clients",
+            "csj_worker.adapters.legacy.binance._build_clients",
             return_value={"spot": spot_client, "usdm": usdm_client, "coinm": coinm_client},
         ):
             adapter = BinanceAdapter()
@@ -551,7 +551,7 @@ class TestFetchOpenPositions:
         spot_client = _make_mock_client()
 
         with patch(
-            "csj_worker.adapters.binance._build_clients",
+            "csj_worker.adapters.legacy.binance._build_clients",
             return_value={"spot": spot_client, "usdm": usdm_client, "coinm": coinm_client},
         ):
             adapter = BinanceAdapter()
@@ -594,7 +594,7 @@ class TestErrorMapping:
         coinm_client = _make_mock_client()
 
         with patch(
-            "csj_worker.adapters.binance._build_clients",
+            "csj_worker.adapters.legacy.binance._build_clients",
             return_value={"spot": spot_client, "usdm": usdm_client, "coinm": coinm_client},
         ):
             adapter = BinanceAdapter()
@@ -660,9 +660,9 @@ class TestErrorMapping:
             sleep_calls.append(delay)
 
         with patch(
-            "csj_worker.adapters.binance._build_clients",
+            "csj_worker.adapters.legacy.binance._build_clients",
             return_value={"spot": spot_client, "usdm": usdm_client, "coinm": coinm_client},
-        ), patch("csj_worker.adapters.binance.asyncio.sleep", side_effect=_mock_sleep):
+        ), patch("csj_worker.adapters.legacy.binance.asyncio.sleep", side_effect=_mock_sleep):
             adapter = BinanceAdapter()
             gen = adapter.fetch_fills(_creds(), since=_since(), until=_until())
             pages = [page async for page in gen]

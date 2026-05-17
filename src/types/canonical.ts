@@ -55,6 +55,7 @@ export const Exchange = {
   KRAKEN:       'kraken',
   GATE:         'gate',
   BINGX:        'bingx',
+  HTX:          'htx',
 } as const;
 export type Exchange = typeof Exchange[keyof typeof Exchange];
 

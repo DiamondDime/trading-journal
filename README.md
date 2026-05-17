@@ -38,16 +38,39 @@ The data model is a multi-activity journal. The atomic unit is an `activity` (su
 
 ## Supported exchanges
 
-Currently implemented:
+All CEX adapters share a single `CcxtUniversalAdapter` (see [`worker/csj_worker/adapters/generic.py`](worker/csj_worker/adapters/generic.py)) driven by per-venue `VenueConfig` modules. Adding a new ccxt-supported exchange is now ~30 LOC of config plus an `exchange_catalog` row.
 
-| Exchange | Kind | Auth | Adapter |
-|---|---|---|---|
-| Binance | CEX | api_key | `worker/csj_worker/adapters/binance.py` |
-| Bybit | CEX | api_key | `worker/csj_worker/adapters/bybit.py` |
-| Hyperliquid | DEX | wallet_address | `worker/csj_worker/adapters/hyperliquid.py` |
+| Exchange | Kind | Auth | Adapter | Notes |
+|---|---|---|---|---|
+| Binance | CEX | api_key | `CcxtUniversalAdapter(BINANCE_CONFIG)` | Spot + USD-M perp + coin-M perp |
+| Bybit | CEX | api_key | `CcxtUniversalAdapter(BYBIT_CONFIG)` | v5 unified, linear + spot |
+| OKX | CEX | api_key + passphrase | `CcxtUniversalAdapter(OKX_CONFIG)` | SPOT + SWAP + FUTURES + OPTION |
+| BingX | CEX | api_key | `CcxtUniversalAdapter(BINGX_CONFIG)` | Withdraw status unverifiable — UI attestation required |
+| Gate | CEX | api_key | `CcxtUniversalAdapter(GATE_CONFIG)` | Spot + perp + dated futures |
+| MEXC | CEX | api_key | `CcxtUniversalAdapter(MEXC_CONFIG)` | Withdraw status unverifiable — UI attestation required |
+| KuCoin | CEX | api_key + passphrase | `CcxtUniversalAdapter(KUCOIN_CONFIG)` | Defaults to `kucoinfutures` for perps |
+| Bitget | CEX | api_key + passphrase | `CcxtUniversalAdapter(BITGET_CONFIG)` | v2 api-key-info endpoint |
+| HTX | CEX | api_key | `CcxtUniversalAdapter(HTX_CONFIG)` | Formerly Huobi |
+| Phemex | CEX | api_key | `CcxtUniversalAdapter(PHEMEX_CONFIG)` | Withdraw status unverifiable — UI attestation required |
+| Hyperliquid | DEX | wallet_address | `HyperliquidAdapter` (bespoke) | Not on ccxt — uses proprietary `/info` endpoint |
 
-Planned (declared in `src/types/canonical.ts` `Exchange` enum, no adapter yet):
-OKX, Deribit, OKX DEX, Aster, Phemex, Bitget, MEXC, KuCoin, Kraken, Gate, BingX. PRs welcome — see [CONTRIBUTING.md](CONTRIBUTING.md#adding-a-new-exchange-adapter).
+Planned (declared in `Exchange` enum, no adapter yet): Deribit, OKX DEX, Aster, Kraken.
+
+### Adding a new exchange
+
+If the exchange is supported by [ccxt](https://github.com/ccxt/ccxt/wiki/Exchange-Markets):
+
+1. **Create `worker/csj_worker/adapters/configs/<code>.py`** — define `CONFIG = VenueConfig(code='<code>', ccxt_id='<ccxt_id>', ccxt_options={...}, requires_passphrase=...)`.
+2. **Implement `_fetch_permissions`, `_has_withdraw`, `_extract_permissions`** per the exchange's API docs. The framework rejects keys where `_has_withdraw` returns true. For venues without an introspection endpoint, surface `"withdraw:unverified"` in `_extract_permissions` so the UI can force user attestation.
+3. **Register in `csj_worker/adapters/configs/__init__.py`** (`ALL_CONFIGS` dict).
+4. **Add a row to the `exchange_catalog` migration** with the canonical code, display name, and capability flags.
+5. **Smoke-test in `tests/adapters/test_generic_adapter.py`** — copy one of the existing per-venue `TestWithdrawPermissionRejection` tests as a template.
+
+For venues NOT on ccxt (DEXes, regional venues), implement a bespoke `ExchangeAdapter` subclass under `csj_worker/adapters/legacy/` and register it directly in `ADAPTER_REGISTRY`.
+
+### Legacy fallback
+
+The hand-built Binance and Bybit adapters (~700 LOC each) are preserved under `worker/csj_worker/adapters/legacy/`. To roll back to them for any specific venue, set the env var `CSJ_USE_LEGACY_ADAPTER_<EXCHANGE>=1` (e.g. `CSJ_USE_LEGACY_ADAPTER_BINANCE=1`). The factory consults this flag at adapter resolution time, so per-connection toggling is possible.
 
 ## Security
 
