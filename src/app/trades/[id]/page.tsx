@@ -13,10 +13,22 @@ import {
 import { fmtCapital, fmtUsd } from "@/lib/data/archive-data";
 import { WizardPreviewBanner } from "@/components/wizard/wizard-preview-banner";
 import { requireUser } from "@/lib/auth/server";
-import { getActivity } from "@/lib/db/activity";
+import { getActivity, getAllClosedActivities } from "@/lib/db/activity";
 import { getNoteForActivity } from "@/lib/db/notes";
+import {
+  getExcursionForActivity,
+  getSatisfaction,
+  listScreenshotsForActivity,
+  listTagsForActivity,
+} from "@/lib/db/satellite";
+import { computeMoreMetrics } from "@/lib/analytics";
 import { DeleteButton } from "@/components/activity/delete-button";
 import { NotesEditor } from "@/components/activity/notes-editor";
+import { ScreenshotsSection } from "@/components/activity/screenshots-section";
+import { toScreenshotItems } from "@/components/activity/screenshots-data";
+import { TagEditor } from "@/components/activity/tag-editor";
+import { SatisfactionToggle } from "@/components/activity/satisfaction-toggle";
+import { ExcursionMetricStrip } from "@/components/activity/excursion-metric-strip";
 
 export const dynamic = "force-dynamic";
 
@@ -74,13 +86,35 @@ export default async function TradeDetailPage({
   const sp = await searchParams;
 
   const { id: userId } = await requireUser();
-  const [activity, note] = await Promise.all([
+  // Fetch everything needed for the page in parallel — supertype + note +
+  // screenshots + satellite tables + the closed-feed needed for the R-unit
+  // baseline (computeMoreMetrics.avgLoss).
+  const [
+    activity,
+    note,
+    screenshots,
+    excursion,
+    initialTags,
+    satisfaction,
+    allClosed,
+  ] = await Promise.all([
     getActivity(userId, id),
     getNoteForActivity(userId, id),
+    listScreenshotsForActivity(userId, id),
+    getExcursionForActivity(userId, id),
+    listTagsForActivity(userId, id),
+    getSatisfaction(userId, id),
+    getAllClosedActivities(userId),
   ]);
   if (!activity || activity.subtype.type !== "trade") {
     notFound();
   }
+  const initialScreenshots = toScreenshotItems(screenshots);
+  // avgLoss across the book is the R-unit baseline. The metrics module
+  // returns a positive number (sum of |losses| / lossCount); see
+  // computeMoreMetrics for the convention.
+  const moreMetrics = computeMoreMetrics(allClosed);
+  const avgLossUsd = moreMetrics.avgLoss;
 
   const t = activity.subtype.row;
   const apr = fmtAprPct(t.realizedApr);
@@ -139,6 +173,16 @@ export default async function TradeDetailPage({
             <p className="mt-1 font-mono text-sm text-text-tertiary">
               {daysLabel} held
             </p>
+            {/* Satisfaction pill row — under the title, optimistic flip on
+                click. The 3rd state ("—") clears the visible rating but the
+                row in activity_satisfaction stays for v1 (see component). */}
+            <div className="mt-5">
+              <SatisfactionToggle
+                activityId={activity.id}
+                initialSatisfaction={satisfaction?.satisfaction ?? null}
+                initialReason={satisfaction?.reason ?? null}
+              />
+            </div>
           </header>
 
           {/* ── hero block ────────────────────────────────────────────── */}
@@ -164,6 +208,17 @@ export default async function TradeDetailPage({
               </p>
             </div>
           </section>
+
+          {/* ── MFE-R / MAE-R / Realized-R ────────────────────────────── */}
+          <ExcursionMetricStrip
+            activityId={activity.id}
+            excursion={excursion}
+            avgLossUsd={avgLossUsd}
+            entryPrice={t.avgEntryPrice}
+            side={t.side}
+            netPnlUsd={netPnl}
+            qty={t.qty}
+          />
 
           {/* ── thesis ────────────────────────────────────────────────── */}
           <section className="mt-14">
@@ -270,6 +325,35 @@ export default async function TradeDetailPage({
                 initialBody={note?.body ?? ""}
                 initialVersion={note?.updatedAt ?? null}
                 initialNoteId={note?.id ?? null}
+              />
+            </div>
+          </section>
+
+          {/* ── free-form tags ────────────────────────────────────────── */}
+          <section className="mt-14">
+            <h2 className="font-serif text-xs font-semibold uppercase tracking-[0.18em] text-text-tertiary">
+              Tags
+            </h2>
+            <p className="mt-2 font-serif text-[12px] italic text-text-tertiary">
+              Setup labels for grouping and analytics
+            </p>
+            <div className="mt-4">
+              <TagEditor activityId={activity.id} initialTags={initialTags} />
+            </div>
+          </section>
+
+          {/* ── screenshots ───────────────────────────────────────────── */}
+          <section className="mt-14">
+            <h2 className="font-serif text-xs font-semibold uppercase tracking-[0.18em] text-text-tertiary">
+              Screenshots
+            </h2>
+            <p className="mt-2 font-serif text-[12px] italic text-text-tertiary">
+              Snapshots of the chart at entry, exit, or thesis moments.
+            </p>
+            <div className="mt-4">
+              <ScreenshotsSection
+                activityId={activity.id}
+                initialScreenshots={initialScreenshots}
               />
             </div>
           </section>

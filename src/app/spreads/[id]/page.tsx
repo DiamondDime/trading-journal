@@ -13,10 +13,22 @@ import { fmtCapital, fmtUsd } from "@/lib/data/archive-data";
 import { cn } from "@/lib/utils";
 import { WizardPreviewBanner } from "@/components/wizard/wizard-preview-banner";
 import { requireUser } from "@/lib/auth/server";
-import { getActivity } from "@/lib/db/activity";
+import { getActivity, getAllClosedActivities } from "@/lib/db/activity";
 import { getNoteForActivity } from "@/lib/db/notes";
+import {
+  getExcursionForActivity,
+  getSatisfaction,
+  listScreenshotsForActivity,
+  listTagsForActivity,
+} from "@/lib/db/satellite";
+import { computeMoreMetrics } from "@/lib/analytics";
 import { DeleteButton } from "@/components/activity/delete-button";
 import { NotesEditor } from "@/components/activity/notes-editor";
+import { ScreenshotsSection } from "@/components/activity/screenshots-section";
+import { toScreenshotItems } from "@/components/activity/screenshots-data";
+import { TagEditor } from "@/components/activity/tag-editor";
+import { SatisfactionToggle } from "@/components/activity/satisfaction-toggle";
+import { ExcursionMetricStrip } from "@/components/activity/excursion-metric-strip";
 
 export const dynamic = "force-dynamic";
 
@@ -111,13 +123,29 @@ export default async function SpreadDetailPage({
   const { id } = await params;
   const sp = await searchParams;
   const { id: userId } = await requireUser();
-  const [activity, note] = await Promise.all([
+  const [
+    activity,
+    note,
+    screenshots,
+    excursion,
+    initialTags,
+    satisfaction,
+    allClosed,
+  ] = await Promise.all([
     getActivity(userId, id),
     getNoteForActivity(userId, id),
+    listScreenshotsForActivity(userId, id),
+    getExcursionForActivity(userId, id),
+    listTagsForActivity(userId, id),
+    getSatisfaction(userId, id),
+    getAllClosedActivities(userId),
   ]);
   if (!activity || activity.subtype.type !== "spread") {
     notFound();
   }
+  const initialScreenshots = toScreenshotItems(screenshots);
+  const moreMetrics = computeMoreMetrics(allClosed);
+  const avgLossUsd = moreMetrics.avgLoss;
 
   const s = activity.subtype.row;
   const legs = deriveLegs(s.spreadType, s.exchanges, s.primaryBase);
@@ -169,6 +197,13 @@ export default async function SpreadDetailPage({
         <p className="mt-1 font-mono text-sm text-text-tertiary">
           {daysLabel} held
         </p>
+        <div className="mt-5">
+          <SatisfactionToggle
+            activityId={activity.id}
+            initialSatisfaction={satisfaction?.satisfaction ?? null}
+            initialReason={satisfaction?.reason ?? null}
+          />
+        </div>
       </header>
 
       <section className="mt-14 border-y border-border py-12">
@@ -193,6 +228,28 @@ export default async function SpreadDetailPage({
           </p>
         </div>
       </section>
+
+      {/*
+        Spreads expose `primaryBase` (the underlying base symbol the worker
+        targets for kline backfill) but no single entryPrice / qty — the
+        position is multi-leg. We pass "0" for entryPrice + qty which makes
+        the strip degrade MFE-R/MAE-R to "—" gracefully (priceToR returns
+        null when those are <= 0). Realized-R still works because it only
+        needs netPnlUsd + the avgLoss baseline. When the worker eventually
+        materialises spread-level MFE-R/MAE-R into excursion_row, the strip
+        will surface them once we wire a spread-specific dollar conversion.
+      */}
+      {s.primaryBase && (
+        <ExcursionMetricStrip
+          activityId={activity.id}
+          excursion={excursion}
+          avgLossUsd={avgLossUsd}
+          entryPrice="0"
+          side="long"
+          netPnlUsd={netPnl}
+          qty="0"
+        />
+      )}
 
       {s.exitPlan && (
         <section className="mt-14">
@@ -267,6 +324,33 @@ export default async function SpreadDetailPage({
             initialBody={note?.body ?? ""}
             initialVersion={note?.updatedAt ?? null}
             initialNoteId={note?.id ?? null}
+          />
+        </div>
+      </section>
+
+      <section className="mt-14">
+        <h2 className="font-serif text-xs font-semibold uppercase tracking-[0.18em] text-text-tertiary">
+          Tags
+        </h2>
+        <p className="mt-2 font-serif text-[12px] italic text-text-tertiary">
+          Setup labels for grouping and analytics
+        </p>
+        <div className="mt-4">
+          <TagEditor activityId={activity.id} initialTags={initialTags} />
+        </div>
+      </section>
+
+      <section className="mt-14">
+        <h2 className="font-serif text-xs font-semibold uppercase tracking-[0.18em] text-text-tertiary">
+          Screenshots
+        </h2>
+        <p className="mt-2 font-serif text-[12px] italic text-text-tertiary">
+          Snapshots of the chart at entry, exit, or thesis moments.
+        </p>
+        <div className="mt-4">
+          <ScreenshotsSection
+            activityId={activity.id}
+            initialScreenshots={initialScreenshots}
           />
         </div>
       </section>

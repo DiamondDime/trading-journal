@@ -15,8 +15,17 @@ import { WizardPreviewBanner } from "@/components/wizard/wizard-preview-banner";
 import { requireUser } from "@/lib/auth/server";
 import { getActivity } from "@/lib/db/activity";
 import { getNoteForActivity } from "@/lib/db/notes";
+import {
+  getSatisfaction,
+  listScreenshotsForActivity,
+  listTagsForActivity,
+} from "@/lib/db/satellite";
 import { DeleteButton } from "@/components/activity/delete-button";
 import { NotesEditor } from "@/components/activity/notes-editor";
+import { ScreenshotsSection } from "@/components/activity/screenshots-section";
+import { toScreenshotItems } from "@/components/activity/screenshots-data";
+import { TagEditor } from "@/components/activity/tag-editor";
+import { SatisfactionToggle } from "@/components/activity/satisfaction-toggle";
 
 export const dynamic = "force-dynamic";
 
@@ -46,13 +55,23 @@ export default async function AirdropDetailPage({
   const { id } = await params;
   const sp = await searchParams;
   const { id: userId } = await requireUser();
-  const [activity, note] = await Promise.all([
+  const [
+    activity,
+    note,
+    screenshots,
+    initialTags,
+    satisfaction,
+  ] = await Promise.all([
     getActivity(userId, id),
     getNoteForActivity(userId, id),
+    listScreenshotsForActivity(userId, id),
+    listTagsForActivity(userId, id),
+    getSatisfaction(userId, id),
   ]);
   if (!activity || activity.subtype.type !== "airdrop") {
     notFound();
   }
+  const initialScreenshots = toScreenshotItems(screenshots);
 
   const a = activity.subtype.row;
   const tokens = Number(a.qtyReceived);
@@ -107,6 +126,13 @@ export default async function AirdropDetailPage({
             <p className="mt-1 font-mono text-sm text-text-tertiary">
               {daysSinceClaim}d since claim
             </p>
+            <div className="mt-5">
+              <SatisfactionToggle
+                activityId={activity.id}
+                initialSatisfaction={satisfaction?.satisfaction ?? null}
+                initialReason={satisfaction?.reason ?? null}
+              />
+            </div>
           </header>
 
           <section className="mt-14 border-y border-border py-12">
@@ -237,6 +263,33 @@ export default async function AirdropDetailPage({
                 initialBody={note?.body ?? ""}
                 initialVersion={note?.updatedAt ?? null}
                 initialNoteId={note?.id ?? null}
+              />
+            </div>
+          </section>
+
+          <section className="mt-14">
+            <h2 className="font-serif text-xs font-semibold uppercase tracking-[0.18em] text-text-tertiary">
+              Tags
+            </h2>
+            <p className="mt-2 font-serif text-[12px] italic text-text-tertiary">
+              Setup labels for grouping and analytics
+            </p>
+            <div className="mt-4">
+              <TagEditor activityId={activity.id} initialTags={initialTags} />
+            </div>
+          </section>
+
+          <section className="mt-14">
+            <h2 className="font-serif text-xs font-semibold uppercase tracking-[0.18em] text-text-tertiary">
+              Screenshots
+            </h2>
+            <p className="mt-2 font-serif text-[12px] italic text-text-tertiary">
+              Snapshots of the chart at entry, exit, or thesis moments.
+            </p>
+            <div className="mt-4">
+              <ScreenshotsSection
+                activityId={activity.id}
+                initialScreenshots={initialScreenshots}
               />
             </div>
           </section>
