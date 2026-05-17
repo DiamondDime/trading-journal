@@ -31,6 +31,8 @@ import { SatisfactionToggle } from "@/components/activity/satisfaction-toggle";
 import { ExcursionMetricStrip } from "@/components/activity/excursion-metric-strip";
 import { OhlcChart } from "@/components/activity/ohlc-chart";
 import { isKlineSupportedExchange } from "@/lib/exchanges/klines";
+import { getT, getLocale } from "@/lib/i18n/server";
+import type { TFunction } from "@/lib/i18n/resolve";
 
 export const dynamic = "force-dynamic";
 
@@ -58,8 +60,9 @@ function deriveLegs(
   spreadType: string,
   exchanges: string[],
   primaryBase: string,
+  manualLabel: string,
 ): DerivedLegs {
-  const venue1 = exchanges[0] ?? "Manual";
+  const venue1 = exchanges[0] ?? manualLabel;
   const venue2 = exchanges[1] ?? venue1;
   switch (spreadType) {
     case "cash_carry":
@@ -103,16 +106,22 @@ function fmtAprPct(apr: string | null): { label: string; tone: "up" | "down" } {
   return { label: `${sign}${Math.abs(n * 100).toFixed(1)}%`, tone: n >= 0 ? "up" : "down" };
 }
 
-function fmtDaysLabel(openedIso: string | null, closedIso: string | null) {
+function fmtDaysLabel(
+  openedIso: string | null,
+  closedIso: string | null,
+  t: TFunction,
+) {
   if (!openedIso || !closedIso) return "—";
   const ms = new Date(closedIso).getTime() - new Date(openedIso).getTime();
   const d = ms / 86_400_000;
   if (d < 1) {
     const hours = d * 24;
-    if (hours < 1) return `${Math.round(hours * 60)} min`;
-    return `${hours.toFixed(1)}h`;
+    if (hours < 1) {
+      return t("spreadDetail.duration.minutes", { value: Math.round(hours * 60) });
+    }
+    return t("spreadDetail.duration.hours", { value: hours.toFixed(1) });
   }
-  return `${Math.round(d)}d`;
+  return t("spreadDetail.duration.days", { value: Math.round(d) });
 }
 
 export default async function SpreadDetailPage({
@@ -125,6 +134,8 @@ export default async function SpreadDetailPage({
   const { id } = await params;
   const sp = await searchParams;
   const { id: userId } = await requireUser();
+  const t = await getT();
+  const intlLocale = (await getLocale()) === "ru" ? "ru-RU" : "en-US";
   const [
     activity,
     note,
@@ -150,18 +161,29 @@ export default async function SpreadDetailPage({
   const avgLossUsd = moreMetrics.avgLoss;
 
   const s = activity.subtype.row;
-  const legs = deriveLegs(s.spreadType, s.exchanges, s.primaryBase);
+  const manualLabel = t("spreadDetail.manualVenue");
+  const legs = deriveLegs(s.spreadType, s.exchanges, s.primaryBase, manualLabel);
   const apr = fmtAprPct(s.apr);
   const headlineTone = apr.tone === "up" ? "text-up" : "text-down";
+  // Spread type label — pulled from the local SPREAD_TYPE_LABELS constant
+  // (English-only). i18n of the 6 spread-type strings is a separate scope
+  // touching the wizard, archive, dashboard, and worker mirrors.
   const typeLabel = SPREAD_TYPE_LABELS[s.spreadType] ?? s.spreadType;
   const netPnl = Number(activity.netPnlUsd ?? 0);
   const capital = Number(activity.capitalDeployedUsd ?? 0);
-  const daysLabel = fmtDaysLabel(activity.openedAt, activity.closedAt);
+  const daysLabel = fmtDaysLabel(activity.openedAt, activity.closedAt, t);
+  // toLocaleDateString — number/date formatting flagged. en-US fallback kept
+  // for now; switching to intlLocale once the number/currency formatters in
+  // archive-data are unified.
   const closedLabel = activity.closedAt
-    ? new Date(activity.closedAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
+    ? new Date(activity.closedAt).toLocaleDateString(intlLocale, { month: "short", day: "numeric", year: "numeric" })
     : "—";
-  const statusLabel = activity.status[0].toUpperCase() + activity.status.slice(1);
-  const venuesLabel = s.exchanges.length > 0 ? s.exchanges.join(" + ") : "Manual";
+  const statusKey: "open" | "closed" | "pending" =
+    activity.status === "open" || activity.status === "closed" || activity.status === "pending"
+      ? activity.status
+      : "closed";
+  const statusLabel = t(`status.${statusKey}`);
+  const venuesLabel = s.exchanges.length > 0 ? s.exchanges.join(" + ") : manualLabel;
   const serial = `#${activity.id.slice(0, 4).toUpperCase()}`;
 
   return (
@@ -187,7 +209,7 @@ export default async function SpreadDetailPage({
           </h1>
           <Link
             href={`/add/spread/fields?edit=${activity.id}`}
-            aria-label="Edit spread"
+            aria-label={t("spreadDetail.editAria")}
             className="mt-2 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-border bg-surface text-text-tertiary transition-colors hover:border-border-strong hover:text-text"
           >
             <Pencil className="h-3.5 w-3.5" />
@@ -197,7 +219,7 @@ export default async function SpreadDetailPage({
           {typeLabel} · {s.variant ?? "—"} · {venuesLabel}
         </p>
         <p className="mt-1 font-mono text-sm text-text-tertiary">
-          {daysLabel} held
+          {t("spreadDetail.heldSuffix", { duration: daysLabel })}
         </p>
         <div className="mt-5">
           <SatisfactionToggle
@@ -218,15 +240,15 @@ export default async function SpreadDetailPage({
               {apr.label}
             </span>
             <span className="font-serif text-2xl font-normal text-text-tertiary">
-              APR
+              {t("spreadDetail.hero.unitApr")}
             </span>
           </div>
           <p className="mt-3 font-mono text-sm text-text-secondary">
-            Net{" "}
+            {t("spreadDetail.hero.netPrefix")}{" "}
             <span className={`${headlineTone} font-medium`}>
               {fmtUsd(netPnl, true)}
             </span>{" "}
-            realized on {fmtCapital(capital)} capital
+            {t("spreadDetail.hero.realizedSuffix", { capital: fmtCapital(capital) })}
           </p>
         </div>
       </section>
@@ -244,11 +266,10 @@ export default async function SpreadDetailPage({
       {s.primaryBase && hasSupportedExchange(s.exchanges) && (
         <section className="mt-14">
           <h2 className="font-serif text-xs font-semibold uppercase tracking-[0.18em] text-text-tertiary">
-            Price action
+            {t("spreadDetail.sections.priceAction")}
           </h2>
           <p className="mt-2 font-serif text-[12px] italic text-text-tertiary">
-            Candles for the {s.primaryBase}{" "}primary leg covering the spread&apos;s
-            open-to-close window.
+            {t("spreadDetail.priceActionCaption", { base: s.primaryBase })}
           </p>
           <div className="mt-4">
             <OhlcChart activityId={activity.id} />
@@ -281,7 +302,7 @@ export default async function SpreadDetailPage({
       {s.exitPlan && (
         <section className="mt-14">
           <h2 className="font-serif text-xs font-semibold uppercase tracking-[0.18em] text-text-tertiary">
-            Thesis
+            {t("spreadDetail.sections.thesis")}
           </h2>
           <div className="mt-4 space-y-4 font-serif text-lg leading-[1.65] text-text">
             <p>{s.exitPlan}</p>
@@ -291,29 +312,28 @@ export default async function SpreadDetailPage({
 
       <section className="mt-14">
         <h2 className="font-serif text-xs font-semibold uppercase tracking-[0.18em] text-text-tertiary">
-          Decomposition
+          {t("spreadDetail.sections.decomposition")}
         </h2>
         <p className="mt-2 font-serif text-[12px] italic text-text-tertiary">
-          Two legs derived from spread type + venues — replaced by spread_legs JOIN
-          when the worker pipeline materializes real positions.
+          {t("spreadDetail.decompositionCaption")}
         </p>
         <div className="mt-4 overflow-hidden rounded-md border border-border bg-surface">
           <Table>
             <TableHeader>
               <TableRow className="hover:bg-transparent">
                 <TableHead scope="col" className="text-text-tertiary">&nbsp;</TableHead>
-                <TableHead scope="col" className="text-text-secondary">Leg 1</TableHead>
-                <TableHead scope="col" className="text-text-secondary">Leg 2</TableHead>
+                <TableHead scope="col" className="text-text-secondary">{t("spreadDetail.legs.leg1")}</TableHead>
+                <TableHead scope="col" className="text-text-secondary">{t("spreadDetail.legs.leg2")}</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              <LegRow label="Venue" leg1={legs.leg1.venue} leg2={legs.leg2.venue} />
-              <LegRow label="Symbol" leg1={legs.leg1.symbol} leg2={legs.leg2.symbol} mono />
-              <LegRow label="Instrument" leg1={legs.leg1.instrument} leg2={legs.leg2.instrument} />
+              <LegRow label={t("fields.venue")} leg1={legs.leg1.venue} leg2={legs.leg2.venue} />
+              <LegRow label={t("spreadDetail.legs.symbol")} leg1={legs.leg1.symbol} leg2={legs.leg2.symbol} mono />
+              <LegRow label={t("spreadDetail.legs.instrument")} leg1={legs.leg1.instrument} leg2={legs.leg2.instrument} />
               <LegRow
-                label="Side"
-                leg1={<SidePill side={legs.leg1.side} />}
-                leg2={<SidePill side={legs.leg2.side} />}
+                label={t("fields.side")}
+                leg1={<SidePill side={legs.leg1.side} t={t} />}
+                leg2={<SidePill side={legs.leg2.side} t={t} />}
               />
             </TableBody>
           </Table>
@@ -323,7 +343,7 @@ export default async function SpreadDetailPage({
       {activity.regimeTags.length > 0 && (
         <section className="mt-14">
           <h2 className="font-serif text-xs font-semibold uppercase tracking-[0.18em] text-text-tertiary">
-            Regime tags
+            {t("spreadDetail.sections.regimeTags")}
           </h2>
           <div className="mt-4 flex flex-wrap gap-2">
             {activity.regimeTags.map((tag) => (
@@ -340,10 +360,10 @@ export default async function SpreadDetailPage({
 
       <section className="mt-14">
         <h2 className="font-serif text-xs font-semibold uppercase tracking-[0.18em] text-text-tertiary">
-          Notes
+          {t("spreadDetail.sections.notes")}
         </h2>
         <p className="mt-2 font-serif text-[12px] italic text-text-tertiary">
-          Your postmortem
+          {t("spreadDetail.notesCaption")}
         </p>
         <div className="mt-4">
           <NotesEditor
@@ -357,10 +377,10 @@ export default async function SpreadDetailPage({
 
       <section className="mt-14">
         <h2 className="font-serif text-xs font-semibold uppercase tracking-[0.18em] text-text-tertiary">
-          Tags
+          {t("spreadDetail.sections.tags")}
         </h2>
         <p className="mt-2 font-serif text-[12px] italic text-text-tertiary">
-          Setup labels for grouping and analytics
+          {t("spreadDetail.tagsCaption")}
         </p>
         <div className="mt-4">
           <TagEditor activityId={activity.id} initialTags={initialTags} />
@@ -369,10 +389,10 @@ export default async function SpreadDetailPage({
 
       <section className="mt-14">
         <h2 className="font-serif text-xs font-semibold uppercase tracking-[0.18em] text-text-tertiary">
-          Screenshots
+          {t("spreadDetail.sections.screenshots")}
         </h2>
         <p className="mt-2 font-serif text-[12px] italic text-text-tertiary">
-          Snapshots of the chart at entry, exit, or thesis moments.
+          {t("spreadDetail.screenshotsCaption")}
         </p>
         <div className="mt-4">
           <ScreenshotsSection
@@ -384,7 +404,7 @@ export default async function SpreadDetailPage({
 
       <section className="mt-14">
         <h2 className="font-serif text-xs font-semibold uppercase tracking-[0.18em] text-text-tertiary">
-          Actions
+          {t("spreadDetail.sections.actions")}
         </h2>
         <div className="mt-4 flex flex-wrap items-center gap-2">
           <Link
@@ -392,7 +412,7 @@ export default async function SpreadDetailPage({
             className="inline-flex items-center gap-1.5 rounded-md border border-border bg-surface px-3 py-1.5 font-mono text-[10px] uppercase tracking-[0.16em] text-text-secondary transition-colors hover:border-border-strong hover:text-text"
           >
             <Pencil className="h-3 w-3" />
-            Edit
+            {t("spreadDetail.actions.edit")}
           </Link>
           <DeleteButton
             activityId={activity.id}
@@ -408,10 +428,10 @@ export default async function SpreadDetailPage({
             href="/spreads/archive?activity=spread"
             className="hover:text-text"
           >
-            ← back to spreads
+            {t("spreadDetail.backLink")}
           </Link>
           <span>
-            spread {serial.toLowerCase()} · csj
+            {t("spreadDetail.footerSerial", { serial: serial.toLowerCase() })}
           </span>
         </div>
       </footer>
@@ -453,7 +473,7 @@ function hasSupportedExchange(exchanges: string[]): boolean {
   return exchanges.some(isKlineSupportedExchange);
 }
 
-function SidePill({ side }: { side: "long" | "short" }) {
+function SidePill({ side, t }: { side: "long" | "short"; t: TFunction }) {
   return (
     <span
       className={cn(
@@ -461,7 +481,7 @@ function SidePill({ side }: { side: "long" | "short" }) {
         side === "long" ? "text-up" : "text-down"
       )}
     >
-      {side}
+      {t(`side.${side}`)}
     </span>
   );
 }

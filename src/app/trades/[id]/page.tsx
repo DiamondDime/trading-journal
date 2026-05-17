@@ -13,6 +13,7 @@ import {
 import { fmtCapital, fmtUsd } from "@/lib/data/archive-data";
 import { WizardPreviewBanner } from "@/components/wizard/wizard-preview-banner";
 import { requireUser } from "@/lib/auth/server";
+import { getT } from "@/lib/i18n/server";
 import { getActivity, getAllClosedActivities } from "@/lib/db/activity";
 import { getNoteForActivity } from "@/lib/db/notes";
 import {
@@ -35,11 +36,11 @@ export const dynamic = "force-dynamic";
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
-function fmtSidePill(side: "long" | "short") {
+function fmtSidePill(side: "long" | "short", label: string) {
   const cls = side === "long" ? "text-up" : "text-down";
   return (
     <span className={`font-mono text-[10px] uppercase tracking-[0.16em] ${cls}`}>
-      {side}
+      {label}
     </span>
   );
 }
@@ -54,16 +55,20 @@ function fmtPrice(n: number) {
   });
 }
 
-function fmtDaysLabel(openedIso: string | null, closedIso: string | null) {
+function fmtDaysLabel(
+  openedIso: string | null,
+  closedIso: string | null,
+  units: { min: string; hour: string; day: string },
+) {
   if (!openedIso || !closedIso) return "—";
   const ms = new Date(closedIso).getTime() - new Date(openedIso).getTime();
   const d = ms / 86_400_000;
   if (d < 1) {
     const hours = d * 24;
-    if (hours < 1) return `${Math.round(hours * 60)} min`;
-    return `${hours.toFixed(1)}h`;
+    if (hours < 1) return `${Math.round(hours * 60)} ${units.min}`;
+    return `${hours.toFixed(1)}${units.hour}`;
   }
-  return `${Math.round(d)}d`;
+  return `${Math.round(d)}${units.day}`;
 }
 
 function fmtAprPct(realizedApr: string | null): { label: string; tone: "up" | "down" } {
@@ -86,6 +91,7 @@ export default async function TradeDetailPage({
   const { id } = await params;
   const sp = await searchParams;
 
+  const t = await getT();
   const { id: userId } = await requireUser();
   // Fetch everything needed for the page in parallel — supertype + note +
   // screenshots + satellite tables + the closed-feed needed for the R-unit
@@ -117,21 +123,32 @@ export default async function TradeDetailPage({
   const moreMetrics = computeMoreMetrics(allClosed);
   const avgLossUsd = moreMetrics.avgLoss;
 
-  const t = activity.subtype.row;
-  const apr = fmtAprPct(t.realizedApr);
+  const trade = activity.subtype.row;
+  const apr = fmtAprPct(trade.realizedApr);
   const headlineTone = apr.tone === "up" ? "text-up" : "text-down";
   const netPnl = Number(activity.netPnlUsd ?? 0);
   const capital = Number(activity.capitalDeployedUsd ?? 0);
-  const qty = Number(t.qty);
-  const entry = Number(t.avgEntryPrice);
-  const exit = t.avgExitPrice !== null ? Number(t.avgExitPrice) : entry;
+  const qty = Number(trade.qty);
+  const entry = Number(trade.avgEntryPrice);
+  const exit = trade.avgExitPrice !== null ? Number(trade.avgExitPrice) : entry;
   const fees = Number(activity.feesUsd);
   const gross = netPnl + fees;
-  const daysLabel = fmtDaysLabel(activity.openedAt, activity.closedAt);
+  const daysLabel = fmtDaysLabel(activity.openedAt, activity.closedAt, {
+    min: t("tradeDetail.units.min"),
+    hour: t("tradeDetail.units.hour"),
+    day: t("tradeDetail.units.day"),
+  });
   const closedLabel = activity.closedAt
     ? new Date(activity.closedAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
     : "—";
-  const statusLabel = activity.status.charAt(0).toUpperCase() + activity.status.slice(1);
+  const statusLabel =
+    activity.status === "open"
+      ? t("status.open")
+      : activity.status === "closed"
+        ? t("status.closed")
+        : t("status.pending");
+  const sideLabel =
+    trade.side === "long" ? t("side.long") : t("side.short");
   const serial = `T#${activity.id.slice(0, 4).toUpperCase()}`;
 
   return (
@@ -162,17 +179,17 @@ export default async function TradeDetailPage({
               </h1>
               <Link
                 href={`/add/trade/fields?edit=${activity.id}`}
-                aria-label="Edit trade"
+                aria-label={t("tradeDetail.editAria")}
                 className="mt-2 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-border bg-surface text-text-tertiary transition-colors hover:border-border-strong hover:text-text"
               >
                 <Pencil className="h-3.5 w-3.5" />
               </Link>
             </div>
             <p className="mt-3 text-base text-text-secondary">
-              {t.exchange} · {t.symbol} · {t.instrumentKind} · {t.side}
+              {trade.exchange} · {trade.symbol} · {trade.instrumentKind} · {sideLabel}
             </p>
             <p className="mt-1 font-mono text-sm text-text-tertiary">
-              {daysLabel} held
+              {t("tradeDetail.heldSuffix", { days: daysLabel })}
             </p>
             {/* Satisfaction pill row — under the title, optimistic flip on
                 click. The 3rd state ("—") clears the visible rating but the
@@ -197,15 +214,15 @@ export default async function TradeDetailPage({
                   {apr.label}
                 </span>
                 <span className="font-serif text-2xl font-normal text-text-tertiary">
-                  APR
+                  {t("tradeDetail.aprBadge")}
                 </span>
               </div>
               <p className="mt-3 font-mono text-sm text-text-secondary">
-                Net{" "}
+                {t("tradeDetail.hero.netPrefix")}{" "}
                 <span className={`${headlineTone} font-medium`}>
                   {fmtUsd(netPnl, true)}
                 </span>{" "}
-                realized on {fmtCapital(capital)} capital
+                {t("tradeDetail.hero.onCapital", { capital: fmtCapital(capital) })}
               </p>
             </div>
           </section>
@@ -217,10 +234,10 @@ export default async function TradeDetailPage({
               in the v1 kline registry. */}
           <section className="mt-14">
             <h2 className="font-serif text-xs font-semibold uppercase tracking-[0.18em] text-text-tertiary">
-              Price action
+              {t("tradeDetail.priceAction.title")}
             </h2>
             <p className="mt-2 font-serif text-[12px] italic text-text-tertiary">
-              Candles cover the position&apos;s open-to-close window.
+              {t("tradeDetail.priceAction.caption")}
             </p>
             <div className="mt-4">
               <OhlcChart activityId={activity.id} />
@@ -232,26 +249,26 @@ export default async function TradeDetailPage({
             activityId={activity.id}
             excursion={excursion}
             avgLossUsd={avgLossUsd}
-            entryPrice={t.avgEntryPrice}
-            side={t.side}
+            entryPrice={trade.avgEntryPrice}
+            side={trade.side}
             netPnlUsd={netPnl}
-            qty={t.qty}
+            qty={trade.qty}
           />
 
           {/* ── thesis ────────────────────────────────────────────────── */}
           <section className="mt-14">
             <h2 className="font-serif text-xs font-semibold uppercase tracking-[0.18em] text-text-tertiary">
-              Thesis
+              {t("tradeDetail.thesis.title")}
             </h2>
             <div className="mt-4 space-y-4 font-serif text-lg leading-[1.65] text-text">
-              {t.entryThesis ? <p>{t.entryThesis}</p> : <p className="text-text-tertiary">—</p>}
+              {trade.entryThesis ? <p>{trade.entryThesis}</p> : <p className="text-text-tertiary">—</p>}
             </div>
           </section>
 
           {/* ── decomposition ─────────────────────────────────────────── */}
           <section className="mt-14">
             <h2 className="font-serif text-xs font-semibold uppercase tracking-[0.18em] text-text-tertiary">
-              Decomposition
+              {t("tradeDetail.decomposition.title")}
             </h2>
 
             <div className="mt-6 overflow-hidden rounded-md border border-border bg-surface">
@@ -260,17 +277,21 @@ export default async function TradeDetailPage({
                   <TableRow className="hover:bg-transparent">
                     <TableHead className="text-text-tertiary">&nbsp;</TableHead>
                     <TableHead className="text-right text-text-secondary">
-                      Value
+                      {t("tradeDetail.decomposition.valueHeader")}
                     </TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  <ExecRow label="Side" value={fmtSidePill(t.side)} />
-                  <ExecRow label="Quantity" value={qty.toLocaleString("en-US", { maximumSignificantDigits: 6 })} mono />
-                  <ExecRow label="Entry price" value={`$${fmtPrice(entry)}`} mono />
-                  <ExecRow label="Exit price" value={`$${fmtPrice(exit)}`} mono />
+                  <ExecRow label={t("fields.side")} value={fmtSidePill(trade.side, sideLabel)} />
                   <ExecRow
-                    label="Gross P&L"
+                    label={t("fields.quantity")}
+                    value={qty.toLocaleString("en-US", { maximumSignificantDigits: 6 })}
+                    mono
+                  />
+                  <ExecRow label={t("tradeDetail.rows.entryPrice")} value={`$${fmtPrice(entry)}`} mono />
+                  <ExecRow label={t("tradeDetail.rows.exitPrice")} value={`$${fmtPrice(exit)}`} mono />
+                  <ExecRow
+                    label={t("tradeDetail.rows.grossPnl")}
                     value={
                       <span className={gross >= 0 ? "text-up" : "text-down"}>
                         {fmtUsd(gross, true)}
@@ -279,7 +300,7 @@ export default async function TradeDetailPage({
                     mono
                   />
                   <ExecRow
-                    label="Fees"
+                    label={t("tradeDetail.rows.fees")}
                     value={
                       <span className="text-text-secondary">
                         {fmtUsd(fees * -1, true)}
@@ -288,7 +309,7 @@ export default async function TradeDetailPage({
                     mono
                   />
                   <ExecRow
-                    label="Net P&L"
+                    label={t("tradeDetail.rows.netPnl")}
                     value={
                       <span className={`font-medium ${headlineTone}`}>
                         {fmtUsd(netPnl, true)}
@@ -297,7 +318,7 @@ export default async function TradeDetailPage({
                     mono
                   />
                   <ExecRow
-                    label="Realized APR"
+                    label={t("tradeDetail.rows.realizedApr")}
                     value={
                       <span className={`font-medium ${headlineTone}`}>
                         {apr.label}
@@ -314,7 +335,7 @@ export default async function TradeDetailPage({
           {activity.regimeTags.length > 0 && (
             <section className="mt-14">
               <h2 className="font-serif text-xs font-semibold uppercase tracking-[0.18em] text-text-tertiary">
-                Regime tags
+                {t("tradeDetail.regimeTags.title")}
               </h2>
               <div className="mt-4 flex flex-wrap gap-2">
                 {activity.regimeTags.map((tag) => (
@@ -332,10 +353,10 @@ export default async function TradeDetailPage({
           {/* ── notes editor ──────────────────────────────────────────── */}
           <section className="mt-14">
             <h2 className="font-serif text-xs font-semibold uppercase tracking-[0.18em] text-text-tertiary">
-              Notes
+              {t("tradeDetail.notes.title")}
             </h2>
             <p className="mt-2 font-serif text-[12px] italic text-text-tertiary">
-              Your postmortem
+              {t("tradeDetail.notes.caption")}
             </p>
             <div className="mt-4">
               <NotesEditor
@@ -350,10 +371,10 @@ export default async function TradeDetailPage({
           {/* ── free-form tags ────────────────────────────────────────── */}
           <section className="mt-14">
             <h2 className="font-serif text-xs font-semibold uppercase tracking-[0.18em] text-text-tertiary">
-              Tags
+              {t("tradeDetail.tags.title")}
             </h2>
             <p className="mt-2 font-serif text-[12px] italic text-text-tertiary">
-              Setup labels for grouping and analytics
+              {t("tradeDetail.tags.caption")}
             </p>
             <div className="mt-4">
               <TagEditor activityId={activity.id} initialTags={initialTags} />
@@ -363,10 +384,10 @@ export default async function TradeDetailPage({
           {/* ── screenshots ───────────────────────────────────────────── */}
           <section className="mt-14">
             <h2 className="font-serif text-xs font-semibold uppercase tracking-[0.18em] text-text-tertiary">
-              Screenshots
+              {t("tradeDetail.screenshots.title")}
             </h2>
             <p className="mt-2 font-serif text-[12px] italic text-text-tertiary">
-              Snapshots of the chart at entry, exit, or thesis moments.
+              {t("tradeDetail.screenshots.caption")}
             </p>
             <div className="mt-4">
               <ScreenshotsSection
@@ -379,7 +400,7 @@ export default async function TradeDetailPage({
           {/* ── actions ───────────────────────────────────────────────── */}
           <section className="mt-14">
             <h2 className="font-serif text-xs font-semibold uppercase tracking-[0.18em] text-text-tertiary">
-              Actions
+              {t("tradeDetail.actions.title")}
             </h2>
             <div className="mt-4 flex flex-wrap items-center gap-2">
               <Link
@@ -387,7 +408,7 @@ export default async function TradeDetailPage({
                 className="inline-flex items-center gap-1.5 rounded-md border border-border bg-surface px-3 py-1.5 font-mono text-[10px] uppercase tracking-[0.16em] text-text-secondary transition-colors hover:border-border-strong hover:text-text"
               >
                 <Pencil className="h-3 w-3" />
-                Edit
+                {t("common.edit")}
               </Link>
               <DeleteButton
                 activityId={activity.id}
@@ -404,10 +425,10 @@ export default async function TradeDetailPage({
                 href="/spreads/archive?activity=trade"
                 className="hover:text-text"
               >
-                ← back to trades
+                {t("tradeDetail.footer.back")}
               </Link>
               <span>
-                trade {serial.toLowerCase()} · csj
+                {t("tradeDetail.footer.serial", { serial: serial.toLowerCase() })}
               </span>
             </div>
           </footer>

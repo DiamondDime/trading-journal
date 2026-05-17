@@ -26,6 +26,7 @@ import { ScreenshotsSection } from "@/components/activity/screenshots-section";
 import { toScreenshotItems } from "@/components/activity/screenshots-data";
 import { TagEditor } from "@/components/activity/tag-editor";
 import { SatisfactionToggle } from "@/components/activity/satisfaction-toggle";
+import { getT } from "@/lib/i18n/server";
 
 export const dynamic = "force-dynamic";
 
@@ -55,6 +56,7 @@ export default async function AirdropDetailPage({
   const { id } = await params;
   const sp = await searchParams;
   const { id: userId } = await requireUser();
+  const t = await getT();
   const [
     activity,
     note,
@@ -81,7 +83,7 @@ export default async function AirdropDetailPage({
   const multiplier = valueAtClaim > 0 ? currentValue / valueAtClaim : 1.0;
   const netPnl = Number(activity.netPnlUsd ?? 0);
   const headlineTone = multiplier >= 1 ? "text-up" : "text-down";
-  const statusLabel = activity.status[0].toUpperCase() + activity.status.slice(1);
+  const statusLabel = t(`airdropDetail.status.${activity.status}` as never);
   const serial = `A#${activity.id.slice(0, 4).toUpperCase()}`;
   const claimLabel = fmtDate(a.claimDate ?? activity.openedAt);
   const daysSinceClaim = a.claimDate
@@ -114,7 +116,7 @@ export default async function AirdropDetailPage({
               </h1>
               <Link
                 href={`/add/airdrop/fields?edit=${activity.id}`}
-                aria-label="Edit airdrop"
+                aria-label={t("airdropDetail.editAria")}
                 className="mt-2 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-border bg-surface text-text-tertiary transition-colors hover:border-border-strong hover:text-text"
               >
                 <Pencil className="h-3.5 w-3.5" />
@@ -124,7 +126,7 @@ export default async function AirdropDetailPage({
               {a.protocol} · {a.tokenSymbol}
             </p>
             <p className="mt-1 font-mono text-sm text-text-tertiary">
-              {daysSinceClaim}d since claim
+              {t("airdropDetail.daysSinceClaim", { days: daysSinceClaim })}
             </p>
             <div className="mt-5">
               <SatisfactionToggle
@@ -138,7 +140,7 @@ export default async function AirdropDetailPage({
           <section className="mt-14 border-y border-border py-12">
             <div className="flex flex-col gap-2">
               <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-text-tertiary">
-                Mark-to-market
+                {t("airdropDetail.markToMarket")}
               </p>
               <div className="flex items-baseline gap-3">
                 <span
@@ -148,15 +150,15 @@ export default async function AirdropDetailPage({
                   {fmtMultiplier(multiplier)}
                 </span>
                 <span className="font-serif text-2xl font-normal text-text-tertiary">
-                  MTM
+                  {t("airdropDetail.mtmAbbrev")}
                 </span>
               </div>
               <p className="mt-3 font-mono text-sm text-text-secondary">
-                Net{" "}
+                {t("airdropDetail.netPrefix")}{" "}
                 <span className={`${headlineTone} font-medium`}>
                   {fmtUsd(netPnl, true)}
                 </span>{" "}
-                realized · cost basis $0
+                {t("airdropDetail.netSuffix")}
               </p>
             </div>
           </section>
@@ -164,7 +166,7 @@ export default async function AirdropDetailPage({
           {a.eligibilityReason && (
             <section className="mt-14">
               <h2 className="font-serif text-xs font-semibold uppercase tracking-[0.18em] text-text-tertiary">
-                Thesis
+                {t("airdropDetail.thesis")}
               </h2>
               <div className="mt-4 space-y-4 font-serif text-lg leading-[1.65] text-text">
                 <p>{a.eligibilityReason}</p>
@@ -174,7 +176,7 @@ export default async function AirdropDetailPage({
 
           <section className="mt-14">
             <h2 className="font-serif text-xs font-semibold uppercase tracking-[0.18em] text-text-tertiary">
-              Claim
+              {t("airdropDetail.claim")}
             </h2>
 
             <div className="mt-6 overflow-hidden rounded-md border border-border bg-surface">
@@ -182,35 +184,35 @@ export default async function AirdropDetailPage({
                 <TableHeader>
                   <TableRow className="hover:bg-transparent">
                     <TableHead className="text-text-tertiary">&nbsp;</TableHead>
-                    <TableHead className="text-right text-text-secondary">Value</TableHead>
+                    <TableHead className="text-right text-text-secondary">{t("airdropDetail.table.value")}</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  <ExecRow label="Protocol" value={a.protocol} mono />
+                  <ExecRow label={t("airdropDetail.table.protocol")} value={a.protocol} mono />
                   <ExecRow
-                    label="Tokens claimed"
+                    label={t("airdropDetail.table.tokensClaimed")}
                     value={`${fmtTokens(tokens)} ${a.tokenSymbol}`}
                     mono
                   />
-                  <ExecRow label="Claim date" value={fmtDate(a.claimDate)} mono />
-                  <ExecRow label="Value at claim" value={fmtUsd(valueAtClaim)} mono />
+                  <ExecRow label={t("airdropDetail.table.claimDate")} value={fmtDate(a.claimDate)} mono />
+                  <ExecRow label={t("airdropDetail.table.valueAtClaim")} value={fmtUsd(valueAtClaim)} mono />
                   <ExecRow
-                    label="Current price"
+                    label={t("airdropDetail.table.currentPrice")}
                     value={currentPrice > 0 ? `$${fmtPrice(currentPrice)}` : "—"}
                     mono
                   />
                   <ExecRow
-                    label="Current value"
+                    label={t("airdropDetail.table.currentValue")}
                     value={currentValue > 0 ? fmtUsd(currentValue) : "—"}
                     mono
                   />
                   <ExecRow
-                    label="Cost basis"
+                    label={t("airdropDetail.table.costBasis")}
                     value={<span className="text-text-tertiary">$0.00</span>}
                     mono
                   />
                   <ExecRow
-                    label="Net P&L"
+                    label={t("airdropDetail.table.netPnl")}
                     value={
                       <span className={`font-medium ${headlineTone}`}>
                         {fmtUsd(netPnl, true)}
@@ -219,7 +221,7 @@ export default async function AirdropDetailPage({
                     mono
                   />
                   <ExecRow
-                    label="MTM ×"
+                    label={t("airdropDetail.table.mtmMultiplier")}
                     value={
                       <span className={`font-medium ${headlineTone}`}>
                         {fmtMultiplier(multiplier)}
@@ -235,7 +237,7 @@ export default async function AirdropDetailPage({
           {activity.regimeTags.length > 0 && (
             <section className="mt-14">
               <h2 className="font-serif text-xs font-semibold uppercase tracking-[0.18em] text-text-tertiary">
-                Regime tags
+                {t("airdropDetail.regimeTags")}
               </h2>
               <div className="mt-4 flex flex-wrap gap-2">
                 {activity.regimeTags.map((tag) => (
@@ -252,10 +254,10 @@ export default async function AirdropDetailPage({
 
           <section className="mt-14">
             <h2 className="font-serif text-xs font-semibold uppercase tracking-[0.18em] text-text-tertiary">
-              Notes
+              {t("airdropDetail.notes")}
             </h2>
             <p className="mt-2 font-serif text-[12px] italic text-text-tertiary">
-              Your postmortem
+              {t("airdropDetail.notesHint")}
             </p>
             <div className="mt-4">
               <NotesEditor
@@ -269,10 +271,10 @@ export default async function AirdropDetailPage({
 
           <section className="mt-14">
             <h2 className="font-serif text-xs font-semibold uppercase tracking-[0.18em] text-text-tertiary">
-              Tags
+              {t("airdropDetail.tags")}
             </h2>
             <p className="mt-2 font-serif text-[12px] italic text-text-tertiary">
-              Setup labels for grouping and analytics
+              {t("airdropDetail.tagsHint")}
             </p>
             <div className="mt-4">
               <TagEditor activityId={activity.id} initialTags={initialTags} />
@@ -281,10 +283,10 @@ export default async function AirdropDetailPage({
 
           <section className="mt-14">
             <h2 className="font-serif text-xs font-semibold uppercase tracking-[0.18em] text-text-tertiary">
-              Screenshots
+              {t("airdropDetail.screenshots")}
             </h2>
             <p className="mt-2 font-serif text-[12px] italic text-text-tertiary">
-              Snapshots of the chart at entry, exit, or thesis moments.
+              {t("airdropDetail.screenshotsHint")}
             </p>
             <div className="mt-4">
               <ScreenshotsSection
@@ -296,7 +298,7 @@ export default async function AirdropDetailPage({
 
           <section className="mt-14">
             <h2 className="font-serif text-xs font-semibold uppercase tracking-[0.18em] text-text-tertiary">
-              Actions
+              {t("airdropDetail.actions")}
             </h2>
             <div className="mt-4 flex flex-wrap items-center gap-2">
               <Link
@@ -304,7 +306,7 @@ export default async function AirdropDetailPage({
                 className="inline-flex items-center gap-1.5 rounded-md border border-border bg-surface px-3 py-1.5 font-mono text-[10px] uppercase tracking-[0.16em] text-text-secondary transition-colors hover:border-border-strong hover:text-text"
               >
                 <Pencil className="h-3 w-3" />
-                Edit
+                {t("airdropDetail.edit")}
               </Link>
               <DeleteButton
                 activityId={activity.id}
@@ -320,10 +322,10 @@ export default async function AirdropDetailPage({
                 href="/spreads/archive?activity=airdrop"
                 className="hover:text-text"
               >
-                ← back to airdrops
+                {t("airdropDetail.backLink")}
               </Link>
               <span>
-                airdrop {serial.toLowerCase()} · csj
+                {t("airdropDetail.footerLabel", { serial: serial.toLowerCase() })}
               </span>
             </div>
           </footer>
