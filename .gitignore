@@ -51,6 +51,9 @@ supabase/.temp
 # Local-only scratch
 .tmp-screenshots/
 
+# Screenshot uploads (Wave 9A). Bytes live on disk; metadata in activity_screenshot.
+uploads/
+
 # Playwright
 test-results/
 playwright-report/

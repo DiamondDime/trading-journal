@@ -549,3 +549,61 @@ export const ListNotesQuery = z
   .object({
     activity_id: z.string().uuid(),
   });
+
+// ============================================================================
+// Satellite tables (Wave 9A) — schemas for /api/activities/[id]/{tags,
+// excursion,screenshots,satisfaction} and /api/screenshots/[id] body input.
+// ============================================================================
+
+/** PUT /api/activities/[id]/tags — replace all tags on an activity. */
+export const SetTagsBody = z
+  .object({
+    tags: z.array(z.string().min(1).max(60)).max(40),
+  })
+  .strict();
+
+export type SetTagsData = z.infer<typeof SetTagsBody>;
+
+/**
+ * PUT /api/activities/[id]/excursion — upsert MAE/MFE/stop-loss.
+ *
+ * All fields optional individually; the route maps `undefined` → "leave alone"
+ * on update and "NULL" on insert. Decimals accept signed strings; prices come
+ * back from postgres.js as strings so we stay in the string-decimal domain
+ * end-to-end.
+ */
+export const UpsertExcursionBody = z
+  .object({
+    stop_loss_price: SignedDecimal.nullable().optional(),
+    mae_price:       SignedDecimal.nullable().optional(),
+    mfe_price:       SignedDecimal.nullable().optional(),
+    mae_at:          z.string().datetime().nullable().optional(),
+    mfe_at:          z.string().datetime().nullable().optional(),
+    source:          z.enum(['manual', 'kline_backfill']).optional(),
+    backfilled_at:   z.string().datetime().nullable().optional(),
+  })
+  .strict();
+
+export type UpsertExcursionData = z.infer<typeof UpsertExcursionBody>;
+
+/** PATCH /api/screenshots/[id] — update annotation state + optional caption. */
+export const UpdateScreenshotAnnotationBody = z
+  .object({
+    // MarkerJS2 state is an opaque JSON blob — we don't validate the shape,
+    // only that it's valid JSON the route can pass through to jsonb.
+    annotation_state: z.unknown().nullable(),
+    caption:          z.string().max(1000).nullable().optional(),
+  })
+  .strict();
+
+export type UpdateScreenshotAnnotationData = z.infer<typeof UpdateScreenshotAnnotationBody>;
+
+/** PUT /api/activities/[id]/satisfaction — upsert thumbs up/down. */
+export const UpsertSatisfactionBody = z
+  .object({
+    satisfaction: z.boolean(),
+    reason:       z.string().max(2000).nullable().optional(),
+  })
+  .strict();
+
+export type UpsertSatisfactionData = z.infer<typeof UpsertSatisfactionBody>;
