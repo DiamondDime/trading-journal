@@ -7,6 +7,8 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { fmtUsd } from "@/lib/data/archive-data";
+import { getT } from "@/lib/i18n/server";
+import type { MessageKey } from "@/lib/i18n/resolve";
 
 /**
  * Generic activity-breakdown table. Used by both the activity-mix
@@ -43,7 +45,8 @@ interface Props {
   showWinRate?: boolean;
 }
 
-export function CategoryTable({ rows, showCapital, showWinRate }: Props) {
+export async function CategoryTable({ rows, showCapital, showWinRate }: Props) {
+  const t = await getT();
   const hasCapital =
     showCapital ?? rows.some((r) => r.capital != null);
   const hasWinRate =
@@ -53,7 +56,7 @@ export function CategoryTable({ rows, showCapital, showWinRate }: Props) {
     return (
       <div className="flex h-[140px] w-full items-center justify-center rounded-md border border-dashed border-border bg-inset">
         <p className="font-serif text-sm italic text-text-tertiary">
-          Not enough data yet.
+          {t("numbers.notEnoughData")}
         </p>
       </div>
     );
@@ -65,29 +68,29 @@ export function CategoryTable({ rows, showCapital, showWinRate }: Props) {
         <TableHeader>
           <TableRow className="hover:bg-transparent">
             <TableHead className="font-mono text-[10px] uppercase tracking-[0.14em] text-text-tertiary">
-              Category
+              {t("analytics.tables.category" as MessageKey)}
             </TableHead>
             <TableHead className="text-right font-mono text-[10px] uppercase tracking-[0.14em] text-text-tertiary">
-              Count
+              {t("analytics.tables.count" as MessageKey)}
             </TableHead>
             <TableHead className="text-right font-mono text-[10px] uppercase tracking-[0.14em] text-text-tertiary">
-              Total P&amp;L
+              {t("analytics.tables.totalPnl" as MessageKey)}
             </TableHead>
             <TableHead className="text-right font-mono text-[10px] uppercase tracking-[0.14em] text-text-tertiary">
-              Avg P&amp;L
+              {t("analytics.tables.avgPnl" as MessageKey)}
             </TableHead>
             {hasWinRate && (
               <TableHead className="text-right font-mono text-[10px] uppercase tracking-[0.14em] text-text-tertiary">
-                Win rate
+                {t("analytics.tables.winRate" as MessageKey)}
               </TableHead>
             )}
             {hasCapital && (
               <TableHead className="text-right font-mono text-[10px] uppercase tracking-[0.14em] text-text-tertiary">
-                Capital
+                {t("analytics.tables.capital" as MessageKey)}
               </TableHead>
             )}
             <TableHead className="text-right font-mono text-[10px] uppercase tracking-[0.14em] text-text-tertiary">
-              Share
+              {t("analytics.tables.share" as MessageKey)}
             </TableHead>
           </TableRow>
         </TableHeader>

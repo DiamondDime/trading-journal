@@ -12,6 +12,8 @@ import {
 import { ArrowUpDown } from "lucide-react";
 import { fmtUsd } from "@/lib/data/archive-data";
 import type { RegimeAggRow } from "@/lib/db/activity";
+import { useT } from "@/lib/i18n/client";
+import type { MessageKey } from "@/lib/i18n/resolve";
 
 /**
  * Sortable per-regime stats table. Click a header to sort by that column;
@@ -63,6 +65,7 @@ function compareString(a: string, b: string, dir: SortDir): number {
 }
 
 export function RegimeStatsTable({ rows }: Props) {
+  const t = useT();
   const [sort, setSort] = React.useState<SortState>({ key: "count", dir: "desc" });
 
   const sorted = React.useMemo(() => {
@@ -87,7 +90,7 @@ export function RegimeStatsTable({ rows }: Props) {
     return (
       <div className="flex h-[160px] w-full items-center justify-center rounded-md border border-dashed border-border bg-inset">
         <p className="font-serif text-sm italic text-text-tertiary">
-          Not enough data yet.
+          {t("numbers.notEnoughData")}
         </p>
       </div>
     );
@@ -102,13 +105,13 @@ export function RegimeStatsTable({ rows }: Props) {
       <Table>
         <TableHeader>
           <TableRow className="hover:bg-transparent">
-            <SortableHead label="Regime" onClick={() => toggle("regime")} active={sort.key === "regime"} dir={sort.dir} align="left" />
-            <SortableHead label="Count" onClick={() => toggle("count")} active={sort.key === "count"} dir={sort.dir} />
-            <SortableHead label="Total P&L" onClick={() => toggle("netPnl")} active={sort.key === "netPnl"} dir={sort.dir} />
-            <SortableHead label="Avg P&L" onClick={() => toggle("avgPnl")} active={sort.key === "avgPnl"} dir={sort.dir} />
-            <SortableHead label="Win rate" onClick={() => toggle("winRate")} active={sort.key === "winRate"} dir={sort.dir} />
-            <SortableHead label="Profit factor" onClick={() => toggle("profitFactor")} active={sort.key === "profitFactor"} dir={sort.dir} />
-            <SortableHead label="SQN" onClick={() => toggle("sqn")} active={sort.key === "sqn"} dir={sort.dir} />
+            <SortableHead label={t("analytics.tables.regime" as MessageKey)} onClick={() => toggle("regime")} active={sort.key === "regime"} dir={sort.dir} align="left" />
+            <SortableHead label={t("analytics.tables.count" as MessageKey)} onClick={() => toggle("count")} active={sort.key === "count"} dir={sort.dir} />
+            <SortableHead label={t("analytics.tables.totalPnl" as MessageKey)} onClick={() => toggle("netPnl")} active={sort.key === "netPnl"} dir={sort.dir} />
+            <SortableHead label={t("analytics.tables.avgPnl" as MessageKey)} onClick={() => toggle("avgPnl")} active={sort.key === "avgPnl"} dir={sort.dir} />
+            <SortableHead label={t("analytics.tables.winRate" as MessageKey)} onClick={() => toggle("winRate")} active={sort.key === "winRate"} dir={sort.dir} />
+            <SortableHead label={t("analytics.tables.profitFactor" as MessageKey)} onClick={() => toggle("profitFactor")} active={sort.key === "profitFactor"} dir={sort.dir} />
+            <SortableHead label={t("analytics.tables.sqn" as MessageKey)} onClick={() => toggle("sqn")} active={sort.key === "sqn"} dir={sort.dir} />
           </TableRow>
         </TableHeader>
         <TableBody>

@@ -13,6 +13,8 @@ import {
   Cell,
 } from "recharts";
 import type { HoldTimeBucketRow } from "@/lib/db/activity";
+import { useT } from "@/lib/i18n/client";
+import type { MessageKey } from "@/lib/i18n/resolve";
 
 /**
  * Hold-time histogram with secondary line for avg P&L per bucket.
@@ -40,13 +42,14 @@ function fmtUsdShort(v: number): string {
 }
 
 export function HoldTimeHistogram({ rows }: Props) {
+  const t = useT();
   // If every bucket is empty, fall back to the editorial empty state.
   const hasData = rows.some((r) => r.count > 0);
   if (!hasData) {
     return (
       <div className="flex h-[220px] w-full items-center justify-center rounded-md border border-dashed border-border bg-inset">
         <p className="font-serif text-sm italic text-text-tertiary">
-          Not enough data yet.
+          {t("numbers.notEnoughData")}
         </p>
       </div>
     );
@@ -106,8 +109,13 @@ export function HoldTimeHistogram({ rows }: Props) {
             }}
             formatter={(value, name) => {
               const v = Number(value);
-              if (name === "count") return [`${v} activities`, "count"];
-              if (name === "avgPnl") return [fmtUsdShort(v), "avg P&L"];
+              if (name === "count")
+                return [
+                  t.plural("plurals.activities", v),
+                  t("analytics.charts.count" as MessageKey),
+                ];
+              if (name === "avgPnl")
+                return [fmtUsdShort(v), t("analytics.charts.avgPnl" as MessageKey)];
               return [String(value), String(name)];
             }}
           />

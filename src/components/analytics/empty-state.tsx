@@ -1,4 +1,6 @@
 import Link from "next/link";
+import { getT } from "@/lib/i18n/server";
+import type { MessageKey } from "@/lib/i18n/resolve";
 
 /**
  * Page-level empty state shown when the user has too few closed activities
@@ -16,7 +18,8 @@ interface Props {
   current: number;
 }
 
-export function AnalyticsEmptyState({ headline, body, current }: Props) {
+export async function AnalyticsEmptyState({ headline, body, current }: Props) {
+  const t = await getT();
   return (
     <div className="flex flex-col items-center justify-center gap-4 rounded-md border border-dashed border-border bg-surface px-8 py-16 text-center">
       <p className="font-serif text-[18px] italic leading-snug text-text">
@@ -28,13 +31,16 @@ export function AnalyticsEmptyState({ headline, body, current }: Props) {
         </p>
       )}
       <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-text-tertiary">
-        {current} / {MIN_FOR_ANALYTICS} activities logged
+        {t("analytics.empty.progress" as MessageKey, {
+          current,
+          total: MIN_FOR_ANALYTICS,
+        })}
       </p>
       <Link
         href="/add"
         className="font-mono text-[11px] uppercase tracking-[0.16em] text-text underline-offset-4 hover:underline"
       >
-        Log activity →
+        {t("analytics.empty.logActivity" as MessageKey)}
       </Link>
     </div>
   );

@@ -9,6 +9,8 @@ import {
 } from "@/components/ui/table";
 import { fmtUsd, fmtCapital } from "@/lib/data/archive-data";
 import type { Activity } from "@/lib/data/archive-data";
+import { getT } from "@/lib/i18n/server";
+import type { MessageKey } from "@/lib/i18n/resolve";
 
 /**
  * Top-N best/worst trades table. Each row is a Link to the detail page so
@@ -66,12 +68,13 @@ const TYPE_BADGE_LABEL: Record<string, string> = {
   airdrop: "AIR",
 };
 
-export function TopTradesTable({ title, rows, tone }: Props) {
+export async function TopTradesTable({ title, rows, tone }: Props) {
+  const t = await getT();
   if (rows.length === 0) {
     return (
       <div className="flex h-[200px] w-full items-center justify-center rounded-md border border-dashed border-border bg-inset">
         <p className="font-serif text-sm italic text-text-tertiary">
-          Not enough data yet.
+          {t("numbers.notEnoughData")}
         </p>
       </div>
     );
@@ -94,22 +97,22 @@ export function TopTradesTable({ title, rows, tone }: Props) {
           <TableHeader>
             <TableRow className="hover:bg-transparent">
               <TableHead className="w-[64px] font-mono text-[10px] uppercase tracking-[0.14em] text-text-tertiary">
-                #
+                {t("analytics.tables.serial" as MessageKey)}
               </TableHead>
               <TableHead className="font-mono text-[10px] uppercase tracking-[0.14em] text-text-tertiary">
-                Name
+                {t("analytics.tables.name" as MessageKey)}
               </TableHead>
               <TableHead className="hidden text-right font-mono text-[10px] uppercase tracking-[0.14em] text-text-tertiary md:table-cell">
-                Date
+                {t("analytics.tables.date" as MessageKey)}
               </TableHead>
               <TableHead className="hidden text-right font-mono text-[10px] uppercase tracking-[0.14em] text-text-tertiary md:table-cell">
-                Capital
+                {t("analytics.tables.capital" as MessageKey)}
               </TableHead>
               <TableHead className="text-right font-mono text-[10px] uppercase tracking-[0.14em] text-text-tertiary">
-                Net P&amp;L
+                {t("analytics.tables.netPnl" as MessageKey)}
               </TableHead>
               <TableHead className="text-right font-mono text-[10px] uppercase tracking-[0.14em] text-text-tertiary">
-                R
+                {t("analytics.tables.rMultiple" as MessageKey)}
               </TableHead>
             </TableRow>
           </TableHeader>

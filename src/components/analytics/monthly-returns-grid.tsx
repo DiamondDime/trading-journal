@@ -7,6 +7,8 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import type { MonthlyPnlRow } from "@/lib/db/activity";
+import { useT } from "@/lib/i18n/client";
+import type { MessageKey } from "@/lib/i18n/resolve";
 
 /**
  * Monthly returns grid — years on rows, months Jan-Dec across columns. One of
@@ -33,10 +35,20 @@ interface Props {
   rows: MonthlyPnlRow[];
 }
 
-const MONTH_LABELS = [
-  "Jan", "Feb", "Mar", "Apr", "May", "Jun",
-  "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
-];
+const MONTH_KEYS = [
+  "analytics.charts.months.jan",
+  "analytics.charts.months.feb",
+  "analytics.charts.months.mar",
+  "analytics.charts.months.apr",
+  "analytics.charts.months.may",
+  "analytics.charts.months.jun",
+  "analytics.charts.months.jul",
+  "analytics.charts.months.aug",
+  "analytics.charts.months.sep",
+  "analytics.charts.months.oct",
+  "analytics.charts.months.nov",
+  "analytics.charts.months.dec",
+] as const;
 
 interface YearRow {
   year: number;
@@ -96,6 +108,8 @@ function cellTextColor(v: number | null): string {
 }
 
 export function MonthlyReturnsGrid({ rows }: Props) {
+  const t = useT();
+  const MONTH_LABELS = MONTH_KEYS.map((k) => t(k as MessageKey));
   // Pivot into years × months. Skip rows that don't parse (defensive).
   const { years, maxAbs } = React.useMemo(() => {
     const byYear = new Map<number, (MonthlyPnlRow | null)[]>();
@@ -142,7 +156,7 @@ export function MonthlyReturnsGrid({ rows }: Props) {
     return (
       <div className="flex h-[140px] w-full items-center justify-center rounded-md border border-dashed border-border bg-inset">
         <p className="font-serif text-sm italic text-text-tertiary">
-          Not enough data yet.
+          {t("numbers.notEnoughData")}
         </p>
       </div>
     );
@@ -154,18 +168,18 @@ export function MonthlyReturnsGrid({ rows }: Props) {
         <thead>
           <tr>
             <th className="w-12 px-1 py-1 text-left font-mono text-[10px] uppercase tracking-[0.14em] text-text-tertiary">
-              Year
+              {t("analytics.tables.year" as MessageKey)}
             </th>
-            {MONTH_LABELS.map((m) => (
+            {MONTH_LABELS.map((m, i) => (
               <th
-                key={m}
+                key={i}
                 className="px-1 py-1 text-center font-mono text-[10px] uppercase tracking-[0.14em] text-text-tertiary"
               >
                 {m}
               </th>
             ))}
             <th className="w-16 px-1 py-1 text-right font-mono text-[10px] uppercase tracking-[0.14em] text-text-tertiary">
-              YTD
+              {t("analytics.tables.ytd" as MessageKey)}
             </th>
           </tr>
         </thead>
@@ -186,8 +200,16 @@ export function MonthlyReturnsGrid({ rows }: Props) {
                           role="img"
                           aria-label={
                             m
-                              ? `${cellLabel} ${y.year}: ${fmtTooltipAmount(m.netPnl)} across ${m.count} ${m.count === 1 ? "activity" : "activities"}`
-                              : `${cellLabel} ${y.year}: no activity`
+                              ? t("analytics.charts.monthlyAriaCell" as MessageKey, {
+                                  month: cellLabel,
+                                  year: y.year,
+                                  amount: fmtTooltipAmount(m.netPnl),
+                                  activities: t.plural("plurals.activities", m.count),
+                                })
+                              : t("analytics.charts.monthlyAriaEmpty" as MessageKey, {
+                                  month: cellLabel,
+                                  year: y.year,
+                                })
                           }
                           className="flex h-9 min-w-[44px] items-center justify-center rounded-[3px] px-1 transition-transform hover:ring-1 hover:ring-text/30"
                           style={{ background: cellBackground(value, maxAbs) }}
@@ -222,11 +244,13 @@ export function MonthlyReturnsGrid({ rows }: Props) {
                                 {fmtTooltipAmount(m.netPnl)}
                               </span>
                               <span className="text-text-tertiary">
-                                {m.count} {m.count === 1 ? "activity" : "activities"}
+                                {t.plural("plurals.activities", m.count)}
                               </span>
                             </>
                           ) : (
-                            <span className="text-text-tertiary">no activity</span>
+                            <span className="text-text-tertiary">
+                              {t("analytics.charts.noActivity" as MessageKey)}
+                            </span>
                           )}
                         </div>
                       </TooltipContent>

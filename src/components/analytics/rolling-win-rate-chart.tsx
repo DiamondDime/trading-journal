@@ -10,6 +10,8 @@ import {
   ReferenceLine,
   ResponsiveContainer,
 } from "recharts";
+import { useT } from "@/lib/i18n/client";
+import type { MessageKey } from "@/lib/i18n/resolve";
 
 /**
  * Rolling win-rate line chart — sliding window of N (default 20) most-recent
@@ -49,11 +51,12 @@ function fmtPct(v: number): string {
 }
 
 export function RollingWinRateChart({ points = [], window }: Props) {
+  const t = useT();
   if (points.length === 0) {
     return (
       <div className="flex h-[220px] w-full items-center justify-center rounded-md border border-dashed border-border bg-inset">
         <p className="font-serif text-sm italic text-text-tertiary">
-          Not enough data yet.
+          {t("numbers.notEnoughData")}
         </p>
       </div>
     );
@@ -115,10 +118,11 @@ export function RollingWinRateChart({ points = [], window }: Props) {
             }}
             formatter={(_value, _name, item) => {
               const p = item?.payload as RollingWinRatePoint | undefined;
-              if (!p) return ["—", "win rate"];
+              if (!p)
+                return ["—", t("analytics.charts.winRate" as MessageKey)];
               return [
                 `${fmtPct(p.winRate)} · ${p.winners}/${p.windowSize}`,
-                `win rate (window ${window})`,
+                t("analytics.charts.winRateWindow" as MessageKey, { window }),
               ];
             }}
           />

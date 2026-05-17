@@ -11,6 +11,7 @@ import {
   ReferenceLine,
   ResponsiveContainer,
 } from "recharts";
+import { useT } from "@/lib/i18n/client";
 
 /**
  * Horizontal bar chart for ranked dollar values (e.g. P&L by asset, P&L by
@@ -49,11 +50,12 @@ function fmtUsdShort(v: number): string {
 }
 
 export function BarRank({ rows, rowHeight = 26, showValueLabels = true }: Props) {
+  const t = useT();
   if (rows.length === 0) {
     return (
       <div className="flex h-[160px] w-full items-center justify-center rounded-md border border-dashed border-border bg-inset">
         <p className="font-serif text-sm italic text-text-tertiary">
-          Not enough data yet.
+          {t("numbers.notEnoughData")}
         </p>
       </div>
     );

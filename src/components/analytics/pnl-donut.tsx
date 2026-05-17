@@ -8,6 +8,7 @@ import {
   Tooltip,
   ResponsiveContainer,
 } from "recharts";
+import { useT } from "@/lib/i18n/client";
 
 /**
  * Donut chart of categorical USD distribution (e.g. P&L by activity type or
@@ -75,13 +76,14 @@ export function PnlDonut({
   centerValue,
   centerCaption,
 }: Props) {
+  const t = useT();
   const total = slices.reduce((s, x) => s + Math.abs(x.value), 0);
 
   if (slices.length === 0 || total === 0) {
     return (
       <div className="flex h-[280px] w-full items-center justify-center rounded-md border border-dashed border-border bg-inset">
         <p className="font-serif text-sm italic text-text-tertiary">
-          Not enough data yet.
+          {t("numbers.notEnoughData")}
         </p>
       </div>
     );

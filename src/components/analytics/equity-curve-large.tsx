@@ -11,6 +11,8 @@ import {
   ResponsiveContainer,
 } from "recharts";
 import type { EquityPoint } from "@/components/spread/equity-curve-chart";
+import { useT } from "@/lib/i18n/client";
+import type { MessageKey } from "@/lib/i18n/resolve";
 
 /**
  * Track-record full-width equity curve — 480px tall variant of the dashboard
@@ -46,11 +48,12 @@ export function EquityCurveLarge({
   currentDrawdownUsd = 0,
   currentEquity = 0,
 }: Props) {
+  const t = useT();
   if (points.length === 0) {
     return (
       <div className="flex h-[480px] w-full items-center justify-center rounded-md border border-dashed border-border bg-inset">
         <p className="font-serif text-base italic text-text-tertiary">
-          Equity curve will appear once activities are logged.
+          {t("analytics.charts.equityEmpty" as MessageKey)}
         </p>
       </div>
     );
@@ -99,7 +102,7 @@ export function EquityCurveLarge({
               strokeDasharray="2 3"
               strokeWidth={1}
               label={{
-                value: `ATH ${fmtUsdShort(peakUsd)}`,
+                value: `${t("analytics.charts.ath" as MessageKey)} ${fmtUsdShort(peakUsd)}`,
                 position: "right",
                 fontSize: 11,
                 fill: "var(--text-tertiary)",
@@ -150,10 +153,11 @@ export function EquityCurveLarge({
               const sign = v >= 0 ? "+" : "−";
               const p = item?.payload as EquityPoint | undefined;
               const dd = p?.drawdownUsd ?? 0;
-              const label = `${sign}$${Math.abs(v).toLocaleString("en-US", { maximumFractionDigits: 0 })}${
-                dd < 0 ? `  ·  dd ${fmtUsdShort(dd)}` : ""
+              const ddPrefix = t("analytics.charts.ddPrefix" as MessageKey);
+              const label = `${sign}$${Math.abs(v).toLocaleString(t.locale === "ru" ? "ru-RU" : "en-US", { maximumFractionDigits: 0 })}${
+                dd < 0 ? `  ·  ${ddPrefix} ${fmtUsdShort(dd)}` : ""
               }`;
-              return [label, "equity"];
+              return [label, t("analytics.charts.equity" as MessageKey)];
             }}
           />
           <Area

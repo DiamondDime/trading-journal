@@ -10,6 +10,8 @@ import {
   ReferenceLine,
   ResponsiveContainer,
 } from "recharts";
+import { useT } from "@/lib/i18n/client";
+import type { MessageKey } from "@/lib/i18n/resolve";
 
 /**
  * Underwater drawdown chart — for each closing event, plots
@@ -52,11 +54,12 @@ function fmtUsdShort(v: number): string {
 }
 
 export function UnderwaterChart({ points = [] }: Props) {
+  const t = useT();
   if (points.length === 0) {
     return (
       <div className="flex h-[200px] w-full items-center justify-center rounded-md border border-dashed border-border bg-inset">
         <p className="font-serif text-sm italic text-text-tertiary">
-          Not enough data yet.
+          {t("numbers.notEnoughData")}
         </p>
       </div>
     );
@@ -113,7 +116,10 @@ export function UnderwaterChart({ points = [] }: Props) {
               const p = item?.payload as UnderwaterPoint | undefined;
               const pct = Number(value);
               const ddUsd = p?.ddUsd ?? 0;
-              return [`${fmtPct(pct)}  ·  ${fmtUsdShort(ddUsd)}`, "drawdown"];
+              return [
+                `${fmtPct(pct)}  ·  ${fmtUsdShort(ddUsd)}`,
+                t("analytics.charts.drawdown" as MessageKey),
+              ];
             }}
           />
           <Area

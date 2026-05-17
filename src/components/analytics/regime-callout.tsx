@@ -2,6 +2,8 @@ import { TrendingDown, TrendingUp } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { fmtUsd } from "@/lib/data/archive-data";
 import type { RegimeAggRow } from "@/lib/db/activity";
+import { getT } from "@/lib/i18n/server";
+import type { MessageKey } from "@/lib/i18n/resolve";
 
 /**
  * Best / worst regime callout card. Two of these are rendered on the regime
@@ -15,7 +17,8 @@ interface Props {
   tone: "up" | "down";
 }
 
-export function RegimeCallout({ title, regime, tone }: Props) {
+export async function RegimeCallout({ title, regime, tone }: Props) {
+  const t = await getT();
   const toneClass = tone === "up" ? "text-up" : "text-down";
   const Icon = tone === "up" ? TrendingUp : TrendingDown;
 
@@ -26,7 +29,7 @@ export function RegimeCallout({ title, regime, tone }: Props) {
           {title}
         </p>
         <p className="font-serif text-sm italic text-text-tertiary">
-          Not enough data yet.
+          {t("numbers.notEnoughData")}
         </p>
       </div>
     );
@@ -46,7 +49,7 @@ export function RegimeCallout({ title, regime, tone }: Props) {
       <div className="grid grid-cols-3 gap-3 border-t border-border-subtle pt-3">
         <div className="flex flex-col gap-0.5">
           <span className="font-mono text-[9px] uppercase tracking-[0.16em] text-text-tertiary">
-            Win rate
+            {t("analytics.tables.winRate" as MessageKey)}
           </span>
           <span className="font-mono text-[15px] font-medium tabular-nums text-text">
             {(regime.winRate * 100).toFixed(0)}%
@@ -54,7 +57,7 @@ export function RegimeCallout({ title, regime, tone }: Props) {
         </div>
         <div className="flex flex-col gap-0.5">
           <span className="font-mono text-[9px] uppercase tracking-[0.16em] text-text-tertiary">
-            Avg P&L
+            {t("analytics.tables.avgPnl" as MessageKey)}
           </span>
           <span className={cn("font-mono text-[15px] font-medium tabular-nums", toneClass)}>
             {fmtUsd(regime.avgPnl, true)}
@@ -62,7 +65,7 @@ export function RegimeCallout({ title, regime, tone }: Props) {
         </div>
         <div className="flex flex-col gap-0.5">
           <span className="font-mono text-[9px] uppercase tracking-[0.16em] text-text-tertiary">
-            Total
+            {t("analytics.tables.total" as MessageKey)}
           </span>
           <span className={cn("font-mono text-[15px] font-medium tabular-nums", toneClass)}>
             {fmtUsd(regime.netPnl, true)}
@@ -70,7 +73,7 @@ export function RegimeCallout({ title, regime, tone }: Props) {
         </div>
       </div>
       <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-text-tertiary">
-        {regime.count} {regime.count === 1 ? "activity" : "activities"}
+        {t.plural("plurals.activities", regime.count)}
       </p>
     </div>
   );
