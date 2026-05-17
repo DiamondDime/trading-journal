@@ -1,4 +1,5 @@
 import { requireUser } from "@/lib/auth/server";
+import { getT } from "@/lib/i18n/server";
 import {
   getActivityTypeAggregations,
   getCapitalByActivityType,
@@ -65,6 +66,7 @@ function fmtUsdCompact(v: number): string {
 
 export default async function ActivityMixPage() {
   const { id: userId } = await requireUser();
+  const t = await getT();
 
   const [
     totals,
@@ -103,8 +105,8 @@ export default async function ActivityMixPage() {
         <PageHero totalNet={totals.net} count={totals.count} />
         <div className="mt-8">
           <AnalyticsEmptyState
-            headline="Activity mix needs more data."
-            body={`Log at least ${MIN_FOR_ANALYTICS} activities to see breakdowns by type, subtype, asset, and capital allocation.`}
+            headline={t("analytics.activityMix.empty.headline")}
+            body={t("analytics.activityMix.empty.body", { min: MIN_FOR_ANALYTICS })}
             current={totals.count}
           />
         </div>
@@ -212,7 +214,7 @@ export default async function ActivityMixPage() {
     .filter((b) => b.count > 0)
     .map((b) => ({
       label: b.bucket,
-      sublabel: holdBucketSublabel(b.bucket),
+      sublabel: holdBucketSublabel(b.bucket, t),
       count: b.count,
       netPnl: b.netPnl,
       avgPnl: b.avgPnl,
@@ -228,15 +230,15 @@ export default async function ActivityMixPage() {
       <div className="mt-10 flex flex-col gap-8">
         {/* 1. P&L by activity type — donut + table side by side */}
         <SectionCard
-          title="P&L by activity type"
-          caption="Where each dollar of P&L came from. Slices use neutral tones — the page's signature amber is reserved for the headline."
+          title={t("analytics.activityMix.sections.byType")}
+          caption={t("analytics.activityMix.captions.byType")}
         >
           <div className="grid grid-cols-1 gap-8 lg:grid-cols-[1fr_1.4fr]">
             <PnlDonut
               slices={typeSlices}
-              centerLabel="Total net"
+              centerLabel={t("analytics.activityMix.donut.totalNet")}
               centerValue={fmtUsdCompact(totals.net)}
-              centerCaption={`${totals.count} activities`}
+              centerCaption={t("analytics.activityMix.donut.activities", { count: totals.count })}
             />
             <CategoryTable rows={typeRows} />
           </div>
@@ -245,8 +247,8 @@ export default async function ActivityMixPage() {
         {/* 2. Spread subtypes — only when spreads exist */}
         {spreadSubtypes.length > 0 && (
           <SectionCard
-            title="Spread subtypes"
-            caption="Spreads broken down by structure. Cash-and-carry, funding, cross-exchange — which strategy carries the book?"
+            title={t("analytics.activityMix.sections.subtypes")}
+            caption={t("analytics.activityMix.captions.subtypes")}
           >
             <div className="flex flex-col gap-6">
               <BarRank rows={subtypeBarRows} />
@@ -257,22 +259,26 @@ export default async function ActivityMixPage() {
 
         {/* 3. Asset rank */}
         <SectionCard
-          title="By asset"
-          caption="Net P&L per underlying. Sorted by absolute magnitude — find your bread-and-butter ticker."
-          meta={`${assets.length} ${assets.length === 1 ? "asset" : "assets"} traded`}
+          title={t("analytics.activityMix.sections.byAsset")}
+          caption={t("analytics.activityMix.captions.byAsset")}
+          meta={
+            assets.length === 1
+              ? t("analytics.activityMix.assetTradedOne")
+              : t("analytics.activityMix.assetsTraded", { count: assets.length })
+          }
         >
           <BarRank rows={assetRows} />
         </SectionCard>
 
         {/* 4. Capital allocation donut */}
         <SectionCard
-          title="Capital allocation"
-          caption="Where the money is parked — distinct from P&L. Look for mismatches: a type that holds 60% of capital but generates 20% of returns."
+          title={t("analytics.activityMix.sections.capital")}
+          caption={t("analytics.activityMix.captions.capital")}
         >
           <div className="grid grid-cols-1 gap-8 lg:grid-cols-[1fr_1.4fr]">
             <PnlDonut
               slices={capitalSlices}
-              centerLabel="Total capital"
+              centerLabel={t("analytics.activityMix.donut.totalCapital")}
               centerValue={
                 totalCapital > 0
                   ? `$${(totalCapital >= 10_000
@@ -280,7 +286,9 @@ export default async function ActivityMixPage() {
                       : totalCapital.toFixed(0))}`
                   : "—"
               }
-              centerCaption={`across ${ACTIVITY_TYPE_ORDER.filter((t) => capitalByType[t] > 0).length} types`}
+              centerCaption={t("analytics.activityMix.donut.acrossTypes", {
+                count: ACTIVITY_TYPE_ORDER.filter((t) => capitalByType[t] > 0).length,
+              })}
             />
             <CapitalDonutCallouts
               capitalByType={capitalByType}
@@ -292,8 +300,8 @@ export default async function ActivityMixPage() {
 
         {/* 5. Avg hold time + avg P&L by band */}
         <SectionCard
-          title="Average hold time + return per band"
-          caption="Distribution of activities across holding-period bands, with average P&L per band."
+          title={t("analytics.activityMix.sections.holdTime")}
+          caption={t("analytics.activityMix.captions.holdTime")}
         >
           <CategoryTable rows={holdTableRows} showCapital={false} showWinRate={false} />
         </SectionCard>
@@ -304,28 +312,33 @@ export default async function ActivityMixPage() {
   );
 }
 
-function PageHero({ totalNet, count }: { totalNet: number; count: number }) {
+async function PageHero({ totalNet, count }: { totalNet: number; count: number }) {
+  const t = await getT();
   return (
     <header className="flex flex-col gap-2 border-b border-border pb-8">
       <p className="font-mono text-[10px] uppercase tracking-[0.22em] text-text-tertiary">
-        Activity mix
+        {t("analytics.nav.activityMix")}
       </p>
       <AnalyticsHeadline
-        label="Total realized P&L"
+        label={t("analytics.activityMix.heroLabel")}
         value={fmtUsd(totalNet, true)}
-        subtitle={`Breakdown by type, subtype, asset, and capital allocation · ${count} ${count === 1 ? "activity" : "activities"}`}
+        subtitle={
+          count === 1
+            ? t("analytics.activityMix.heroSubtitleOne")
+            : t("analytics.activityMix.heroSubtitle", { count })
+        }
       />
     </header>
   );
 }
 
-function holdBucketSublabel(bucket: string): string {
+function holdBucketSublabel(bucket: string, t: Awaited<ReturnType<typeof getT>>): string {
   switch (bucket) {
-    case "0-1d": return "intraday";
-    case "1-7d": return "short swing";
-    case "1-4w": return "swing";
-    case "1-3m": return "position";
-    case "3m+": return "long hold";
+    case "0-1d": return t("analytics.activityMix.holdBuckets.intraday");
+    case "1-7d": return t("analytics.activityMix.holdBuckets.shortSwing");
+    case "1-4w": return t("analytics.activityMix.holdBuckets.swing");
+    case "1-3m": return t("analytics.activityMix.holdBuckets.position");
+    case "3m+": return t("analytics.activityMix.holdBuckets.longHold");
     default: return "";
   }
 }
@@ -334,7 +347,7 @@ function holdBucketSublabel(bucket: string): string {
  * Right-column callout list for the capital allocation donut — surfaces
  * the % capital vs % P&L mismatch the user is looking for.
  */
-function CapitalDonutCallouts({
+async function CapitalDonutCallouts({
   capitalByType,
   netByType,
   totalCapital,
@@ -343,25 +356,26 @@ function CapitalDonutCallouts({
   netByType: Record<ActivityType, number>;
   totalCapital: number;
 }) {
+  const t = await getT();
   const totalNetAbs = ACTIVITY_TYPE_ORDER.reduce(
-    (s, t) => s + Math.abs(netByType[t]),
+    (s, type) => s + Math.abs(netByType[type]),
     0,
   );
   return (
     <div className="flex flex-col gap-3">
       <h4 className="font-serif text-[12px] font-semibold uppercase tracking-[0.16em] text-text">
-        Capital share · vs · P&L share
+        {t("analytics.activityMix.capitalCalloutTitle")}
       </h4>
       <div className="overflow-hidden rounded-md border border-border bg-surface">
         <div className="grid grid-cols-4 border-b border-border bg-inset px-4 py-2 text-right font-mono text-[10px] uppercase tracking-[0.14em] text-text-tertiary">
-          <span className="text-left">Type</span>
-          <span>Capital</span>
-          <span>% Cap</span>
-          <span>% P&L</span>
+          <span className="text-left">{t("analytics.activityMix.capitalCalloutCols.type")}</span>
+          <span>{t("analytics.activityMix.capitalCalloutCols.capital")}</span>
+          <span>{t("analytics.activityMix.capitalCalloutCols.capPct")}</span>
+          <span>{t("analytics.activityMix.capitalCalloutCols.pnlPct")}</span>
         </div>
-        {ACTIVITY_TYPE_ORDER.map((t) => {
-          const cap = capitalByType[t];
-          const net = netByType[t];
+        {ACTIVITY_TYPE_ORDER.map((type) => {
+          const cap = capitalByType[type];
+          const net = netByType[type];
           const capShare = totalCapital > 0 ? (cap / totalCapital) * 100 : 0;
           const pnlShare =
             totalNetAbs > 0 ? (Math.abs(net) / totalNetAbs) * 100 : 0;
@@ -371,14 +385,14 @@ function CapitalDonutCallouts({
           const mismatch = Math.abs(capShare - pnlShare);
           return (
             <div
-              key={t}
+              key={type}
               className={
                 "grid grid-cols-4 border-b border-border-subtle px-4 py-2 text-right font-mono text-[11px] tabular-nums last:border-b-0 " +
                 (mismatch >= 10 ? "bg-inset/40" : "")
               }
             >
               <span className="text-left font-serif text-[12px] not-italic text-text">
-                {ACTIVITY_TYPE_LABELS[t]}
+                {ACTIVITY_TYPE_LABELS[type]}
               </span>
               <span className="text-text-secondary">
                 {cap > 0 ? fmtUsdCompact(cap) : "—"}
@@ -392,8 +406,7 @@ function CapitalDonutCallouts({
         })}
       </div>
       <p className="font-serif text-[11px] italic leading-snug text-text-tertiary">
-        Highlighted rows are types where capital share and P&L share differ by
-        10 points or more — a sign of mis-allocation worth investigating.
+        {t("analytics.activityMix.capitalCalloutHint")}
       </p>
     </div>
   );

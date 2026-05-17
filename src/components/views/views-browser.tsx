@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ArrowRight, Pencil, Plus, Trash2 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useT, useLocale } from "@/lib/i18n/client";
 import {
   Dialog,
   DialogContent,
@@ -53,22 +54,23 @@ function prettyPath(qs: string): string {
   }
 }
 
-function fmtRelative(iso: string | null): string {
-  if (!iso) return "Never";
+function fmtRelative(iso: string | null, locale: "en" | "ru"): string {
+  if (!iso) return locale === "ru" ? "никогда" : "Never";
   const date = new Date(iso);
-  if (!Number.isFinite(date.getTime())) return "Never";
+  if (!Number.isFinite(date.getTime())) return locale === "ru" ? "никогда" : "Never";
   const diff = Date.now() - date.getTime();
   const sec = Math.max(0, Math.floor(diff / 1000));
-  if (sec < 60) return `${sec}s ago`;
+  const rtf = new Intl.RelativeTimeFormat(locale === "ru" ? "ru-RU" : "en-US", { numeric: "auto" });
+  if (sec < 60) return rtf.format(-sec, "second");
   const min = Math.floor(sec / 60);
-  if (min < 60) return `${min}m ago`;
+  if (min < 60) return rtf.format(-min, "minute");
   const hr = Math.floor(min / 60);
-  if (hr < 24) return `${hr}h ago`;
+  if (hr < 24) return rtf.format(-hr, "hour");
   const day = Math.floor(hr / 24);
-  if (day < 30) return `${day}d ago`;
+  if (day < 30) return rtf.format(-day, "day");
   const mo = Math.floor(day / 30);
-  if (mo < 12) return `${mo}mo ago`;
-  return `${Math.floor(mo / 12)}y ago`;
+  if (mo < 12) return rtf.format(-mo, "month");
+  return rtf.format(-Math.floor(mo / 12), "year");
 }
 
 // ──────────────────────────────────────────────────────────────────────────
@@ -83,6 +85,8 @@ type DialogState =
 
 export function ViewsBrowser({ initialViews, prefillFrom }: ViewsBrowserProps) {
   const router = useRouter();
+  const t = useT();
+  const locale = useLocale();
   const [views, setViews] = React.useState<ViewWithCount[]>(initialViews);
   const [dialog, setDialog] = React.useState<DialogState>(() =>
     prefillFrom ? { mode: "create", queryString: prefillFrom } : { mode: "closed" },
@@ -139,9 +143,7 @@ export function ViewsBrowser({ initialViews, prefillFrom }: ViewsBrowserProps) {
       if (url.origin !== window.location.origin) throw new Error("Bad origin");
       router.push(url.pathname + url.search);
     } catch {
-      setFlashError(
-        `"${view.name}" had a malformed URL. Open Edit to fix it.`,
-      );
+      setFlashError(t("views.malformed", { name: view.name }));
       router.push("/spreads/archive");
     }
   };
@@ -152,22 +154,22 @@ export function ViewsBrowser({ initialViews, prefillFrom }: ViewsBrowserProps) {
       <header className="flex flex-col gap-4 border-b border-border px-8 py-7 md:flex-row md:items-end md:justify-between lg:px-12">
         <div>
           <h1 className="font-serif text-[40px] font-medium leading-none tracking-tight text-text">
-            Saved views
+            {t("views.title")}
           </h1>
           <p className="mt-2 font-serif text-sm italic text-text-tertiary">
-            Your filtered archive bookmarks.
+            {t("views.subtitle")}
           </p>
         </div>
         <div className="flex items-end gap-6">
           <div className="text-right">
             <p
-              aria-label={`${views.length} saved views`}
+              aria-label={t.plural("plurals.views", views.length)}
               className="font-serif text-[44px] font-medium leading-none tracking-tight tabular-nums text-signature"
             >
-              {views.length.toLocaleString("en-US")}
+              {views.length.toLocaleString(locale === "ru" ? "ru-RU" : "en-US")}
             </p>
             <p className="mt-1 font-mono text-[10px] uppercase tracking-[0.18em] text-text-tertiary">
-              {views.length === 1 ? "view" : "views"}
+              {views.length === 1 ? t("views.counter") : t("views.counterPlural")}
             </p>
           </div>
           <button
@@ -178,7 +180,7 @@ export function ViewsBrowser({ initialViews, prefillFrom }: ViewsBrowserProps) {
             className="flex items-center gap-1.5 rounded-md border border-text bg-text px-3 py-2 font-mono text-[11px] uppercase tracking-[0.16em] text-app transition-opacity hover:opacity-90"
           >
             <Plus className="h-3.5 w-3.5" />
-            New saved view
+            {t("views.newView")}
           </button>
         </div>
       </header>
@@ -191,9 +193,9 @@ export function ViewsBrowser({ initialViews, prefillFrom }: ViewsBrowserProps) {
               type="button"
               onClick={() => setFlashError(null)}
               className="font-mono text-[10px] uppercase tracking-[0.14em] text-down/80 hover:text-down"
-              aria-label="Dismiss error"
+              aria-label={t("views.dismissAria")}
             >
-              dismiss
+              {t("views.dismiss")}
             </button>
           </div>
         )}
@@ -204,11 +206,11 @@ export function ViewsBrowser({ initialViews, prefillFrom }: ViewsBrowserProps) {
           <ul className="overflow-hidden rounded-md border border-border bg-surface">
             {/* Table header */}
             <li className="grid grid-cols-[1fr_2fr_auto_auto_auto] items-baseline gap-4 border-b border-border px-5 py-3 font-mono text-[9px] uppercase tracking-[0.18em] text-text-tertiary">
-              <span>Name</span>
-              <span>Filters</span>
-              <span className="text-right">Activities</span>
-              <span className="text-right">Last applied</span>
-              <span className="text-right">Actions</span>
+              <span>{t("views.cols.name")}</span>
+              <span>{t("views.cols.filters")}</span>
+              <span className="text-right">{t("views.cols.activities")}</span>
+              <span className="text-right">{t("views.cols.lastApplied")}</span>
+              <span className="text-right">{t("views.cols.actions")}</span>
             </li>
 
             {views.map((view) => (
@@ -246,22 +248,22 @@ export function ViewsBrowser({ initialViews, prefillFrom }: ViewsBrowserProps) {
                 </span>
 
                 <span className="text-right font-mono text-[10px] uppercase tracking-[0.14em] text-text-tertiary">
-                  {fmtRelative(view.lastAppliedAt)}
+                  {fmtRelative(view.lastAppliedAt, locale)}
                 </span>
 
                 <div className="flex items-center justify-end gap-1">
                   <button
                     type="button"
                     onClick={() => handleApply(view)}
-                    aria-label={`Apply ${view.name}`}
+                    aria-label={t("views.applyAria", { name: view.name })}
                     className="flex items-center gap-1 rounded-md px-2 py-1 font-mono text-[10px] uppercase tracking-[0.14em] text-text-secondary transition-colors hover:bg-surface hover:text-text"
                   >
-                    Apply <ArrowRight className="h-3 w-3" />
+                    {t("views.actionApply")} <ArrowRight className="h-3 w-3" />
                   </button>
                   <button
                     type="button"
                     onClick={() => setDialog({ mode: "edit", view })}
-                    aria-label={`Edit ${view.name}`}
+                    aria-label={t("views.editAria", { name: view.name })}
                     className="flex h-7 w-7 items-center justify-center rounded-md text-text-tertiary transition-colors hover:bg-surface hover:text-text"
                   >
                     <Pencil className="h-3.5 w-3.5" />
@@ -269,7 +271,7 @@ export function ViewsBrowser({ initialViews, prefillFrom }: ViewsBrowserProps) {
                   <button
                     type="button"
                     onClick={() => setDialog({ mode: "delete", view })}
-                    aria-label={`Delete ${view.name}`}
+                    aria-label={t("views.deleteAria", { name: view.name })}
                     className="flex h-7 w-7 items-center justify-center rounded-md text-text-tertiary transition-colors hover:bg-down/10 hover:text-down"
                   >
                     <Trash2 className="h-3.5 w-3.5" />
@@ -346,6 +348,7 @@ function ViewFormDialog({
   onClose,
   onSuccess,
 }: ViewFormDialogProps) {
+  const t = useT();
   const [name, setName] = React.useState(view?.name ?? "");
   const [description, setDescription] = React.useState(view?.description ?? "");
   const [queryString, setQueryString] = React.useState(
@@ -403,27 +406,26 @@ function ViewFormDialog({
       <DialogContent className="max-w-xl">
         <DialogHeader>
           <DialogEyebrow>
-            {mode === "create" ? "Workshop · new" : "Workshop · edit"}
+            {mode === "create" ? t("views.create.eyebrow") : t("views.edit.eyebrow")}
           </DialogEyebrow>
           <DialogTitle>
-            {mode === "create" ? "Save this view" : "Edit saved view"}
+            {mode === "create" ? t("views.create.title") : t("views.edit.title")}
           </DialogTitle>
           <DialogDescription>
-            Bookmark a filtered archive URL so you can return to the same
-            slice of activities in one click.
+            {mode === "create" ? t("views.create.description") : t("views.edit.description")}
           </DialogDescription>
         </DialogHeader>
 
         <form onSubmit={handleSubmit}>
           <DialogBody>
             <div className="flex flex-col gap-5">
-              <WizardField label="Name" htmlFor="view-name" required>
+              <WizardField label={t("views.fields.name")} htmlFor="view-name" required>
                 <WizardInput
                   id="view-name"
                   type="text"
                   value={name}
                   onChange={(e) => setName(e.target.value)}
-                  placeholder="Winning trades · Q2"
+                  placeholder={t("views.fields.namePlaceholder")}
                   maxLength={60}
                   autoFocus
                   required
@@ -431,32 +433,32 @@ function ViewFormDialog({
               </WizardField>
 
               <WizardField
-                label="Description"
+                label={t("views.fields.description")}
                 htmlFor="view-description"
-                helper="Optional. Reminds future-you why this view matters."
+                helper={t("views.fields.descriptionHint")}
               >
                 <WizardInput
                   id="view-description"
                   type="text"
                   value={description}
                   onChange={(e) => setDescription(e.target.value)}
-                  placeholder="The cohort I'm tracking for the retro"
+                  placeholder={t("views.fields.descriptionPlaceholder")}
                   maxLength={200}
                 />
               </WizardField>
 
               <WizardField
-                label="URL"
+                label={t("views.fields.queryString")}
                 htmlFor="view-url"
                 required
-                helper="Must start with /spreads/archive, /calendar, or /spreads."
+                helper={t("views.fields.queryStringHint")}
               >
                 <WizardInput
                   id="view-url"
                   type="text"
                   value={queryString}
                   onChange={(e) => setQueryString(e.target.value)}
-                  placeholder="/spreads/archive?activity=trade&outcome=winners"
+                  placeholder={t("views.fields.queryStringPlaceholder")}
                   required
                 />
               </WizardField>
@@ -473,7 +475,7 @@ function ViewFormDialog({
               onClick={onClose}
               className="rounded-md border border-border bg-surface px-4 py-2 font-mono text-[11px] uppercase tracking-[0.16em] text-text-secondary hover:bg-subtle hover:text-text"
             >
-              Cancel
+              {t("views.cancel")}
             </button>
             <button
               type="submit"
@@ -483,11 +485,7 @@ function ViewFormDialog({
                 "disabled:cursor-not-allowed disabled:opacity-50",
               )}
             >
-              {submitting
-                ? "Saving…"
-                : mode === "create"
-                ? "Create view"
-                : "Save changes"}
+              {submitting ? t("views.saving") : t("views.save")}
             </button>
           </DialogFooter>
         </form>
@@ -509,6 +507,7 @@ function DeleteConfirmDialog({
   onClose: () => void;
   onSuccess: () => Promise<void> | void;
 }) {
+  const t = useT();
   const [submitting, setSubmitting] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
 
@@ -536,10 +535,10 @@ function DeleteConfirmDialog({
     <Dialog open onOpenChange={(open) => !open && onClose()}>
       <DialogContent className="max-w-md">
         <DialogHeader>
-          <DialogEyebrow>Workshop · delete</DialogEyebrow>
-          <DialogTitle>Delete &ldquo;{view.name}&rdquo;?</DialogTitle>
+          <DialogEyebrow>{t("views.deleteDialog.eyebrow")}</DialogEyebrow>
+          <DialogTitle>{t("views.deleteDialog.title")}</DialogTitle>
           <DialogDescription>
-            The bookmark goes away. Your activities are not affected.
+            {t("views.deleteDialog.description")}
           </DialogDescription>
         </DialogHeader>
 
@@ -555,7 +554,7 @@ function DeleteConfirmDialog({
             onClick={onClose}
             className="rounded-md border border-border bg-surface px-4 py-2 font-mono text-[11px] uppercase tracking-[0.16em] text-text-secondary hover:bg-subtle hover:text-text"
           >
-            Cancel
+            {t("views.cancel")}
           </button>
           <button
             type="button"
@@ -563,7 +562,7 @@ function DeleteConfirmDialog({
             disabled={submitting}
             className="rounded-md border border-down bg-down px-4 py-2 font-mono text-[11px] uppercase tracking-[0.16em] text-app transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
           >
-            {submitting ? "Deleting…" : "Delete view"}
+            {submitting ? t("views.saving") : t("views.deleteDialog.confirm")}
           </button>
         </DialogFooter>
       </DialogContent>
@@ -576,20 +575,20 @@ function DeleteConfirmDialog({
 // ──────────────────────────────────────────────────────────────────────────
 
 function EmptyState() {
+  const t = useT();
   return (
     <div className="flex flex-col items-center justify-center gap-3 rounded-md border border-dashed border-border bg-surface py-16 text-center">
       <p className="font-serif text-[20px] italic text-text-secondary">
-        No saved views yet.
+        {t("views.emptyHeading")}
       </p>
       <p className="max-w-md font-serif text-sm italic text-text-tertiary">
-        Use &ldquo;Save this view&rdquo; on the archive page to bookmark your
-        filtered slices. They show up here for one-click reuse.
+        {t("views.emptyBody")}
       </p>
       <Link
         href="/spreads/archive"
         className="mt-2 inline-flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-[0.18em] text-text-tertiary underline-offset-4 hover:text-text hover:underline"
       >
-        Open the archive
+        {t("views.openArchive")}
         <ArrowRight className="h-3 w-3" />
       </Link>
     </div>

@@ -1,4 +1,5 @@
 import { requireUser } from "@/lib/auth/server";
+import { getT, getLocale } from "@/lib/i18n/server";
 import {
   getAllClosedActivities,
   getMonthlyPnl,
@@ -58,9 +59,9 @@ function normalizeClosedAt<T extends { closedAt: unknown }>(rows: T[]): T[] {
   );
 }
 
-function fmtSinceDate(iso: string | null): string {
+function fmtSinceDate(iso: string | null, locale: "en" | "ru"): string {
   if (!iso) return "—";
-  return new Date(iso).toLocaleDateString("en-US", {
+  return new Date(iso).toLocaleDateString(locale === "ru" ? "ru-RU" : "en-US", {
     month: "short",
     day: "numeric",
     year: "numeric",
@@ -83,6 +84,8 @@ function fmtNumber(n: number): string {
 
 export default async function TrackRecordPage() {
   const { id: userId } = await requireUser();
+  const t = await getT();
+  const locale = await getLocale();
 
   // Parallel reads — one full closed feed (drives 6 of 7 sections) + the
   // monthly pivot + hold-time buckets.
@@ -104,11 +107,12 @@ export default async function TrackRecordPage() {
           cumulativeNet={computeCumulativeNet(closedRows)}
           count={closedRows.length}
           firstClose={(earlyFirst?.closedAt as string | null | undefined) ?? null}
+          locale={locale}
         />
         <div className="mt-8">
           <AnalyticsEmptyState
-            headline="Track record needs more data."
-            body={`Log at least ${MIN_FOR_ANALYTICS} activities to see meaningful drawdown, edge, and consistency metrics.`}
+            headline={t("analytics.trackRecord.empty.headline")}
+            body={t("analytics.trackRecord.empty.body", { min: MIN_FOR_ANALYTICS })}
             current={closedRows.length}
           />
         </div>
@@ -169,13 +173,13 @@ export default async function TrackRecordPage() {
   // ── System metrics card grid (9 cards) ──────────────────────────────────
   const systemMetrics: SystemMetric[] = [
     {
-      label: "Profit factor",
+      label: t("analytics.trackRecord.metrics.profitFactor"),
       value: fmtRatio(more.profitFactor),
-      caption: "Gross wins ÷ gross losses. Above 1.5 is healthy.",
+      caption: t("analytics.trackRecord.metricCaptions.profitFactor"),
       delta:
         more.profitFactor != null
-          ? `${fmtUsd(more.avgWin)} avg win · ${fmtUsd(-more.avgLoss)} avg loss`
-          : "needs both wins + losses",
+          ? t("analytics.trackRecord.metricDeltas.avgWinLoss", { win: fmtUsd(more.avgWin), loss: fmtUsd(-more.avgLoss) })
+          : t("analytics.trackRecord.metricDeltas.needsBoth"),
       tone:
         more.profitFactor == null
           ? "neutral"
@@ -184,10 +188,12 @@ export default async function TrackRecordPage() {
           : "down",
     },
     {
-      label: "Payoff ratio",
+      label: t("analytics.trackRecord.metrics.payoffRatio"),
       value: fmtPayoff(more.payoffRatio),
-      caption: "Average win size relative to average loss.",
-      delta: more.payoffRatio != null ? "win-size : loss-size" : "needs both wins + losses",
+      caption: t("analytics.trackRecord.metricCaptions.payoffRatio"),
+      delta: more.payoffRatio != null
+        ? t("analytics.trackRecord.metricDeltas.winLossSize")
+        : t("analytics.trackRecord.metricDeltas.needsBoth"),
       tone:
         more.payoffRatio == null
           ? "neutral"
@@ -196,20 +202,20 @@ export default async function TrackRecordPage() {
           : "down",
     },
     {
-      label: "Expectancy",
+      label: t("analytics.trackRecord.metrics.expectancy"),
       value: fmtUsd(more.expectancy, true),
-      caption: "Average dollar P&L per activity, all-in.",
-      delta: `over ${closedRows.length} closed activities`,
+      caption: t("analytics.trackRecord.metricCaptions.expectancy"),
+      delta: t("analytics.trackRecord.metricDeltas.overActivities", { count: closedRows.length }),
       tone: more.expectancy >= 0 ? "up" : "down",
     },
     {
-      label: "SQN",
+      label: t("analytics.trackRecord.metrics.sqn"),
       value: fmtRatio(more.systemQualityNumber),
-      caption: "Van Tharp System Quality. Above 2.0 is good.",
+      caption: t("analytics.trackRecord.metricCaptions.sqn"),
       delta:
         more.systemQualityNumber == null
-          ? "needs variance + ≥ 2 trades"
-          : `pop. stddev · √${closedRows.length}`,
+          ? t("analytics.trackRecord.metricDeltas.needsVariance")
+          : t("analytics.trackRecord.metricDeltas.sqnFormula", { n: closedRows.length }),
       tone:
         more.systemQualityNumber == null
           ? "neutral"
@@ -218,12 +224,12 @@ export default async function TrackRecordPage() {
           : "neutral",
     },
     {
-      label: "Sharpe",
+      label: t("analytics.trackRecord.metrics.sharpe"),
       value: sharpe.enoughData ? sharpe.sharpe.toFixed(2) : "—",
-      caption: "Risk-adjusted return, annualized.",
+      caption: t("analytics.trackRecord.metricCaptions.sharpe"),
       delta: sharpe.enoughData
-        ? `${sharpe.sampleDays} active days · ann. ${sharpe.annualizationFactor}d`
-        : `needs ≥7 active days (${sharpe.sampleDays})`,
+        ? t("analytics.trackRecord.metricDeltas.sharpeReady", { days: sharpe.sampleDays, factor: sharpe.annualizationFactor })
+        : t("analytics.trackRecord.metricDeltas.sharpeNeeds", { days: sharpe.sampleDays }),
       tone:
         !sharpe.enoughData
           ? "neutral"
@@ -234,12 +240,12 @@ export default async function TrackRecordPage() {
           : "neutral",
     },
     {
-      label: "Sortino",
+      label: t("analytics.trackRecord.metrics.sortino"),
       value: sharpe.enoughData ? sharpe.sortino.toFixed(2) : "—",
-      caption: "Like Sharpe but penalises only downside variance.",
+      caption: t("analytics.trackRecord.metricCaptions.sortino"),
       delta: sharpe.enoughData
-        ? `dd-vol ${(sharpe.downsideStdevDailyReturnPct * 100).toFixed(2)}%`
-        : `needs ≥7 active days (${sharpe.sampleDays})`,
+        ? t("analytics.trackRecord.metricDeltas.ddVol", { pct: (sharpe.downsideStdevDailyReturnPct * 100).toFixed(2) })
+        : t("analytics.trackRecord.metricDeltas.sharpeNeeds", { days: sharpe.sampleDays }),
       tone:
         !sharpe.enoughData
           ? "neutral"
@@ -250,37 +256,37 @@ export default async function TrackRecordPage() {
           : "neutral",
     },
     {
-      label: "Longest win streak",
+      label: t("analytics.trackRecord.metrics.longestWin"),
       value: fmtNumber(streaks.longestWinStreak),
-      caption: "Consecutive winners — your hot hand.",
-      delta: `over ${closedRows.length} closed activities`,
+      caption: t("analytics.trackRecord.metricCaptions.longestWin"),
+      delta: t("analytics.trackRecord.metricDeltas.overActivities", { count: closedRows.length }),
       tone: streaks.longestWinStreak > 0 ? "up" : "neutral",
     },
     {
-      label: "Longest loss streak",
+      label: t("analytics.trackRecord.metrics.longestLoss"),
       value: fmtNumber(streaks.longestLossStreak),
-      caption: "Consecutive losers — your worst tilt risk.",
-      delta: `over ${closedRows.length} closed activities`,
+      caption: t("analytics.trackRecord.metricCaptions.longestLoss"),
+      delta: t("analytics.trackRecord.metricDeltas.overActivities", { count: closedRows.length }),
       tone: streaks.longestLossStreak > 0 ? "down" : "neutral",
     },
     {
-      label: "Current streak",
+      label: t("analytics.trackRecord.metrics.currentStreak"),
       value:
         streaks.currentStreak.kind === "none"
           ? "—"
           : String(streaks.currentStreak.length),
       caption:
         streaks.currentStreak.kind === "win"
-          ? "Running win streak. Don't ruin it."
+          ? t("analytics.trackRecord.metricCaptions.streakWin")
           : streaks.currentStreak.kind === "loss"
-          ? "Running loss streak. Mind your sizing."
-          : "Last activity was flat — no streak active.",
+          ? t("analytics.trackRecord.metricCaptions.streakLoss")
+          : t("analytics.trackRecord.metricCaptions.streakNone"),
       delta:
         streaks.currentStreak.kind === "win"
-          ? "wins · since last loss"
+          ? t("analytics.trackRecord.metricDeltas.winsSince")
           : streaks.currentStreak.kind === "loss"
-          ? "losses · since last win"
-          : "no streak active",
+          ? t("analytics.trackRecord.metricDeltas.lossesSince")
+          : t("analytics.trackRecord.metricDeltas.noStreak"),
       tone:
         streaks.currentStreak.kind === "win"
           ? "up"
@@ -296,9 +302,11 @@ export default async function TrackRecordPage() {
   const withCloseDate = closedRows.filter((r) => r.closedAt != null);
   const firstCloseLabel = fmtSinceDate(
     (withCloseDate[0]?.closedAt as string | null) ?? null,
+    locale,
   );
   const lastCloseLabel = fmtSinceDate(
     (withCloseDate[withCloseDate.length - 1]?.closedAt as string | null) ?? null,
+    locale,
   );
 
   return (
@@ -308,13 +316,14 @@ export default async function TrackRecordPage() {
         cumulativeNet={cumulativeNet}
         count={closedRows.length}
         firstClose={(withCloseDate[0]?.closedAt as string | null | undefined) ?? null}
+        locale={locale}
       />
 
       <div className="mt-10 flex flex-col gap-8">
         {/* 1. Equity curve, full-width, 480px */}
         <SectionCard
-          title="Equity curve · cumulative realized"
-          caption="Running sum of net P&L across every closed activity. Dotted line is the all-time high; vertical mark shows the current drawdown from peak."
+          title={t("analytics.trackRecord.sections.equity")}
+          caption={t("analytics.trackRecord.captions.equity")}
           meta={`${firstCloseLabel} → ${lastCloseLabel}`}
         >
           <EquityCurveLarge
@@ -327,12 +336,15 @@ export default async function TrackRecordPage() {
 
         {/* 2. Underwater drawdown chart */}
         <SectionCard
-          title="Underwater drawdown"
-          caption="How far below the all-time high you've been. The deeper the curve dips, the longer the recovery."
+          title={t("analytics.trackRecord.sections.underwater")}
+          caption={t("analytics.trackRecord.captions.underwater")}
           meta={
             drawdown.maxDrawdownUsd > 0
-              ? `Max ${(drawdown.maxDrawdownPct * 100).toFixed(1)}% · ${fmtUsd(-drawdown.maxDrawdownUsd)}`
-              : "no drawdown yet"
+              ? t("analytics.trackRecord.meta.maxDrawdown", {
+                  pct: (drawdown.maxDrawdownPct * 100).toFixed(1),
+                  usd: fmtUsd(-drawdown.maxDrawdownUsd),
+                })
+              : t("analytics.trackRecord.meta.noDrawdown")
           }
         >
           <UnderwaterChart points={underwater} />
@@ -340,20 +352,21 @@ export default async function TrackRecordPage() {
 
         {/* 3. Monthly returns grid */}
         <SectionCard
-          title="Monthly returns"
-          caption="Realized net P&L per month, colored by sign and intensity. Year totals on the right."
-          meta={`${monthly.length} ${monthly.length === 1 ? "month" : "months"}`}
+          title={t("analytics.trackRecord.sections.monthly")}
+          caption={t("analytics.trackRecord.captions.monthly")}
         >
           <MonthlyReturnsGrid rows={monthly} />
         </SectionCard>
 
         {/* 4. Rolling win rate */}
         <SectionCard
-          title={`Rolling win rate · window ${ROLLING_WIN_WINDOW}`}
-          caption={`Win rate over the prior ${ROLLING_WIN_WINDOW} activities, plotted as a sliding window. Spot recent edge erosion at a glance.`}
+          title={t("analytics.trackRecord.sections.rollingTitle", { n: ROLLING_WIN_WINDOW })}
+          caption={t("analytics.trackRecord.captions.rolling", { n: ROLLING_WIN_WINDOW })}
           meta={
             rolling.length > 0
-              ? `latest ${((rolling[rolling.length - 1]?.winRate ?? 0) * 100).toFixed(0)}%`
+              ? t("analytics.trackRecord.meta.latestWinRate", {
+                  pct: ((rolling[rolling.length - 1]?.winRate ?? 0) * 100).toFixed(0),
+                })
               : ""
           }
         >
@@ -362,20 +375,20 @@ export default async function TrackRecordPage() {
 
         {/* 5. Hold time histogram */}
         <SectionCard
-          title="Hold time distribution"
-          caption="Activity count per holding-period band (bars) and the average net P&L within each band (line). Patient money or scalp money?"
+          title={t("analytics.trackRecord.sections.holdTime")}
+          caption={t("analytics.trackRecord.captions.holdTime")}
         >
           <HoldTimeHistogram rows={holdBuckets} />
         </SectionCard>
 
         {/* 6. Top 10 best / worst */}
         <SectionCard
-          title="Top 10 best · top 10 worst"
-          caption="Click any row to jump to its detail page. R-multiples are versus your average loss."
+          title={t("analytics.trackRecord.sections.topBestWorst")}
+          caption={t("analytics.trackRecord.captions.topBestWorst")}
         >
           <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
             <TopTradesTable
-              title="Top 10 best"
+              title={t("analytics.trackRecord.topBest")}
               tone="up"
               rows={topBest.map((b, i) => ({
                 activity: bestActivities[i],
@@ -383,7 +396,7 @@ export default async function TrackRecordPage() {
               }))}
             />
             <TopTradesTable
-              title="Top 10 worst"
+              title={t("analytics.trackRecord.topWorst")}
               tone="down"
               rows={topWorst.map((w, i) => ({
                 activity: worstActivities[i],
@@ -395,8 +408,8 @@ export default async function TrackRecordPage() {
 
         {/* 7. System metrics */}
         <SectionCard
-          title="System metrics"
-          caption="Where your edge gets quantified. Each metric answers a different question about your trading system's quality."
+          title={t("analytics.trackRecord.sections.system")}
+          caption={t("analytics.trackRecord.captions.system")}
         >
           <SystemMetricsGrid metrics={systemMetrics} />
         </SectionCard>
@@ -411,31 +424,37 @@ export default async function TrackRecordPage() {
  * Page hero — extracted so we can render it inside both the empty-state path
  * and the full path with a single source of truth.
  */
-function PageHero({
+async function PageHero({
   cumulativeNet,
   count,
   firstClose,
+  locale,
 }: {
   cumulativeNet: number;
   count: number;
   firstClose: string | null | undefined;
+  locale: "en" | "ru";
 }) {
+  const t = await getT();
   const sinceLabel = firstClose
-    ? new Date(firstClose).toLocaleDateString("en-US", {
+    ? new Date(firstClose).toLocaleDateString(locale === "ru" ? "ru-RU" : "en-US", {
         month: "short",
         day: "numeric",
         year: "numeric",
       })
     : "—";
+  const subtitle = count === 1
+    ? t("analytics.trackRecord.heroSubtitleOne", { date: sinceLabel })
+    : t("analytics.trackRecord.heroSubtitle", { date: sinceLabel, count });
   return (
     <header className="flex flex-col gap-2 border-b border-border pb-8">
       <p className="font-mono text-[10px] uppercase tracking-[0.22em] text-text-tertiary">
-        Track record
+        {t("analytics.nav.trackRecord")}
       </p>
       <AnalyticsHeadline
-        label="Cumulative net P&L"
+        label={t("analytics.trackRecord.heroLabel")}
         value={fmtUsd(cumulativeNet, true)}
-        subtitle={`Since ${sinceLabel} · ${count} ${count === 1 ? "activity" : "activities"}`}
+        subtitle={subtitle}
       />
     </header>
   );

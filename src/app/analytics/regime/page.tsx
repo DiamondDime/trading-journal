@@ -1,4 +1,5 @@
 import { requireUser } from "@/lib/auth/server";
+import { getT } from "@/lib/i18n/server";
 import {
   getRegimeAggregations,
   getUntaggedRegimeCount,
@@ -67,6 +68,7 @@ function pickWorstRegime(rows: RegimeAggRow[]): RegimeAggRow | null {
 
 export default async function RegimeDistributionPage() {
   const { id: userId } = await requireUser();
+  const t = await getT();
 
   const [regimes, untaggedCount, totals] = await Promise.all([
     getRegimeAggregations(userId),
@@ -80,8 +82,8 @@ export default async function RegimeDistributionPage() {
         <PageHero best={null} totalCount={totals.count} regimeCount={regimes.length} />
         <div className="mt-8">
           <AnalyticsEmptyState
-            headline="Regime analysis needs more data."
-            body={`Tag at least ${MIN_FOR_ANALYTICS} activities with regime context (e.g. funding-positive, contango, risk-on) to see which markets pay you.`}
+            headline={t("analytics.regime.empty.headline")}
+            body={t("analytics.regime.empty.body", { min: MIN_FOR_ANALYTICS })}
             current={totals.count}
           />
         </div>
@@ -112,26 +114,30 @@ export default async function RegimeDistributionPage() {
       <div className="mt-10 flex flex-col gap-8">
         {/* 1. Per-regime stats table */}
         <SectionCard
-          title="Per-regime stats"
-          caption={`Each row aggregates every activity tagged with that regime. An activity tagged twice contributes to two rows. Click a column header to sort. Regimes with fewer than ${MIN_REGIME_SAMPLES} samples are statistically noisy.`}
-          meta={`${regimes.length} ${regimes.length === 1 ? "regime" : "regimes"}`}
+          title={t("analytics.regime.perRegime")}
+          caption={t("analytics.regime.perRegimeCaption", { min: MIN_REGIME_SAMPLES })}
+          meta={
+            regimes.length === 1
+              ? t("analytics.regime.regimeOne")
+              : t("analytics.regime.regimesCount", { count: regimes.length })
+          }
         >
           <RegimeStatsTable rows={regimes} />
         </SectionCard>
 
         {/* 2. P&L by regime bar chart */}
         <SectionCard
-          title="P&L by regime"
-          caption="Total realized P&L per regime tag, ranked by magnitude. Up vs down tone makes the spreads obvious at a glance."
-          meta={regimes.length > BAR_MAX ? `top ${BAR_MAX} of ${regimes.length}` : undefined}
+          title={t("analytics.regime.pnlTitle")}
+          caption={t("analytics.regime.pnlCaption")}
+          meta={regimes.length > BAR_MAX ? t("analytics.regime.pnlMeta", { bar: BAR_MAX, total: regimes.length }) : undefined}
         >
           <BarRank rows={barRows} />
         </SectionCard>
 
         {/* 3. Best / worst callouts */}
         <section className="grid grid-cols-1 gap-4 md:grid-cols-2">
-          <RegimeCallout title="Best regime" regime={best} tone="up" />
-          <RegimeCallout title="Worst regime" regime={worst} tone="down" />
+          <RegimeCallout title={t("analytics.regime.bestCallout")} regime={best} tone="up" />
+          <RegimeCallout title={t("analytics.regime.worstCallout")} regime={worst} tone="down" />
         </section>
 
         {/* 4. Untagged prompt */}
@@ -139,19 +145,21 @@ export default async function RegimeDistributionPage() {
           <div className="flex items-center justify-between gap-4 rounded-md border border-dashed border-border bg-inset px-5 py-4">
             <div className="flex flex-col gap-1">
               <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-text-tertiary">
-                {untaggedCount} {untaggedCount === 1 ? "activity has" : "activities have"} no regime tag
+                {untaggedCount === 1
+                  ? t("analytics.regime.untaggedCountOne")
+                  : t("analytics.regime.untaggedCount", { count: untaggedCount })}
               </p>
               <p className="font-serif text-[12px] italic text-text-tertiary">
-                Tagging activities with regime context (e.g. funding-positive, risk-on, contango) is what makes this page meaningful.
+                {t("analytics.regime.untaggedHelp")}
               </p>
             </div>
             <a
               href="#"
               className="font-mono text-[10px] uppercase tracking-[0.16em] text-text-tertiary underline-offset-4 hover:text-text hover:underline"
               aria-disabled="true"
-              title="Bulk-tagging UI coming in v2"
+              title={t("analytics.regime.bulkTagTitle")}
             >
-              Bulk tag (soon)
+              {t("analytics.regime.bulkTag")}
             </a>
           </div>
         )}
@@ -162,7 +170,7 @@ export default async function RegimeDistributionPage() {
   );
 }
 
-function PageHero({
+async function PageHero({
   best,
   totalCount,
   regimeCount,
@@ -171,20 +179,21 @@ function PageHero({
   totalCount: number;
   regimeCount: number;
 }) {
-  // When we have a best regime, headline is "{N}% win rate · {tag name}".
-  // When we don't (too thin), fall back to a neutral count headline.
+  const t = await getT();
   if (best) {
     const winRate = `${(best.winRate * 100).toFixed(0)}%`;
-    const subtitle = `Your strongest market regime · ${fmtUsd(best.avgPnl, true)} avg over ${best.count} activities`;
     return (
       <header className="flex flex-col gap-2 border-b border-border pb-8">
         <p className="font-mono text-[10px] uppercase tracking-[0.22em] text-text-tertiary">
-          Regime distribution
+          {t("analytics.nav.regime")}
         </p>
         <AnalyticsHeadline
-          label="Best regime · win rate"
+          label={t("analytics.regime.heroBestLabel")}
           value={`${winRate} · ${best.regime}`}
-          subtitle={subtitle}
+          subtitle={t("analytics.regime.heroBestSubtitle", {
+            avg: fmtUsd(best.avgPnl, true),
+            count: best.count,
+          })}
         />
       </header>
     );
@@ -192,12 +201,16 @@ function PageHero({
   return (
     <header className="flex flex-col gap-2 border-b border-border pb-8">
       <p className="font-mono text-[10px] uppercase tracking-[0.22em] text-text-tertiary">
-        Regime distribution
+        {t("analytics.nav.regime")}
       </p>
       <AnalyticsHeadline
-        label="Regimes tracked"
+        label={t("analytics.regime.heroFallbackLabel")}
         value={String(regimeCount)}
-        subtitle={`Across ${totalCount} ${totalCount === 1 ? "activity" : "activities"}. Tag more activities to surface your strongest market regime.`}
+        subtitle={
+          totalCount === 1
+            ? t("analytics.regime.heroFallbackSubtitleOne")
+            : t("analytics.regime.heroFallbackSubtitle", { count: totalCount })
+        }
       />
     </header>
   );

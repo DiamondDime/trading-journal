@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { ArrowRight, Search, ThumbsDown, ThumbsUp, X } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useT, useLocale } from "@/lib/i18n/client";
 import type { AllNoteRow } from "@/lib/db/notes";
 
 type ActivityType = "spread" | "trade" | "sale" | "airdrop";
@@ -26,20 +27,6 @@ interface NotesBrowserProps {
 }
 
 const ACTIVITY_TYPE_ORDER: ActivityType[] = ["spread", "trade", "sale", "airdrop"];
-
-const ACTIVITY_TYPE_LABELS: Record<ActivityType, string> = {
-  spread: "Spreads",
-  trade: "Trades",
-  sale: "Sales",
-  airdrop: "Airdrops",
-};
-
-const SORT_LABELS: Record<SortKey, string> = {
-  newest: "Newest",
-  oldest: "Oldest",
-  longest: "Longest",
-  edited: "Recently edited",
-};
 
 const TYPE_LETTER: Record<ActivityType, string> = {
   spread: "",
@@ -70,38 +57,39 @@ function fmtSerial(type: ActivityType, id: string): string {
  * Friendly relative time string in the style of "2d", "3h", "47s", "5mo".
  * Past-only; we don't expect future-dated notes in this view.
  */
-function fmtRelative(iso: string): string {
+function fmtRelative(iso: string, locale: "en" | "ru"): string {
   if (!iso) return "—";
   const date = new Date(iso);
   if (!Number.isFinite(date.getTime())) return "—";
   const diff = Date.now() - date.getTime();
   const sec = Math.max(0, Math.floor(diff / 1000));
-  if (sec < 60) return `${sec}s ago`;
+  const rtf = new Intl.RelativeTimeFormat(locale === "ru" ? "ru-RU" : "en-US", { numeric: "auto" });
+  if (sec < 60) return rtf.format(-sec, "second");
   const min = Math.floor(sec / 60);
-  if (min < 60) return `${min}m ago`;
+  if (min < 60) return rtf.format(-min, "minute");
   const hr = Math.floor(min / 60);
-  if (hr < 24) return `${hr}h ago`;
+  if (hr < 24) return rtf.format(-hr, "hour");
   const day = Math.floor(hr / 24);
-  if (day < 30) return `${day}d ago`;
+  if (day < 30) return rtf.format(-day, "day");
   const mo = Math.floor(day / 30);
-  if (mo < 12) return `${mo}mo ago`;
+  if (mo < 12) return rtf.format(-mo, "month");
   const yr = Math.floor(mo / 12);
-  return `${yr}y ago`;
+  return rtf.format(-yr, "year");
 }
 
-function fmtAbsolute(iso: string): string {
+function fmtAbsolute(iso: string, locale: "en" | "ru"): string {
   if (!iso) return "—";
   const d = new Date(iso);
   if (!Number.isFinite(d.getTime())) return "—";
-  return d.toLocaleDateString("en-US", {
+  return d.toLocaleDateString(locale === "ru" ? "ru-RU" : "en-US", {
     month: "short",
     day: "numeric",
     year: "numeric",
   });
 }
 
-function describeActivity(n: AllNoteRow): string {
-  const parts = [ACTIVITY_TYPE_LABELS[n.activityType].slice(0, -1)];
+function describeActivity(n: AllNoteRow, typeLabels: Record<ActivityType, string>): string {
+  const parts = [typeLabels[n.activityType].slice(0, -1)];
   if (n.primarySymbol) parts.push(n.primarySymbol);
   return parts.join(" · ").toLowerCase();
 }
@@ -136,6 +124,22 @@ export function NotesBrowser({
 }: NotesBrowserProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const t = useT();
+  const locale = useLocale();
+
+  const ACTIVITY_TYPE_LABELS: Record<ActivityType, string> = {
+    spread: t("notes.filter.spreads"),
+    trade: t("notes.filter.trades"),
+    sale: t("notes.filter.sales"),
+    airdrop: t("notes.filter.airdrops"),
+  };
+
+  const SORT_LABELS: Record<SortKey, string> = {
+    newest: t("notes.sortLabels.newest"),
+    oldest: t("notes.sortLabels.oldest"),
+    longest: t("notes.sortLabels.longest"),
+    edited: t("notes.sortLabels.edited"),
+  };
 
   const [filters, setFilters] = React.useState<Filters>(initialFilters);
   const [notes, setNotes] = React.useState<AllNoteRow[]>(initialNotes);
@@ -225,22 +229,22 @@ export function NotesBrowser({
       <header className="flex flex-col gap-4 border-b border-border px-8 py-7 md:flex-row md:items-end md:justify-between lg:px-12">
         <div>
           <h1 className="font-serif text-[40px] font-medium leading-none tracking-tight text-text">
-            Notes &amp; marginalia
+            {t("notes.title")}
           </h1>
           <p className="mt-2 font-serif text-sm italic text-text-tertiary">
-            Every thought you&rsquo;ve left on every activity.
+            {t("notes.subtitle")}
           </p>
         </div>
         <div className="text-right">
           <p
-            aria-label={`${totalCount} notes`}
+            aria-label={t.plural("plurals.notes", totalCount)}
             className="font-serif text-[44px] font-medium leading-none tracking-tight tabular-nums text-signature"
           >
-            {totalCount.toLocaleString("en-US")}
+            {totalCount.toLocaleString(locale === "ru" ? "ru-RU" : "en-US")}
           </p>
           <p className="mt-1 font-mono text-[10px] uppercase tracking-[0.18em] text-text-tertiary">
-            {totalCount === 1 ? "note" : "notes"}
-            {filtersActive && " · filtered"}
+            {totalCount === 1 ? t("notes.counterSuffix") : t("notes.counterSuffixPlural")}
+            {filtersActive && ` · ${t("notes.filtered")}`}
           </p>
         </div>
       </header>
@@ -248,7 +252,7 @@ export function NotesBrowser({
       {/* ── filter rail ─────────────────────────────────────────────────── */}
       <section
         className="border-b border-border bg-surface/60 px-8 py-4 lg:px-12"
-        aria-label="Filter notes"
+        aria-label={t("notes.filterAria")}
       >
         <div className="flex flex-col gap-3">
           {/* Search + sort row */}
@@ -258,8 +262,8 @@ export function NotesBrowser({
               <input
                 value={searchInput}
                 onChange={(e) => setSearchInput(e.target.value)}
-                placeholder="Search notes…"
-                aria-label="Search notes by body text"
+                placeholder={t("notes.searchPlaceholder")}
+                aria-label={t("notes.searchAria")}
                 type="search"
                 className="w-72 bg-transparent text-[12px] text-text placeholder:text-text-tertiary focus:outline-none"
               />
@@ -267,7 +271,7 @@ export function NotesBrowser({
                 <button
                   type="button"
                   onClick={() => setSearchInput("")}
-                  aria-label="Clear search"
+                  aria-label={t("notes.clearSearch")}
                   className="text-text-tertiary hover:text-text"
                 >
                   <X className="h-3 w-3" />
@@ -280,7 +284,7 @@ export function NotesBrowser({
                 htmlFor="notes-sort"
                 className="font-mono text-[10px] uppercase tracking-[0.16em] text-text-tertiary"
               >
-                Sort
+                {t("notes.sort")}
               </label>
               <select
                 id="notes-sort"
@@ -305,21 +309,21 @@ export function NotesBrowser({
           {/* Activity type chips */}
           <div className="flex items-baseline gap-3">
             <span className="w-16 shrink-0 font-serif text-[10px] font-semibold uppercase tracking-[0.18em] text-text-tertiary">
-              Type
+              {t("notes.typeLabel")}
             </span>
             <div className="flex flex-wrap items-center gap-2">
               <FilterChip
-                label="All"
+                label={t("notes.all")}
                 active={filters.type.length === 0}
                 onClick={() => setFilters((f) => ({ ...f, type: [] }))}
               />
-              {ACTIVITY_TYPE_ORDER.map((t) => (
+              {ACTIVITY_TYPE_ORDER.map((type) => (
                 <FilterChip
-                  key={t}
-                  label={ACTIVITY_TYPE_LABELS[t]}
-                  active={filters.type.includes(t)}
+                  key={type}
+                  label={ACTIVITY_TYPE_LABELS[type]}
+                  active={filters.type.includes(type)}
                   onClick={() =>
-                    setFilters((f) => ({ ...f, type: toggleType(f.type, t) }))
+                    setFilters((f) => ({ ...f, type: toggleType(f.type, type) }))
                   }
                 />
               ))}
@@ -330,18 +334,18 @@ export function NotesBrowser({
           {tagVocab.length > 0 && (
             <div className="flex items-baseline gap-3">
               <span className="w-16 shrink-0 font-serif text-[10px] font-semibold uppercase tracking-[0.18em] text-text-tertiary">
-                Tag
+                {t("notes.tagLabel")}
               </span>
               <div className="flex flex-wrap items-center gap-2">
-                {tagVocab.slice(0, 18).map((t) => (
+                {tagVocab.slice(0, 18).map((tg) => (
                   <FilterChip
-                    key={t.tag}
-                    label={`${t.tag} · ${t.count}`}
-                    active={filters.tag === t.tag}
+                    key={tg.tag}
+                    label={`${tg.tag} · ${tg.count}`}
+                    active={filters.tag === tg.tag}
                     onClick={() =>
                       setFilters((f) => ({
                         ...f,
-                        tag: f.tag === t.tag ? "" : t.tag,
+                        tag: f.tag === tg.tag ? "" : tg.tag,
                       }))
                     }
                   />
@@ -357,7 +361,7 @@ export function NotesBrowser({
                 onClick={clearAll}
                 className="font-mono text-[10px] uppercase tracking-[0.16em] text-text-tertiary underline-offset-4 hover:text-text hover:underline"
               >
-                Clear filters
+                {t("notes.clearFilters")}
               </button>
             </div>
           )}
@@ -382,7 +386,7 @@ export function NotesBrowser({
           <>
             <ul className="flex flex-col gap-4">
               {notes.map((n) => (
-                <NoteCard key={n.id} note={n} />
+                <NoteCard key={n.id} note={n} typeLabels={ACTIVITY_TYPE_LABELS} locale={locale} />
               ))}
             </ul>
 
@@ -395,15 +399,15 @@ export function NotesBrowser({
                   className="rounded-md border border-border bg-surface px-5 py-2 font-mono text-[11px] uppercase tracking-[0.16em] text-text-secondary transition-colors hover:border-border-strong hover:text-text disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   {loadingMore
-                    ? "Loading…"
-                    : `Load ${Math.min(pageSize, totalCount - notes.length)} more`}
+                    ? t("notes.loading")
+                    : t("notes.loadMore", { count: Math.min(pageSize, totalCount - notes.length) })}
                 </button>
               </div>
             )}
 
             {!hasMore && notes.length > pageSize && (
               <p className="mt-8 text-center font-mono text-[10px] uppercase tracking-[0.18em] text-text-tertiary">
-                End of the feed · {notes.length} of {totalCount}
+                {t("notes.endOfFeed", { n: notes.length, total: totalCount })}
               </p>
             )}
           </>
@@ -467,7 +471,8 @@ function FilterChip({
 const COLLAPSED_LINES = 5;
 const COLLAPSED_CHAR_LIMIT = 480;
 
-function NoteCard({ note }: { note: AllNoteRow }) {
+function NoteCard({ note, typeLabels, locale }: { note: AllNoteRow; typeLabels: Record<ActivityType, string>; locale: "en" | "ru" }) {
+  const t = useT();
   const longBody = note.body.length > COLLAPSED_CHAR_LIMIT;
   const [expanded, setExpanded] = React.useState(false);
 
@@ -486,7 +491,7 @@ function NoteCard({ note }: { note: AllNoteRow }) {
             </span>
             <span className="font-mono text-[10px] text-text-tertiary">·</span>
             <span className="font-mono text-[9px] uppercase tracking-[0.16em] text-signature">
-              {ACTIVITY_TYPE_LABELS[note.activityType].slice(0, -1)}
+              {typeLabels[note.activityType].slice(0, -1)}
             </span>
             <span className="font-mono text-[10px] text-text-tertiary">·</span>
             <Link
@@ -497,15 +502,15 @@ function NoteCard({ note }: { note: AllNoteRow }) {
               {note.activityName}
             </Link>
             <span className="font-mono text-[10px] text-text-tertiary">
-              · {describeActivity(note)}
+              · {describeActivity(note, typeLabels)}
             </span>
           </div>
 
           <span
-            title={`Edited ${fmtAbsolute(note.updatedAt)}`}
+            title={t("notes.editedTooltip", { date: fmtAbsolute(note.updatedAt, locale) })}
             className="font-mono text-[10px] uppercase tracking-[0.14em] text-text-tertiary"
           >
-            {fmtRelative(note.updatedAt)}
+            {fmtRelative(note.updatedAt, locale)}
           </span>
         </header>
 
@@ -537,7 +542,7 @@ function NoteCard({ note }: { note: AllNoteRow }) {
               className="mt-3 font-mono text-[10px] uppercase tracking-[0.16em] text-text-tertiary underline-offset-4 hover:text-text hover:underline"
               aria-expanded={expanded}
             >
-              {expanded ? "Collapse" : "Expand full note"}
+              {expanded ? t("notes.collapse") : t("notes.expandFull")}
             </button>
           )}
         </div>
@@ -556,14 +561,14 @@ function NoteCard({ note }: { note: AllNoteRow }) {
               ))}
               {note.tags.length > 6 && (
                 <span className="font-mono text-[9px] text-text-tertiary">
-                  +{note.tags.length - 6} more
+                  {t("notes.moreTags", { count: note.tags.length - 6 })}
                 </span>
               )}
             </div>
 
             {note.activitySatisfaction !== null && (
               <span
-                title={note.activitySatisfaction ? "Satisfied" : "Not satisfied"}
+                title={note.activitySatisfaction ? t("notes.satisfied") : t("notes.notSatisfied")}
                 className={cn(
                   "inline-flex items-center gap-1 font-mono text-[10px] uppercase tracking-[0.14em]",
                   note.activitySatisfaction ? "text-up" : "text-down",
@@ -574,7 +579,7 @@ function NoteCard({ note }: { note: AllNoteRow }) {
                 ) : (
                   <ThumbsDown className="h-3 w-3" />
                 )}
-                {note.activitySatisfaction ? "Satisfied" : "Not satisfied"}
+                {note.activitySatisfaction ? t("notes.satisfied") : t("notes.notSatisfied")}
               </span>
             )}
           </footer>
@@ -591,18 +596,19 @@ function EmptyState({
   filtersActive: boolean;
   onClear: () => void;
 }) {
+  const t = useT();
   if (filtersActive) {
     return (
       <div className="flex flex-col items-center justify-center gap-3 rounded-md border border-dashed border-border bg-surface py-16 text-center">
         <p className="font-serif text-[18px] italic text-text-secondary">
-          No notes match these filters.
+          {t("notes.emptyFiltered")}
         </p>
         <button
           type="button"
           onClick={onClear}
           className="font-mono text-[10px] uppercase tracking-[0.16em] text-text-tertiary underline-offset-4 hover:text-text hover:underline"
         >
-          Clear filters
+          {t("notes.clearFilters")}
         </button>
       </div>
     );
@@ -610,17 +616,16 @@ function EmptyState({
   return (
     <div className="flex flex-col items-center justify-center gap-3 rounded-md border border-dashed border-border bg-surface py-16 text-center">
       <p className="font-serif text-[20px] italic text-text-secondary">
-        Your journal is quiet.
+        {t("notes.emptyQuiet")}
       </p>
       <p className="max-w-md font-serif text-sm italic text-text-tertiary">
-        Notes you write on detail pages appear here. Open any activity to write
-        your first postmortem.
+        {t("notes.emptyQuietBody")}
       </p>
       <Link
         href="/spreads/archive"
         className="mt-2 inline-flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-[0.18em] text-text-tertiary underline-offset-4 hover:text-text hover:underline"
       >
-        Browse recent closes
+        {t("notes.browseRecent")}
         <ArrowRight className="h-3 w-3" />
       </Link>
     </div>

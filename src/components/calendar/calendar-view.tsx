@@ -15,6 +15,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
+import { useT, useLocale } from "@/lib/i18n/client";
 import type { MonthGrid } from "@/lib/calendar/month-grid";
 import { fmtYearMonth, addMonths } from "@/lib/calendar/month-grid";
 import type { CalendarChip } from "@/lib/calendar/chips";
@@ -29,12 +30,12 @@ import type { CalendarChip } from "@/lib/calendar/chips";
  *     params noted as follow-up since the archive doesn't yet honor them).
  */
 
-const MONTH_NAMES = [
-  "January", "February", "March", "April", "May", "June",
-  "July", "August", "September", "October", "November", "December",
-];
+const MONTH_KEYS = [
+  "jan", "feb", "mar", "apr", "may", "jun",
+  "jul", "aug", "sep", "oct", "nov", "dec",
+] as const;
 
-const DOW_HEADERS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+const DOW_KEYS = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"] as const;
 
 interface CalendarViewProps {
   /** Pre-built month grid (cells + boundaries + row count). */
@@ -53,19 +54,22 @@ interface CalendarViewProps {
 
 const MAX_CHIPS_VISIBLE = 3;
 
-function fmtSignedUsd(v: number): string {
-  if (v === 0) return "$0.00";
-  const sign = v > 0 ? "+" : "−";
-  return `${sign}$${Math.abs(v).toLocaleString("en-US", {
+function fmtSignedUsd(v: number, locale: "en" | "ru"): string {
+  const intl = locale === "ru" ? "ru-RU" : "en-US";
+  const abs = Math.abs(v).toLocaleString(intl, {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
-  })}`;
+  });
+  if (v === 0) return locale === "ru" ? `${abs} $` : `$${abs}`;
+  const sign = v > 0 ? "+" : "−";
+  return locale === "ru" ? `${sign}${abs} $` : `${sign}$${abs}`;
 }
 
-function fmtTooltipDate(ymd: string): string {
+function fmtTooltipDate(ymd: string, locale: "en" | "ru"): string {
   // Construct local-time Date from YYYY-MM-DD parts (no `new Date(string)`).
   const [y, m, d] = ymd.split("-").map(Number);
-  return new Date(y, m - 1, d).toLocaleDateString("en-US", {
+  const intl = locale === "ru" ? "ru-RU" : "en-US";
+  return new Date(y, m - 1, d).toLocaleDateString(intl, {
     weekday: "long",
     month: "long",
     day: "numeric",
@@ -82,7 +86,11 @@ export function CalendarView({
   monthSummary,
 }: CalendarViewProps) {
   const router = useRouter();
+  const t = useT();
+  const locale = useLocale();
   const [pickerOpen, setPickerOpen] = React.useState(false);
+
+  const monthName = (m: number) => t(`calendar.months.${MONTH_KEYS[m]}` as Parameters<typeof t>[0]);
 
   const prev = addMonths(grid.year, grid.month, -1);
   const next = addMonths(grid.year, grid.month, 1);
@@ -100,10 +108,11 @@ export function CalendarView({
         <CalendarPageHeader
           year={grid.year}
           month={grid.month}
+          monthName={monthName(grid.month)}
         />
 
         <CalendarPageTotal
-          monthLabel={`${MONTH_NAMES[grid.month]} ${grid.year}`}
+          monthLabel={`${monthName(grid.month)} ${grid.year}`}
           totals={monthSummary}
         />
       </header>
@@ -112,21 +121,21 @@ export function CalendarView({
       <section className="flex flex-wrap items-center gap-2 border-b border-border bg-surface/60 px-8 py-3 lg:px-12">
         <Link
           href={`/calendar?ym=${fmtYearMonth(prev.year, prev.month)}`}
-          aria-label={`Go to ${MONTH_NAMES[prev.month]} ${prev.year}`}
+          aria-label={t("calendar.goToMonth", { month: monthName(prev.month), year: prev.year })}
           className="flex items-center gap-1.5 rounded-md border border-border bg-surface px-2.5 py-1.5 font-mono text-[10px] uppercase tracking-[0.14em] text-text-secondary hover:bg-subtle hover:text-text"
         >
           <ChevronLeft className="h-3.5 w-3.5" />
-          Previous month
+          {t("calendar.prevMonth")}
         </Link>
 
         <Popover open={pickerOpen} onOpenChange={setPickerOpen}>
           <PopoverTrigger asChild>
             <button
               type="button"
-              aria-label="Pick a month"
+              aria-label={t("calendar.pickMonth")}
               className="flex items-center gap-2 rounded-md border border-border bg-surface px-3 py-1.5 font-mono text-[11px] uppercase tracking-[0.14em] text-text hover:bg-subtle"
             >
-              {MONTH_NAMES[grid.month]} {grid.year}
+              {monthName(grid.month)} {grid.year}
             </button>
           </PopoverTrigger>
           <PopoverContent
@@ -138,6 +147,12 @@ export function CalendarView({
               year={grid.year}
               month={grid.month}
               yearOptions={yearOptions}
+              monthName={monthName}
+              labels={{
+                prevYear: t("calendar.prevYear"),
+                nextYear: t("calendar.nextYear"),
+                year: t("calendar.pickYear"),
+              }}
               onPick={(y, m) => {
                 setPickerOpen(false);
                 router.push(`/calendar?ym=${fmtYearMonth(y, m)}`);
@@ -148,16 +163,16 @@ export function CalendarView({
 
         <Link
           href={`/calendar?ym=${fmtYearMonth(next.year, next.month)}`}
-          aria-label={`Go to ${MONTH_NAMES[next.month]} ${next.year}`}
+          aria-label={t("calendar.goToMonth", { month: monthName(next.month), year: next.year })}
           className="flex items-center gap-1.5 rounded-md border border-border bg-surface px-2.5 py-1.5 font-mono text-[10px] uppercase tracking-[0.14em] text-text-secondary hover:bg-subtle hover:text-text"
         >
-          Next month
+          {t("calendar.nextMonth")}
           <ChevronRight className="h-3.5 w-3.5" />
         </Link>
 
         <Link
           href="/calendar"
-          aria-label="Reset to today's month"
+          aria-label={t("calendar.todayLabel")}
           className={cn(
             "ml-1 rounded-md border px-2.5 py-1.5 font-mono text-[10px] uppercase tracking-[0.14em] transition-colors",
             isCurrentMonth
@@ -165,7 +180,7 @@ export function CalendarView({
               : "border-border bg-surface text-text-secondary hover:bg-subtle hover:text-text",
           )}
         >
-          Today
+          {t("calendar.today")}
         </Link>
       </section>
 
@@ -173,15 +188,15 @@ export function CalendarView({
       <section className="px-8 py-8 lg:px-12">
         {/* DOW header row */}
         <div className="grid grid-cols-7 gap-2 pb-2">
-          {DOW_HEADERS.map((d, i) => (
+          {DOW_KEYS.map((k, i) => (
             <span
-              key={d}
+              key={k}
               className={cn(
                 "px-1 font-serif text-[10px] font-semibold uppercase tracking-[0.18em] text-text-tertiary",
                 i >= 5 ? "text-text-tertiary/70" : "",
               )}
             >
-              {d}
+              {t(`calendar.weekdays.${k}` as Parameters<typeof t>[0])}
             </span>
           ))}
         </div>
@@ -199,15 +214,16 @@ export function CalendarView({
               }}
               chips={chipsByDate.get(c.ymd) ?? []}
               total={totalsByDate.get(c.ymd) ?? 0}
+              locale={locale}
             />
           ))}
         </div>
 
         <footer className="mt-12 flex items-center justify-between border-t border-border pt-5 font-mono text-[10px] uppercase tracking-[0.18em] text-text-tertiary">
           <Link href="/spreads" className="hover:text-text">
-            ← back to The book
+            {t("calendar.backToBook")}
           </Link>
-          <span>crypto journal · v0.1</span>
+          <span>{t("calendar.footer")}</span>
         </footer>
       </section>
     </div>
@@ -221,17 +237,21 @@ export function CalendarView({
 function CalendarPageHeader({
   year,
   month,
+  monthName,
 }: {
   year: number;
   month: number;
+  monthName: string;
 }) {
+  const t = useT();
+  void month;
   return (
     <div>
       <h1 className="font-serif text-[40px] font-medium leading-none tracking-tight text-text">
-        Calendar
+        {t("calendar.pageHeading")}
       </h1>
       <p className="mt-2 font-serif text-sm italic text-text-tertiary">
-        {MONTH_NAMES[month]} {year} · activities by day. Click any day to drill into the archive.
+        {t("calendar.pageSubtitle", { month: monthName, year })}
       </p>
     </div>
   );
@@ -244,13 +264,13 @@ function CalendarPageTotal({
   monthLabel: string;
   totals: { total: number; count: number };
 }) {
-  // The page's amber moment lives here — but only when the total is positive,
-  // per the design-system rule that the signature amber accompanies wins.
+  const t = useT();
+  const locale = useLocale();
   const isPositive = totals.total > 0;
   return (
     <div className="flex flex-col items-end">
       <p className="font-serif text-[10px] font-semibold uppercase tracking-[0.18em] text-text-tertiary">
-        {monthLabel} total
+        {t("calendar.monthTotal", { month: monthLabel })}
       </p>
       <p
         className={cn(
@@ -264,12 +284,12 @@ function CalendarPageTotal({
                 : "text-text",
         )}
       >
-        {fmtSignedUsd(totals.total)}
+        {fmtSignedUsd(totals.total, locale)}
       </p>
       <p className="mt-1 font-mono text-[10px] uppercase tracking-[0.14em] text-text-tertiary">
         {totals.count === 0
-          ? "no activity"
-          : `${totals.count} ${totals.count === 1 ? "activity" : "activities"} closed`}
+          ? t("calendar.noActivity")
+          : t.plural("plurals.activities", totals.count)}
       </p>
     </div>
   );
@@ -283,11 +303,15 @@ function MonthYearPicker({
   year,
   month,
   yearOptions,
+  monthName,
+  labels,
   onPick,
 }: {
   year: number;
   month: number;
   yearOptions: number[];
+  monthName: (m: number) => string;
+  labels: { prevYear: string; nextYear: string; year: string };
   onPick: (y: number, m: number) => void;
 }) {
   const [pickedYear, setPickedYear] = React.useState(year);
@@ -300,7 +324,7 @@ function MonthYearPicker({
             e.preventDefault();
             setPickedYear(pickedYear - 1);
           }}
-          aria-label="Previous year"
+          aria-label={labels.prevYear}
           className="rounded-md border border-border bg-surface px-2 py-1 font-mono text-[10px] uppercase tracking-[0.14em] text-text-secondary hover:bg-subtle hover:text-text"
         >
           <ChevronLeft className="inline h-3 w-3" />
@@ -308,7 +332,7 @@ function MonthYearPicker({
         <select
           value={pickedYear}
           onChange={(e) => setPickedYear(Number(e.target.value))}
-          aria-label="Year"
+          aria-label={labels.year}
           className="flex-1 rounded-md border border-border bg-surface px-2 py-1 font-mono text-[11px] uppercase tracking-[0.14em] text-text focus:outline-none focus:border-border-strong"
         >
           {yearOptions.map((y) => (
@@ -321,7 +345,7 @@ function MonthYearPicker({
             e.preventDefault();
             setPickedYear(pickedYear + 1);
           }}
-          aria-label="Next year"
+          aria-label={labels.nextYear}
           className="rounded-md border border-border bg-surface px-2 py-1 font-mono text-[10px] uppercase tracking-[0.14em] text-text-secondary hover:bg-subtle hover:text-text"
         >
           <ChevronRight className="inline h-3 w-3" />
@@ -329,11 +353,12 @@ function MonthYearPicker({
       </div>
 
       <div className="grid grid-cols-3 gap-1.5">
-        {MONTH_NAMES.map((name, i) => {
+        {Array.from({ length: 12 }, (_, i) => {
+          const name = monthName(i);
           const isFocused = pickedYear === year && i === month;
           return (
             <button
-              key={name}
+              key={i}
               type="button"
               onClick={() => onPick(pickedYear, i)}
               className={cn(
@@ -365,9 +390,11 @@ interface CalendarCellProps {
   };
   chips: CalendarChip[];
   total: number;
+  locale: "en" | "ru";
 }
 
-function CalendarCell({ cell, chips, total }: CalendarCellProps) {
+function CalendarCell({ cell, chips, total, locale }: CalendarCellProps) {
+  const t = useT();
   const totalTone =
     total > 0 ? "text-up" : total < 0 ? "text-down" : "text-text-tertiary";
   const hasActivity = chips.length > 0;
@@ -413,7 +440,7 @@ function CalendarCell({ cell, chips, total }: CalendarCellProps) {
               totalTone,
             )}
           >
-            {fmtSignedUsd(total)}
+            {fmtSignedUsd(total, locale)}
           </span>
         )}
       </div>
@@ -426,7 +453,7 @@ function CalendarCell({ cell, chips, total }: CalendarCellProps) {
           ))}
           {overflow > 0 && (
             <span className="font-mono text-[9px] uppercase tracking-[0.14em] text-text-tertiary">
-              +{overflow} more
+              {t("calendar.moreOverflow", { count: overflow })}
             </span>
           )}
         </div>
@@ -437,12 +464,13 @@ function CalendarCell({ cell, chips, total }: CalendarCellProps) {
   // Wrap in tooltip only when there's something to show — empty cells get
   // a lighter affordance, no tooltip noise.
   if (hasActivity) {
+    const ariaKey = chips.length === 1 ? "calendar.ariaCellWithActivity" : "calendar.ariaCellWithActivities";
     return (
       <Tooltip>
         <TooltipTrigger asChild>
           <Link
             href={href}
-            aria-label={`${fmtTooltipDate(cell.ymd)} · ${chips.length} ${chips.length === 1 ? "activity" : "activities"}`}
+            aria-label={t(ariaKey as Parameters<typeof t>[0], { date: fmtTooltipDate(cell.ymd, locale), count: chips.length })}
             className="block focus:outline-none focus-visible:ring-2 focus-visible:ring-text rounded-md"
           >
             {inner}
@@ -453,6 +481,7 @@ function CalendarCell({ cell, chips, total }: CalendarCellProps) {
             ymd={cell.ymd}
             chips={chips}
             total={total}
+            locale={locale}
           />
         </TooltipContent>
       </Tooltip>
@@ -462,7 +491,7 @@ function CalendarCell({ cell, chips, total }: CalendarCellProps) {
   return (
     <Link
       href={href}
-      aria-label={`${fmtTooltipDate(cell.ymd)} · no activity`}
+      aria-label={t("calendar.ariaCellEmpty", { date: fmtTooltipDate(cell.ymd, locale) })}
       className="block focus:outline-none focus-visible:ring-2 focus-visible:ring-text rounded-md"
     >
       {inner}
@@ -494,20 +523,23 @@ function CellTooltipBody({
   ymd,
   chips,
   total,
+  locale,
 }: {
   ymd: string;
   chips: CalendarChip[];
   total: number;
+  locale: "en" | "ru";
 }) {
+  const t = useT();
   return (
     <div className="flex flex-col gap-1">
-      <span className="text-text-tertiary">{fmtTooltipDate(ymd)}</span>
+      <span className="text-text-tertiary">{fmtTooltipDate(ymd, locale)}</span>
       <span
         className={
           total > 0 ? "text-up" : total < 0 ? "text-down" : "text-text-tertiary"
         }
       >
-        {fmtSignedUsd(total)} · {chips.length} {chips.length === 1 ? "activity" : "activities"}
+        {fmtSignedUsd(total, locale)} · {t.plural("plurals.activities", chips.length)}
       </span>
       <div className="mt-1 flex flex-col gap-0.5">
         {chips.slice(0, 6).map((chip) => (
@@ -522,11 +554,11 @@ function CellTooltipBody({
                   : "text-text-tertiary",
             )}
           >
-            {chip.serial} · {chip.name} · {fmtSignedUsd(chip.netPnl)}
+            {chip.serial} · {chip.name} · {fmtSignedUsd(chip.netPnl, locale)}
           </span>
         ))}
         {chips.length > 6 && (
-          <span className="text-text-tertiary">+{chips.length - 6} more</span>
+          <span className="text-text-tertiary">{t("calendar.moreOverflow", { count: chips.length - 6 })}</span>
         )}
       </div>
     </div>

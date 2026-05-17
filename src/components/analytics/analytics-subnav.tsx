@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
+import { useT } from "@/lib/i18n/client";
 
 /**
  * Tab strip rendered above every /analytics/* page. Three tabs:
@@ -15,14 +16,14 @@ import { cn } from "@/lib/utils";
  * pills — fits the editorial register.
  */
 
-const TABS: { href: string; label: string; caption: string }[] = [
-  { href: "/analytics/track-record", label: "Track record", caption: "Equity + edge metrics" },
-  { href: "/analytics/activity-mix", label: "Activity mix", caption: "Type · asset · capital" },
-  { href: "/analytics/regime", label: "Regime distribution", caption: "Tags that pay" },
-];
-
 export function AnalyticsSubnav() {
   const pathname = usePathname();
+  const t = useT();
+  const TABS = [
+    { href: "/analytics/track-record", label: t("analytics.nav.trackRecord"), caption: t("analytics.navCaptions.trackRecord") },
+    { href: "/analytics/activity-mix", label: t("analytics.nav.activityMix"), caption: t("analytics.navCaptions.activityMix") },
+    { href: "/analytics/regime", label: t("analytics.nav.regime"), caption: t("analytics.navCaptions.regime") },
+  ];
   return (
     <nav className="border-b border-border bg-surface">
       <div className="flex items-end gap-1 overflow-x-auto px-8 lg:px-12">

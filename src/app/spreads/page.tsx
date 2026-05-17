@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { ArrowRight } from "lucide-react";
+import { getT, getLocale } from "@/lib/i18n/server";
 import { KpiCard, defaultFontSize } from "@/components/spread/kpi-card";
 import { CalendarHeatmap } from "@/components/spread/calendar-heatmap";
 import {
@@ -217,6 +218,9 @@ interface SpreadsPageProps {
 
 export default async function SpreadsPage({ searchParams }: SpreadsPageProps) {
   const { id: userId } = await requireUser();
+  const t = await getT();
+  const locale = await getLocale();
+  const intlLocale = locale === "ru" ? "ru-RU" : "en-US";
 
   const rawSearchParams = await searchParams;
   const dashParams = parseDashboardSearchParams(rawSearchParams);
@@ -397,10 +401,10 @@ export default async function SpreadsPage({ searchParams }: SpreadsPageProps) {
 
   // Friendly "since" date — use first close from totals if available.
   const sinceLabel = totals.firstClose
-    ? new Date(totals.firstClose).toLocaleDateString("en-US", {
+    ? new Date(totals.firstClose).toLocaleDateString(intlLocale, {
         month: "short", day: "numeric", year: "numeric",
       })
-    : "today";
+    : (locale === "ru" ? "сегодня" : "today");
 
   return (
     <div className="w-full">
@@ -408,10 +412,17 @@ export default async function SpreadsPage({ searchParams }: SpreadsPageProps) {
       <header className="flex flex-col gap-4 border-b border-border px-8 py-7 md:flex-row md:items-end md:justify-between lg:px-12">
         <div>
           <h1 className="font-serif text-[40px] font-medium leading-none tracking-tight text-text">
-            The book
+            {t("dashboard.title")}
           </h1>
           <p className="mt-2 font-serif text-sm italic text-text-tertiary">
-            {totals.count} activities · {typeCounts.spread} spreads · {typeCounts.trade} trades · {typeCounts.sale} sales · {typeCounts.airdrop} airdrops · since {sinceLabel}
+            {t("dashboard.summary", {
+              count: totals.count,
+              spread: typeCounts.spread,
+              trade: typeCounts.trade,
+              sale: typeCounts.sale,
+              airdrop: typeCounts.airdrop,
+              date: sinceLabel,
+            })}
           </p>
         </div>
 
@@ -430,35 +441,38 @@ export default async function SpreadsPage({ searchParams }: SpreadsPageProps) {
         <section className="mb-3 grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-7">
           <KpiCard
             variant="hero"
-            label="Net P&L · YTD"
+            label={t("dashboard.kpi.netPnlYtd")}
             value={fmtUsd(totals.net, true)}
-            delta={`across ${totals.count} activities`}
+            delta={t("dashboard.deltas.acrossActivities", { count: totals.count })}
           />
           <KpiCard
-            label="Activities closed"
+            label={t("dashboard.kpi.activitiesClosed")}
             value={`${totals.count}`}
-            delta="4 activity types"
+            delta={t("dashboard.deltas.fourTypes")}
           />
           <KpiCard
-            label="Win rate"
+            label={t("dashboard.kpi.winRate")}
             value={`${totals.winRate.toFixed(1)}%`}
             tone="up"
-            delta={`${totals.winners} winners · ${totals.losers} losers`}
+            delta={t("dashboard.deltas.winLossPair", {
+              winners: totals.winners,
+              losers: totals.losers,
+            })}
           />
           <KpiCard
-            label="Weighted return"
+            label={t("dashboard.kpi.weightedReturn")}
             value={`${totals.weightedReturnPct.toFixed(1)}%`}
             tone={totals.weightedReturnPct >= 0 ? "up" : "down"}
-            delta="realized · capital-weighted"
+            delta={t("dashboard.deltas.realizedCapWeighted")}
           />
           <KpiCard
-            label="Best activity"
+            label={t("dashboard.kpi.bestActivity")}
             value={bestDisplay ? fmtUsd(bestDisplay.netPnl, true) : "—"}
             tone="up"
             delta={bestDelta(bestDisplay)}
           />
           <KpiCard
-            label="Worst activity"
+            label={t("dashboard.kpi.worstActivity")}
             value={worstDisplay ? fmtUsd(worstDisplay.netPnl, true) : "—"}
             tone="down"
             delta={bestDelta(worstDisplay)}
@@ -471,83 +485,88 @@ export default async function SpreadsPage({ searchParams }: SpreadsPageProps) {
             the single amber moment lives upstairs. */}
         <section className="mb-8 grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-6">
           <KpiCardWithCaption
-            label="Profit factor"
+            label={t("dashboard.kpi.profitFactor")}
             value={fmtRatio(more.profitFactor)}
-            caption="Gross wins divided by gross losses. >1.5 is healthy."
+            caption={t("dashboard.captions.profitFactor")}
             delta={
               more.profitFactor != null
-                ? `${fmtUsd(more.avgWin)} avg win · ${fmtUsd(-more.avgLoss)} avg loss`
-                : "needs both wins + losses"
+                ? t("dashboard.deltas.avgWinLoss", {
+                    win: fmtUsd(more.avgWin),
+                    loss: fmtUsd(-more.avgLoss),
+                  })
+                : t("dashboard.deltas.needsBoth")
             }
           />
           <KpiCardWithCaption
-            label="Payoff ratio"
+            label={t("dashboard.kpi.payoffRatio")}
             value={fmtPayoff(more.payoffRatio)}
-            caption="Average win size relative to average loss."
+            caption={t("dashboard.captions.payoffRatio")}
             delta={
               more.payoffRatio != null
-                ? "win-size : loss-size"
-                : "needs both wins + losses"
+                ? t("dashboard.deltas.winLossSize")
+                : t("dashboard.deltas.needsBoth")
             }
           />
           <KpiCardWithCaption
-            label="Expectancy"
+            label={t("dashboard.kpi.expectancy")}
             value={fmtExpectancy(more.expectancy)}
             tone={more.expectancy >= 0 ? "up" : "down"}
-            caption="Average dollar P&L per activity, all-in."
+            caption={t("dashboard.captions.expectancy")}
             delta={
               closedRows.length > 0
-                ? `over ${closedRows.length} closed activities`
-                : "no data yet"
+                ? t("dashboard.deltas.overActivities", { count: closedRows.length })
+                : t("dashboard.deltas.noDataYet")
             }
           />
           <KpiCardWithCaption
-            label="Max drawdown"
+            label={t("dashboard.kpi.maxDrawdown")}
             value={fmtPercent(drawdown.maxDrawdownPct)}
             tone="down"
-            caption="Worst peak-to-trough drop on equity."
+            caption={t("dashboard.captions.maxDrawdown")}
             delta={
               drawdown.maxDrawdownUsd > 0
-                ? `${fmtUsd(-drawdown.maxDrawdownUsd)} from ${
-                    drawdown.peakAt
-                      ? new Date(drawdown.peakAt).toLocaleDateString("en-US", {
+                ? t("dashboard.deltas.drawdownFrom", {
+                    usd: fmtUsd(-drawdown.maxDrawdownUsd),
+                    date: drawdown.peakAt
+                      ? new Date(drawdown.peakAt).toLocaleDateString(intlLocale, {
                           month: "short",
                           day: "numeric",
                         })
-                      : "—"
-                  }`
-                : "no drawdown yet"
+                      : "—",
+                  })
+                : t("dashboard.deltas.noDrawdown")
             }
           />
           <KpiCardWithCaption
-            label="Loss streak"
+            label={t("dashboard.kpi.lossStreak")}
             value={
               closedRows.length > 0 ? String(streaks.longestLossStreak) : "—"
             }
             tone={streaks.longestLossStreak > 0 ? "down" : "neutral"}
-            caption="Longest run of consecutive losing activities."
+            caption={t("dashboard.captions.lossStreak")}
             delta={
               streaks.currentStreak.kind === "loss" &&
               streaks.currentStreak.length > 0
-                ? `now: ${streaks.currentStreak.length} in a row`
-                : `now: ${
-                    streaks.currentStreak.kind === "win"
-                      ? `${streaks.currentStreak.length} wins`
-                      : "no streak"
-                  }`
+                ? t("dashboard.deltas.streakNow", { count: streaks.currentStreak.length })
+                : streaks.currentStreak.kind === "win"
+                  ? t("dashboard.deltas.streakNowWins", { count: streaks.currentStreak.length })
+                  : t("dashboard.deltas.streakNoStreak")
             }
           />
           <KpiCardWithCaption
-            label="Sharpe"
+            label={t("dashboard.kpi.sharpe")}
             value={fmtSharpe(sharpe.sharpe, sharpe.enoughData)}
             tone={
               sharpe.enoughData && sharpe.sharpe >= 0 ? "up" : "down"
             }
-            caption="Risk-adjusted return, annualized. >1 is good."
+            caption={t("dashboard.captions.sharpe")}
             delta={
               sharpe.enoughData
-                ? `${sharpe.sampleDays} active days · ann. ${sharpe.annualizationFactor}d`
-                : `needs ≥7 active days (${sharpe.sampleDays} so far)`
+                ? t("dashboard.deltas.sharpeReady", {
+                    days: sharpe.sampleDays,
+                    factor: sharpe.annualizationFactor,
+                  })
+                : t("dashboard.deltas.sharpeNeeds", { days: sharpe.sampleDays })
             }
           />
         </section>
@@ -557,7 +576,7 @@ export default async function SpreadsPage({ searchParams }: SpreadsPageProps) {
           <div className="rounded-md border border-border bg-surface">
             <div className="flex items-center justify-between border-b border-border px-5 py-3">
               <h3 className="font-serif text-[12px] font-semibold uppercase tracking-[0.16em] text-text">
-                Daily realized P&L · last {heatmapWeekCount} weeks
+                {t("dashboard.sections.dailyPnl", { weeks: heatmapWeekCount })}
               </h3>
               <HeatmapWindowToggle current={dashParams.heatmap} />
             </div>
@@ -579,17 +598,21 @@ export default async function SpreadsPage({ searchParams }: SpreadsPageProps) {
           <div className="mb-4 flex items-baseline justify-between">
             <div className="flex items-baseline gap-3">
               <h2 className="font-serif text-[15px] font-semibold uppercase tracking-[0.16em] text-text">
-                Recent closes
+                {t("dashboard.sections.recentCloses")}
               </h2>
               <span className="font-mono text-[11px] text-text-tertiary">
-                {recentRows.length} of {totals.count} · {fmtUsd(recentNetSum)} realized
+                {t("dashboard.sections.recentCount", {
+                  n: recentRows.length,
+                  total: totals.count,
+                  pnl: fmtUsd(recentNetSum),
+                })}
               </span>
             </div>
             <Link
               href="/spreads/archive"
               className="flex items-center gap-1 font-mono text-[11px] uppercase tracking-[0.14em] text-text-tertiary hover:text-text"
             >
-              The archive <ArrowRight className="h-3 w-3" />
+              {t("dashboard.archiveLink")} <ArrowRight className="h-3 w-3" />
             </Link>
           </div>
           {recentCloses.length > 0 ? (
@@ -601,13 +624,13 @@ export default async function SpreadsPage({ searchParams }: SpreadsPageProps) {
           ) : (
             <div className="rounded-md border border-dashed border-border bg-surface py-12 text-center">
               <p className="font-serif text-base italic text-text-secondary">
-                No activities logged yet.
+                {t("dashboard.emptyRecent")}
               </p>
               <Link
                 href="/add"
                 className="mt-3 inline-block font-mono text-[10px] uppercase tracking-[0.18em] text-text-tertiary underline-offset-4 hover:text-text hover:underline"
               >
-                Log your first activity
+                {t("dashboard.emptyRecentCta")}
               </Link>
             </div>
           )}
@@ -618,15 +641,15 @@ export default async function SpreadsPage({ searchParams }: SpreadsPageProps) {
           <div className="mb-4 flex items-baseline justify-between">
             <div>
               <h3 className="font-serif text-[12px] font-semibold uppercase tracking-[0.16em] text-text">
-                Equity curve · cumulative realized
+                {t("dashboard.sections.equity")}
               </h3>
               <p className="mt-1 font-serif text-[12px] italic text-text-tertiary">
-                Running sum of net P&L across every closed activity. Dotted line is the all-time high.
+                {t("dashboard.sections.equityCaption")}
               </p>
             </div>
             <span className="font-mono text-[11px] text-text-tertiary">
               {totals.firstClose
-                ? `${new Date(totals.firstClose).toLocaleDateString("en-US", { month: "short", day: "numeric" })} → ${new Date(totals.lastClose ?? totals.firstClose).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}`
+                ? `${new Date(totals.firstClose).toLocaleDateString(intlLocale, { month: "short", day: "numeric" })} → ${new Date(totals.lastClose ?? totals.firstClose).toLocaleDateString(intlLocale, { month: "short", day: "numeric", year: "numeric" })}`
                 : "—"}
             </span>
           </div>
@@ -643,17 +666,22 @@ export default async function SpreadsPage({ searchParams }: SpreadsPageProps) {
           <div className="mb-4 flex items-baseline justify-between">
             <div>
               <h3 className="font-serif text-[12px] font-semibold uppercase tracking-[0.16em] text-text">
-                R-multiple distribution
+                {t("dashboard.sections.rDist")}
               </h3>
               <p className="mt-1 font-serif text-[12px] italic text-text-tertiary">
                 {rUnit > 0
-                  ? `1R = average loss (${fmtUsd(rUnit)}). Wins above +1R cover more than one losing trade.`
-                  : "1R = average loss. Wins above +1R cover more than one losing trade."}
+                  ? t("dashboard.sections.rDistCaption", { value: fmtUsd(rUnit) })
+                  : t("dashboard.sections.rDistCaptionNoUnit")}
               </p>
             </div>
             {rBins.length > 0 && (
               <span className="font-mono text-[11px] text-text-tertiary">
-                Median: {fmtR(rDistRaw.median)} · Mean: {fmtR(rDistRaw.mean)} · Positive: {rDistRaw.positiveCount} · Negative: {rDistRaw.negativeCount}
+                {t("dashboard.sections.rDistStats", {
+                  med: fmtR(rDistRaw.median),
+                  mean: fmtR(rDistRaw.mean),
+                  pos: rDistRaw.positiveCount,
+                  neg: rDistRaw.negativeCount,
+                })}
               </span>
             )}
           </div>
@@ -665,16 +693,17 @@ export default async function SpreadsPage({ searchParams }: SpreadsPageProps) {
           <div className="mb-4 flex items-baseline justify-between">
             <div>
               <h3 className="font-serif text-[12px] font-semibold uppercase tracking-[0.16em] text-text">
-                Performance by tag
+                {t("dashboard.sections.byTag")}
               </h3>
               <p className="mt-1 font-serif text-[12px] italic text-text-tertiary">
-                Setup labels grouped by P&amp;L. An activity tagged twice counts
-                toward both rows.
+                {t("dashboard.sections.byTagCaption")}
               </p>
             </div>
             {tagAggs.length > 0 && (
               <span className="font-mono text-[11px] text-text-tertiary">
-                {tagAggs.length} distinct {tagAggs.length === 1 ? "tag" : "tags"}
+                {locale === "ru"
+                  ? `${tagAggs.length} ${tagAggs.length === 1 ? "тег" : "тегов"}`
+                  : `${tagAggs.length} distinct ${tagAggs.length === 1 ? "tag" : "tags"}`}
               </span>
             )}
           </div>
@@ -683,10 +712,10 @@ export default async function SpreadsPage({ searchParams }: SpreadsPageProps) {
           ) : (
             <div className="flex flex-col items-center justify-center gap-2 rounded-md border border-dashed border-border bg-inset py-10">
               <p className="font-serif text-sm italic text-text-secondary">
-                Tag-grouped metrics will appear here once you tag your trades.
+                {t("dashboard.sections.byTagEmpty")}
               </p>
               <p className="font-mono text-[10px] uppercase tracking-[0.16em] text-text-tertiary">
-                regime · custom · counterparty
+                {t("dashboard.sections.byTagHints")}
               </p>
             </div>
           )}
@@ -700,8 +729,13 @@ export default async function SpreadsPage({ searchParams }: SpreadsPageProps) {
 
         {/* ── footer ────────────────────────────────────────────────────── */}
         <footer className="mt-8 flex items-center justify-between border-t border-border pt-5 font-mono text-[10px] uppercase tracking-[0.18em] text-text-tertiary">
-          <span>crypto journal · v0.1 · since {sinceLabel}</span>
-          <span>3 exchanges connected · {totals.count} activities archived</span>
+          <span>{t("dashboard.footer", { since: sinceLabel })}</span>
+          <span>
+            {t("dashboard.footerRight", {
+              exchanges: connectedExchangeCount,
+              count: totals.count,
+            })}
+          </span>
         </footer>
       </div>
     </div>

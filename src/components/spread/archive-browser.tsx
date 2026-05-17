@@ -16,6 +16,7 @@ import {
   X,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useT } from "@/lib/i18n/client";
 import {
   Table,
   TableBody,
@@ -203,6 +204,7 @@ function rowSearchHaystack(a: Activity): string {
 export function ArchiveBrowser({ data }: { data: Activity[] }) {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const t = useT();
 
   // Initial state is decoded from URL search params on mount only. Once
   // mounted, chip toggles drive `router.replace` (see effect below) — we
@@ -400,10 +402,16 @@ export function ArchiveBrowser({ data }: { data: Activity[] }) {
       <header className="flex flex-col gap-4 border-b border-border px-8 py-7 md:flex-row md:items-end md:justify-between lg:px-12">
         <div>
           <h1 className="font-serif text-[40px] font-medium leading-none tracking-tight text-text">
-            The archive
+            {t("archive.title")}
           </h1>
           <p className="mt-2 font-serif text-sm italic text-text-tertiary">
-            {data.length} activities · {activityCounts.get("spread") ?? 0} spreads · {activityCounts.get("trade") ?? 0} trades · {activityCounts.get("sale") ?? 0} sales · {activityCounts.get("airdrop") ?? 0} airdrops
+            {t("archive.summary", {
+              count: data.length,
+              spread: activityCounts.get("spread") ?? 0,
+              trade: activityCounts.get("trade") ?? 0,
+              sale: activityCounts.get("sale") ?? 0,
+              airdrop: activityCounts.get("airdrop") ?? 0,
+            })}
           </p>
         </div>
 
@@ -413,15 +421,15 @@ export function ArchiveBrowser({ data }: { data: Activity[] }) {
             <input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search activity, venue, note…"
-              aria-label="Search archive activities"
+              placeholder={t("archive.searchPlaceholder")}
+              aria-label={t("archive.searchAria")}
               type="search"
               className="w-56 bg-transparent text-[12px] text-text placeholder:text-text-tertiary focus:outline-none"
             />
             {search && (
               <button
                 onClick={() => setSearch("")}
-                aria-label="Clear search"
+                aria-label={t("archive.clearSearch")}
                 className="text-text-tertiary hover:text-text"
               >
                 <X className="h-3 w-3" />
@@ -440,7 +448,7 @@ export function ArchiveBrowser({ data }: { data: Activity[] }) {
                   : "text-text-secondary hover:text-text"
               )}
             >
-              <Rows3 className="h-3 w-3" /> Table
+              <Rows3 className="h-3 w-3" /> {t("archive.view.table")}
             </button>
             <div className="h-4 w-px bg-border" />
             <button
@@ -453,12 +461,12 @@ export function ArchiveBrowser({ data }: { data: Activity[] }) {
                   : "text-text-secondary hover:text-text"
               )}
             >
-              <LayoutGrid className="h-3 w-3" /> Cards
+              <LayoutGrid className="h-3 w-3" /> {t("archive.view.cards")}
             </button>
           </div>
 
           <button className="flex items-center gap-1.5 rounded-md border border-border bg-surface px-3 py-1.5 font-mono text-[10px] uppercase tracking-[0.14em] text-text-secondary hover:bg-subtle">
-            <Download className="h-3 w-3" /> Export CSV
+            <Download className="h-3 w-3" /> {t("archive.exportCsv")}
           </button>
         </div>
       </header>
@@ -467,33 +475,33 @@ export function ArchiveBrowser({ data }: { data: Activity[] }) {
       <section className="border-b border-border bg-surface/60 px-8 py-4 lg:px-12">
         <div className="flex flex-col gap-3">
           <FilterRow
-            label="Activity"
+            label={t("archive.filters.activity")}
             chips={ACTIVITY_TYPE_ORDER.filter(
-              (t) => (activityCounts.get(t) ?? 0) > 0
-            ).map((t) => ({
-              key: t,
-              label: ACTIVITY_TYPE_LABELS[t],
-              count: activityCounts.get(t) ?? 0,
-              active: activityFilters.has(t),
+              (tt) => (activityCounts.get(tt) ?? 0) > 0
+            ).map((tt) => ({
+              key: tt,
+              label: ACTIVITY_TYPE_LABELS[tt],
+              count: activityCounts.get(tt) ?? 0,
+              active: activityFilters.has(tt),
               onClick: () =>
-                setActivityFilters((s) => toggleSetValue(s, t)),
+                setActivityFilters((s) => toggleSetValue(s, tt)),
             }))}
           />
           {spreadSubtypeApplicable && (
             <FilterRow
-              label="Type"
-              chips={TYPE_ORDER.map((t) => ({
-                key: t,
-                label: SPREAD_TYPE_LABELS[t],
-                count: spreadSubtypeCounts.get(t) ?? 0,
-                active: spreadTypeFilters.has(t),
+              label={t("archive.filters.type")}
+              chips={TYPE_ORDER.map((tt) => ({
+                key: tt,
+                label: SPREAD_TYPE_LABELS[tt],
+                count: spreadSubtypeCounts.get(tt) ?? 0,
+                active: spreadTypeFilters.has(tt),
                 onClick: () =>
-                  setSpreadTypeFilters((s) => toggleSetValue(s, t)),
+                  setSpreadTypeFilters((s) => toggleSetValue(s, tt)),
               })).filter((c) => c.count > 0)}
             />
           )}
           <FilterRow
-            label="Asset"
+            label={t("archive.filters.asset")}
             chips={ASSET_ORDER.filter(
               (a) => (assetCounts.get(a) ?? 0) > 0
             ).map((a) => ({
@@ -506,7 +514,7 @@ export function ArchiveBrowser({ data }: { data: Activity[] }) {
             }))}
           />
           <FilterRow
-            label="Status"
+            label={t("archive.filters.status")}
             chips={STATUS_ORDER.filter(
               (s) => (statusCounts.get(s) ?? 0) > 0
             ).map((s) => ({
@@ -520,11 +528,11 @@ export function ArchiveBrowser({ data }: { data: Activity[] }) {
           />
           <div className="flex items-baseline gap-3">
             <span className="w-16 shrink-0 font-serif text-[10px] font-semibold uppercase tracking-[0.18em] text-text-tertiary">
-              Outcome
+              {t("archive.filters.outcome")}
             </span>
             <div className="flex flex-wrap items-center gap-2">
               <FilterChip
-                label={`Winners · ${outcomeCounts.winners}`}
+                label={t("archive.outcomeWinners", { n: outcomeCounts.winners })}
                 active={outcome === "winners"}
                 tone="up"
                 onClick={() =>
@@ -532,7 +540,7 @@ export function ArchiveBrowser({ data }: { data: Activity[] }) {
                 }
               />
               <FilterChip
-                label={`Losers · ${outcomeCounts.losers}`}
+                label={t("archive.outcomeLosers", { n: outcomeCounts.losers })}
                 active={outcome === "losers"}
                 tone="down"
                 onClick={() =>
@@ -545,7 +553,7 @@ export function ArchiveBrowser({ data }: { data: Activity[] }) {
                   className="ml-2 flex items-center gap-1 font-mono text-[10px] uppercase tracking-[0.14em] text-text-tertiary hover:text-text"
                 >
                   <X className="h-3 w-3" />
-                  Reset
+                  {t("archive.filters.reset")}
                 </button>
               )}
               {/* "Save this view" — hands the current archive URL to /views
@@ -570,23 +578,23 @@ export function ArchiveBrowser({ data }: { data: Activity[] }) {
       {/* ── stats bar ───────────────────────────────────────────────────── */}
       <section className="grid grid-cols-2 divide-x divide-border-subtle border-b border-border bg-app md:grid-cols-5">
         <StatCell
-          label="Results"
+          label={t("archive.stats.results")}
           value={`${stats.count}`}
-          sub={`of ${data.length} activities`}
+          sub={t("archive.stats.ofActivities", { count: data.length })}
         />
         <StatCell
-          label="Net P&L"
+          label={t("archive.stats.netPnl")}
           value={fmtUsd(stats.net, true)}
           tone={stats.net >= 0 ? "up" : "down"}
         />
         <StatCell
-          label="Win rate"
+          label={t("archive.stats.winRate")}
           value={`${stats.winRate.toFixed(1)}%`}
-          sub={`${stats.winners} W · ${stats.losers} L`}
+          sub={t("archive.stats.winLoss", { w: stats.winners, l: stats.losers })}
         />
-        <StatCell label="Capital used" value={fmtCapital(stats.cap)} />
+        <StatCell label={t("archive.stats.capital")} value={fmtCapital(stats.cap)} />
         <StatCell
-          label="Avg / activity"
+          label={t("archive.stats.avgPerActivity")}
           value={fmtUsd(stats.avgPerTrade, true)}
           tone={stats.avgPerTrade >= 0 ? "up" : "down"}
         />
@@ -608,15 +616,15 @@ export function ArchiveBrowser({ data }: { data: Activity[] }) {
 
         {sorted.length > 0 && (
           <p className="mt-6 text-center font-mono text-[10px] uppercase tracking-[0.18em] text-text-tertiary">
-            Showing {sorted.length} of {data.length}
+            {t("archive.showing", { n: sorted.length, total: data.length })}
           </p>
         )}
 
         <footer className="mt-12 flex items-center justify-between border-t border-border pt-5 font-mono text-[10px] uppercase tracking-[0.18em] text-text-tertiary">
           <Link href="/spreads" className="hover:text-text">
-            ← back to The book
+            {t("archive.backToBook", { name: t("dashboard.title") })}
           </Link>
-          <span>crypto journal · v0.1 · since Jan 12, 2026</span>
+          <span>{t("archive.footer", { since: "Jan 12, 2026" })}</span>
         </footer>
       </section>
     </div>
@@ -728,17 +736,18 @@ function StatCell({
 }
 
 function EmptyState({ onClear }: { onClear: () => void }) {
+  const t = useT();
   return (
     <div className="flex flex-col items-center justify-center gap-3 rounded-md border border-dashed border-border bg-surface py-20 text-center">
       <FilterIcon className="h-6 w-6 text-text-tertiary" />
       <p className="font-serif text-base italic text-text-secondary">
-        Nothing matches these filters.
+        {t("archive.empty")}
       </p>
       <button
         onClick={onClear}
         className="font-mono text-[10px] uppercase tracking-[0.18em] text-text-tertiary underline-offset-4 hover:text-text hover:underline"
       >
-        Reset and start over
+        {t("archive.emptyReset")}
       </button>
     </div>
   );
@@ -753,28 +762,29 @@ function ArchiveTable({
   sort: { key: SortKey; dir: "asc" | "desc" };
   onSort: (key: SortKey) => void;
 }) {
+  const t = useT();
   return (
     <div className="overflow-hidden rounded-md border border-border bg-surface">
       <Table>
         <TableHeader>
           <TableRow className="hover:bg-transparent">
             <SortableHeader k="serial" sort={sort} onSort={onSort}>
-              #
+              {t("archive.headers.hash")}
             </SortableHeader>
             <TableHead className="font-serif text-[10px] font-semibold uppercase tracking-[0.16em] text-text-tertiary">
-              Activity
+              {t("archive.headers.activity")}
             </TableHead>
             <TableHead className="font-serif text-[10px] font-semibold uppercase tracking-[0.16em] text-text-tertiary">
-              Status
+              {t("archive.headers.status")}
             </TableHead>
             <SortableHeader k="capital" sort={sort} onSort={onSort} align="right">
-              Capital
+              {t("archive.headers.capital")}
             </SortableHeader>
             <SortableHeader k="days" sort={sort} onSort={onSort} align="right">
-              Held
+              {t("archive.headers.held")}
             </SortableHeader>
             <SortableHeader k="closed" sort={sort} onSort={onSort}>
-              Closed
+              {t("archive.headers.closed")}
             </SortableHeader>
             <SortableHeader
               k="headline_num"
@@ -782,10 +792,10 @@ function ArchiveTable({
               onSort={onSort}
               align="right"
             >
-              Headline
+              {t("archive.headers.headline")}
             </SortableHeader>
             <SortableHeader k="net_pnl" sort={sort} onSort={onSort} align="right">
-              Net P&L
+              {t("archive.headers.pnl")}
             </SortableHeader>
           </TableRow>
         </TableHeader>

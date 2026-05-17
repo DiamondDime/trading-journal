@@ -21,6 +21,8 @@ import {
   Settings,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useT } from "@/lib/i18n/client";
+import { LocaleSwitcher } from "@/components/locale-switcher";
 
 type NavItem = {
   icon: React.ComponentType<{ className?: string }>;
@@ -31,54 +33,51 @@ type NavItem = {
   badge?: { text: string; tone: "down" | "warn" | "brand" };
 };
 
-const sections: { label: string; items: NavItem[] }[] = [
-  {
-    label: "Book",
-    items: [
-      { icon: BookOpen, label: "Overview", href: "/spreads" },
-      { icon: Archive, label: "The archive", href: "/spreads/archive", count: 27 },
-      { icon: CalendarDays, label: "Calendar view", href: "/calendar" },
-    ],
-  },
-  {
-    label: "Analytics",
-    items: [
-      { icon: TrendingUp, label: "Track record", href: "/analytics/track-record" },
-      { icon: PieChart, label: "Activity mix", href: "/analytics/activity-mix" },
-      { icon: Activity, label: "Regime distribution", href: "/analytics/regime" },
-    ],
-  },
-  {
-    label: "Workshop",
-    items: [
-      { icon: FileText, label: "Notes & marginalia", href: "/notes" },
-      { icon: Bookmark, label: "Saved views", href: "/views" },
-      {
-        icon: Plug,
-        label: "Exchanges",
-        href: "/settings/exchanges",
-      },
-    ],
-  },
-];
-
-const savedViews: { label: string; href: string; count: number; tone?: "up" | "down" }[] = [
-  { label: "All activity",     href: "/spreads/archive",                       count: 27 },
-  { label: "Spreads",          href: "/spreads/archive?activity=spread",        count: 16 },
-  { label: "Trades",           href: "/spreads/archive?activity=trade",         count: 5  },
-  { label: "Sales",            href: "/spreads/archive?activity=sale",          count: 3  },
-  { label: "Airdrops",         href: "/spreads/archive?activity=airdrop",       count: 3  },
-  { label: "Winners",          href: "/spreads/archive?outcome=winners",        count: 22, tone: "up" },
-  { label: "Losers",           href: "/spreads/archive?outcome=losers",         count: 5,  tone: "down" },
-  { label: "Cash-and-carry",   href: "/spreads/archive?activity=spread&type=cash_carry",      count: 5 },
-  { label: "Funding captures", href: "/spreads/archive?activity=spread&type=funding",         count: 5 },
-  { label: "Cross-exchange",   href: "/spreads/archive?activity=spread&type=cross_exchange",  count: 3 },
-  { label: "Calendar spreads", href: "/spreads/archive?activity=spread&type=calendar",        count: 2 },
-  { label: "DEX-CEX",          href: "/spreads/archive?activity=spread&type=dex_cex",         count: 1 },
-];
-
 export function Sidebar() {
   const pathname = usePathname();
+  const t = useT();
+
+  const sections: { label: string; items: NavItem[] }[] = [
+    {
+      label: t("sidebar.sections.book"),
+      items: [
+        { icon: BookOpen, label: t("sidebar.nav.overview"), href: "/spreads" },
+        { icon: Archive, label: t("sidebar.nav.archive"), href: "/spreads/archive", count: 27 },
+        { icon: CalendarDays, label: t("sidebar.nav.calendar"), href: "/calendar" },
+      ],
+    },
+    {
+      label: t("sidebar.sections.analytics"),
+      items: [
+        { icon: TrendingUp, label: t("sidebar.nav.trackRecord"), href: "/analytics/track-record" },
+        { icon: PieChart, label: t("sidebar.nav.activityMix"), href: "/analytics/activity-mix" },
+        { icon: Activity, label: t("sidebar.nav.regime"), href: "/analytics/regime" },
+      ],
+    },
+    {
+      label: t("sidebar.sections.workshop"),
+      items: [
+        { icon: FileText, label: t("sidebar.nav.notes"), href: "/notes" },
+        { icon: Bookmark, label: t("sidebar.nav.views"), href: "/views" },
+        { icon: Plug, label: t("sidebar.nav.exchanges"), href: "/settings/exchanges" },
+      ],
+    },
+  ];
+
+  const savedViews: { label: string; href: string; count: number; tone?: "up" | "down" }[] = [
+    { label: t("sidebar.savedViews.all"),       href: "/spreads/archive",                                       count: 27 },
+    { label: t("sidebar.savedViews.spreads"),   href: "/spreads/archive?activity=spread",                       count: 16 },
+    { label: t("sidebar.savedViews.trades"),    href: "/spreads/archive?activity=trade",                        count: 5  },
+    { label: t("sidebar.savedViews.sales"),     href: "/spreads/archive?activity=sale",                         count: 3  },
+    { label: t("sidebar.savedViews.airdrops"),  href: "/spreads/archive?activity=airdrop",                      count: 3  },
+    { label: t("sidebar.savedViews.winners"),   href: "/spreads/archive?outcome=winners",                       count: 22, tone: "up" },
+    { label: t("sidebar.savedViews.losers"),    href: "/spreads/archive?outcome=losers",                        count: 5,  tone: "down" },
+    { label: t("sidebar.savedViews.cashCarry"), href: "/spreads/archive?activity=spread&type=cash_carry",       count: 5 },
+    { label: t("sidebar.savedViews.funding"),   href: "/spreads/archive?activity=spread&type=funding",          count: 5 },
+    { label: t("sidebar.savedViews.crossEx"),   href: "/spreads/archive?activity=spread&type=cross_exchange",   count: 3 },
+    { label: t("sidebar.savedViews.calendar"),  href: "/spreads/archive?activity=spread&type=calendar",         count: 2 },
+    { label: t("sidebar.savedViews.dexCex"),    href: "/spreads/archive?activity=spread&type=dex_cex",          count: 1 },
+  ];
 
   return (
     <aside className="hidden md:flex w-[260px] flex-shrink-0 flex-col border-r border-border bg-surface">
@@ -91,10 +90,10 @@ export function Sidebar() {
         </div>
         <div className="flex flex-col leading-tight">
           <span className="font-serif text-[13px] italic font-medium text-text">
-            Crypto Journal
+            {t("app.name")}
           </span>
           <span className="font-mono text-[9px] uppercase tracking-[0.22em] text-text-tertiary">
-            journal · v0.1
+            {t("app.tagline")}
           </span>
         </div>
       </div>
@@ -105,7 +104,7 @@ export function Sidebar() {
           <Search className="h-3.5 w-3.5 text-text-tertiary" />
           <input
             type="text"
-            placeholder="Search spreads, notes…"
+            placeholder={t("sidebar.search")}
             className="flex-1 bg-transparent text-[12px] text-text placeholder:text-text-tertiary focus:outline-none"
           />
           <kbd className="hidden sm:inline-block font-mono text-[9px] text-text-tertiary border border-border rounded px-1 py-px">
@@ -148,14 +147,6 @@ export function Sidebar() {
                         {item.count}
                       </span>
                     )}
-                    {item.disabled && (
-                      <span
-                        title="Coming soon"
-                        className="font-mono text-[8px] uppercase tracking-wide text-text-tertiary/60"
-                      >
-                        soon
-                      </span>
-                    )}
                   </span>
                 </>
               );
@@ -165,7 +156,6 @@ export function Sidebar() {
                   <span
                     key={item.label}
                     aria-disabled="true"
-                    title="Coming soon"
                     className={cn(
                       "flex items-center justify-between rounded-md px-2.5 py-1.5 text-[13px]",
                       "text-text-tertiary/70 cursor-not-allowed select-none"
@@ -197,7 +187,7 @@ export function Sidebar() {
         {/* Saved views */}
         <div className="mb-5">
           <p className="px-2.5 mb-1.5 font-serif text-[10px] font-semibold uppercase tracking-[0.18em] text-text-tertiary">
-            Saved views
+            {t("sidebar.sections.savedViews")}
           </p>
           {savedViews.map((v) => (
             <Link
@@ -228,21 +218,21 @@ export function Sidebar() {
         {/* Quick actions */}
         <div className="mb-5">
           <p className="px-2.5 mb-1.5 font-serif text-[10px] font-semibold uppercase tracking-[0.18em] text-text-tertiary">
-            Quick
+            {t("sidebar.sections.quick")}
           </p>
           <Link
             href="/add"
             className="flex items-center gap-2.5 rounded-md px-2.5 py-1.5 text-[13px] font-medium text-text hover:bg-subtle hover:text-text transition-colors"
           >
             <Plus className="h-3.5 w-3.5" />
-            Log activity
+            {t("sidebar.quick.log")}
           </Link>
           <Link
             href="/settings/exchanges"
             className="flex items-center gap-2.5 rounded-md px-2.5 py-1.5 text-[13px] text-text-secondary hover:bg-subtle hover:text-text transition-colors"
           >
             <Plus className="h-3.5 w-3.5" />
-            Connect exchange
+            {t("sidebar.quick.connect")}
           </Link>
         </div>
       </nav>
@@ -256,10 +246,11 @@ export function Sidebar() {
 function SidebarFooter() {
   const { theme, setTheme } = useTheme();
   const [mounted, setMounted] = React.useState(false);
+  const t = useT();
   React.useEffect(() => setMounted(true), []);
 
   return (
-    <div className="border-t border-border p-3">
+    <div className="border-t border-border p-3 space-y-2.5">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2.5">
           <div className="flex h-8 w-8 items-center justify-center rounded-full bg-brand font-mono text-[11px] font-semibold text-white">
@@ -268,13 +259,13 @@ function SidebarFooter() {
           <div className="flex flex-col leading-tight">
             <span className="text-[12px] text-text font-medium">Andrew S.</span>
             <span className="font-mono text-[10px] text-text-tertiary">
-              admin
+              {t("sidebar.role")}
             </span>
           </div>
         </div>
         <div className="flex items-center gap-1">
           <button
-            aria-label="Toggle theme"
+            aria-label={t("common.toggleTheme")}
             onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
             className="h-7 w-7 flex items-center justify-center rounded-md text-text-secondary hover:bg-subtle hover:text-text transition-colors"
           >
@@ -286,13 +277,14 @@ function SidebarFooter() {
           </button>
           <Link
             href="/settings"
-            aria-label="Settings"
+            aria-label={t("common.settings")}
             className="h-7 w-7 flex items-center justify-center rounded-md text-text-secondary hover:bg-subtle hover:text-text transition-colors"
           >
             <Settings className="h-3.5 w-3.5" />
           </Link>
         </div>
       </div>
+      <LocaleSwitcher />
     </div>
   );
 }
