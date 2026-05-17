@@ -97,7 +97,7 @@ type Overlay = Pick<
 const OVERLAY: Record<string, Overlay> = {
   binance: {
     requiresPassphrase: false,
-    logoUrl: null,
+    logoUrl: "/exchanges/binance.svg",
     referralUrl: null,
     referralBlurb: "Deepest perp book · lowest fees with VIP tier",
     rebatePct: null,
@@ -107,7 +107,7 @@ const OVERLAY: Record<string, Overlay> = {
   },
   bybit: {
     requiresPassphrase: false,
-    logoUrl: null,
+    logoUrl: "/exchanges/bybit.svg",
     referralUrl: "https://partner.bybit.com/b/94654",
     referralBlurb: "Strong funding rates for cash-and-carry",
     rebatePct: 20,
@@ -121,7 +121,7 @@ const OVERLAY: Record<string, Overlay> = {
   },
   okx: {
     requiresPassphrase: true,
-    logoUrl: null,
+    logoUrl: "/exchanges/okx.svg",
     referralUrl: "https://okx.com/ru-ae/join/44845570",
     referralBlurb: "Multi-asset margin · tight perp spreads",
     rebatePct: 20,
@@ -135,7 +135,7 @@ const OVERLAY: Record<string, Overlay> = {
   },
   bitget: {
     requiresPassphrase: true,
-    logoUrl: null,
+    logoUrl: "/exchanges/bitget.svg",
     referralUrl:
       "https://www.bitgetapp.com/ru/referral/register?clacCode=QA7PEZ1K&from=%2Fru%2Fevents%2Freferral-all-program&source=events&utmSource=PremierInviter",
     referralBlurb: "Aggressive maker rebates on perps",
@@ -150,7 +150,7 @@ const OVERLAY: Record<string, Overlay> = {
   },
   kucoin: {
     requiresPassphrase: true,
-    logoUrl: null,
+    logoUrl: "/exchanges/kucoin.svg",
     referralUrl: "https://www.kucoin.com/ucenter/signup?utm_source=app_g_Share",
     referralBlurb: "Long-tail altcoin perps",
     rebatePct: 40,
@@ -164,7 +164,7 @@ const OVERLAY: Record<string, Overlay> = {
   },
   phemex: {
     requiresPassphrase: true,
-    logoUrl: null,
+    logoUrl: "/exchanges/phemex.svg",
     referralUrl: "https://phemex.com/register?referralCode=BU8YF9&scene=referral",
     referralBlurb: "Low-latency inverse perps",
     rebatePct: 40,
@@ -178,7 +178,7 @@ const OVERLAY: Record<string, Overlay> = {
   },
   bingx: {
     requiresPassphrase: false,
-    logoUrl: null,
+    logoUrl: "/exchanges/bingx.svg",
     referralUrl: "https://bingxdao.com/invite/2XFCXB/",
     referralBlurb: "Copy-trading focused · friendly funding",
     rebatePct: 30,
@@ -192,7 +192,7 @@ const OVERLAY: Record<string, Overlay> = {
   },
   mexc: {
     requiresPassphrase: false,
-    logoUrl: null,
+    logoUrl: "/exchanges/mexc.svg",
     referralUrl: "https://promote.mexc.com/a/2DkdpyPG",
     referralBlurb: "Widest altcoin coverage",
     rebatePct: 50,
@@ -206,7 +206,7 @@ const OVERLAY: Record<string, Overlay> = {
   },
   gate: {
     requiresPassphrase: false,
-    logoUrl: null,
+    logoUrl: "/exchanges/gate.svg",
     referralUrl:
       "https://www.gate.com/referral/registry?ref=VQVAVQ0KBQ&ref_type=103&page=superRebate",
     referralBlurb: "Deep alt-perp listings · Super Rebate program",
@@ -221,7 +221,7 @@ const OVERLAY: Record<string, Overlay> = {
   },
   htx: {
     requiresPassphrase: false,
-    logoUrl: null,
+    logoUrl: "/exchanges/htx.svg",
     referralUrl: "https://www.htx.com.ph/invite/ru-ru/1f?invite_code=9vxje223",
     referralBlurb: "Long-history exchange · regulated SG entity",
     rebatePct: 50,
@@ -235,7 +235,7 @@ const OVERLAY: Record<string, Overlay> = {
   },
   kraken: {
     requiresPassphrase: false,
-    logoUrl: null,
+    logoUrl: "/exchanges/kraken.svg",
     referralUrl: null,
     referralBlurb: "Regulated · spot-heavy hedge venue",
     rebatePct: null,
@@ -245,7 +245,7 @@ const OVERLAY: Record<string, Overlay> = {
   },
   deribit: {
     requiresPassphrase: false,
-    logoUrl: null,
+    logoUrl: "/exchanges/deribit.svg",
     referralUrl: null,
     referralBlurb: "Options + dated futures benchmark",
     rebatePct: null,
@@ -255,7 +255,7 @@ const OVERLAY: Record<string, Overlay> = {
   },
   hyperliquid: {
     requiresPassphrase: false,
-    logoUrl: null,
+    logoUrl: "/exchanges/hyperliquid.svg",
     referralUrl: null,
     referralBlurb: "On-chain perps · zero gas, EVM custody",
     rebatePct: null,
@@ -265,7 +265,7 @@ const OVERLAY: Record<string, Overlay> = {
   },
   aster: {
     requiresPassphrase: false,
-    logoUrl: null,
+    logoUrl: "/exchanges/aster.svg",
     referralUrl: null,
     referralBlurb: "Cross-chain perp DEX",
     rebatePct: null,
@@ -275,7 +275,7 @@ const OVERLAY: Record<string, Overlay> = {
   },
   okx_dex: {
     requiresPassphrase: false,
-    logoUrl: null,
+    logoUrl: "/exchanges/okx.svg",
     referralUrl: null,
     referralBlurb: "OKX on-chain venue · spot + perp",
     rebatePct: null,
