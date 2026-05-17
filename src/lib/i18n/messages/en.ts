@@ -696,6 +696,18 @@ export const en = {
     },
   },
   wizard: {
+    shell: {
+      newActivity: 'New activity',
+      stepCounter: 'Step {step} of {total}',
+      back: 'Back',
+      continue: 'Continue',
+      types: {
+        spread: 'Spread',
+        trade: 'Trade',
+        sale: 'Sale',
+        airdrop: 'Airdrop',
+      },
+    },
     add: {
       title: 'What did you just do?',
       subtitle: 'Pick the kind of activity you want to log. Each type has its own template designed for that shape of trade.',

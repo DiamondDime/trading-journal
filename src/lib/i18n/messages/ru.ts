@@ -698,6 +698,18 @@ export const ru: MessageDict = {
     },
   },
   wizard: {
+    shell: {
+      newActivity: 'Новая активность',
+      stepCounter: 'Шаг {step} из {total}',
+      back: 'Назад',
+      continue: 'Дальше',
+      types: {
+        spread: 'Спред',
+        trade: 'Сделка',
+        sale: 'Продажа',
+        airdrop: 'Эирдроп',
+      },
+    },
     add: {
       title: 'Что только что было?',
       subtitle: 'Выберите тип активности, который записываем. У каждого свой шаблон под форму сделки.',

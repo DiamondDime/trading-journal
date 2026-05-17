@@ -1,15 +1,9 @@
 import { WizardStepper } from "./wizard-stepper";
+import { getT } from "@/lib/i18n/server";
 
 // Activity types that the wizard supports. Subset of ActivityType — the entry
 // step (/add) renders a chooser, so it doesn't pass a `type`.
 export type WizardType = "spread" | "trade" | "sale" | "airdrop";
-
-const TYPE_LABEL: Record<WizardType, string> = {
-  spread: "Spread",
-  trade: "Trade",
-  sale: "Sale",
-  airdrop: "Airdrop",
-};
 
 export interface WizardShellProps {
   /** Activity type being added. Omit on the type-picker step. */
@@ -35,7 +29,7 @@ export interface WizardShellProps {
  * State-free by design. Each step page owns its own form state (or URL
  * params); the shell is layout only.
  */
-export function WizardShell({
+export async function WizardShell({
   type,
   step,
   totalSteps,
@@ -44,14 +38,15 @@ export function WizardShell({
   subtitle,
   children,
 }: WizardShellProps) {
-  const typeLabel = type ? TYPE_LABEL[type] : null;
+  const t = await getT();
+  const typeLabel = type ? t(`wizard.shell.types.${type}` as const) : null;
 
   return (
     <div className="w-full">
       {/* ── breadcrumb / step counter ─────────────────────────────────── */}
       <div className="flex items-center justify-between font-mono text-[10px] uppercase tracking-[0.18em] text-text-tertiary">
         <span className="flex items-center gap-1.5">
-          <span>New activity</span>
+          <span>{t("wizard.shell.newActivity")}</span>
           {typeLabel && (
             <>
               <span className="text-text-tertiary/60">·</span>
@@ -62,7 +57,7 @@ export function WizardShell({
             <>
               <span className="text-text-tertiary/60">·</span>
               <span>
-                Step {step} of {totalSteps}
+                {t("wizard.shell.stepCounter", { step, total: totalSteps })}
               </span>
             </>
           )}

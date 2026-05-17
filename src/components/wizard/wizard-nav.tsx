@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { ArrowLeft, ArrowRight } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useT } from "@/lib/i18n/client";
 
 export interface WizardNavProps {
   /** Optional href for the Back link. Omit on the first step. */
@@ -21,7 +22,7 @@ export interface WizardNavProps {
   continueFormId?: string;
   /** Disables the Continue button (only meaningful when it's a <button>). */
   disabled?: boolean;
-  /** Custom label for the Continue button. Defaults to "Continue". */
+  /** Custom label for the Continue button. Defaults to the i18n "Continue". */
   continueLabel?: string;
 }
 
@@ -38,8 +39,10 @@ export function WizardNav({
   continueHref,
   continueFormId,
   disabled = false,
-  continueLabel = "Continue",
+  continueLabel,
 }: WizardNavProps) {
+  const t = useT();
+  const continueText = continueLabel ?? t("wizard.shell.continue");
   return (
     <div className="mt-12 flex items-center justify-between border-t border-border pt-6">
       {backHref ? (
@@ -48,7 +51,7 @@ export function WizardNav({
           className="inline-flex items-center gap-1.5 font-mono text-[11px] uppercase tracking-[0.16em] text-text-tertiary transition-colors hover:text-text"
         >
           <ArrowLeft className="h-3 w-3" />
-          Back
+          {t("wizard.shell.back")}
         </Link>
       ) : (
         <span />
@@ -66,7 +69,7 @@ export function WizardNav({
               : "border-text bg-text text-app hover:bg-text-secondary"
           )}
         >
-          {continueLabel}
+          {continueText}
           <ArrowRight className="h-3 w-3" />
         </Link>
       ) : continueFormId ? (
@@ -81,7 +84,7 @@ export function WizardNav({
               : "border-text bg-text text-app hover:bg-text-secondary"
           )}
         >
-          {continueLabel}
+          {continueText}
           <ArrowRight className="h-3 w-3" />
         </button>
       ) : (
