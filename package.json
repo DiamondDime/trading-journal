@@ -32,6 +32,7 @@
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "decimal.js": "^10.4.3",
+    "lightweight-charts": "^5.2.0",
     "lucide-react": "^1.16.0",
     "markerjs2": "^2.32.7",
     "next": "16.2.6",

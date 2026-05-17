@@ -29,6 +29,8 @@ import { toScreenshotItems } from "@/components/activity/screenshots-data";
 import { TagEditor } from "@/components/activity/tag-editor";
 import { SatisfactionToggle } from "@/components/activity/satisfaction-toggle";
 import { ExcursionMetricStrip } from "@/components/activity/excursion-metric-strip";
+import { OhlcChart } from "@/components/activity/ohlc-chart";
+import { isKlineSupportedExchange } from "@/lib/exchanges/klines";
 
 export const dynamic = "force-dynamic";
 
@@ -229,6 +231,31 @@ export default async function SpreadDetailPage({
         </div>
       </section>
 
+      {/* ── price action (primary-leg OHLC candles) ──────────────────────
+          Wave 11. Spreads don't have a single venue price the way a trade
+          does, but we surface the primary base's candles on the first
+          supported leg venue so the trader still sees the underlying
+          price-action context. The component fetches client-side and falls
+          back gracefully when no leg is on a v1-supported exchange.
+
+          Only mount when there's at least one supported exchange in the
+          leg list. Otherwise the component would render the same empty
+          state — skipping the section keeps the page tighter. */}
+      {s.primaryBase && hasSupportedExchange(s.exchanges) && (
+        <section className="mt-14">
+          <h2 className="font-serif text-xs font-semibold uppercase tracking-[0.18em] text-text-tertiary">
+            Price action
+          </h2>
+          <p className="mt-2 font-serif text-[12px] italic text-text-tertiary">
+            Candles for the {s.primaryBase}{" "}primary leg covering the spread&apos;s
+            open-to-close window.
+          </p>
+          <div className="mt-4">
+            <OhlcChart activityId={activity.id} />
+          </div>
+        </section>
+      )}
+
       {/*
         Spreads expose `primaryBase` (the underlying base symbol the worker
         targets for kline backfill) but no single entryPrice / qty — the
@@ -414,6 +441,16 @@ function LegRow({
       </TableCell>
     </TableRow>
   );
+}
+
+/**
+ * Server-side check so we can decide whether to render the chart section at
+ * all. Mirrors the API route's logic: if none of the spread's exchanges are
+ * in our v1 kline registry, the chart would just render its empty state —
+ * skipping it keeps the page tighter and the section header consistent.
+ */
+function hasSupportedExchange(exchanges: string[]): boolean {
+  return exchanges.some(isKlineSupportedExchange);
 }
 
 function SidePill({ side }: { side: "long" | "short" }) {

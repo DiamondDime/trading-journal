@@ -29,6 +29,7 @@ import { toScreenshotItems } from "@/components/activity/screenshots-data";
 import { TagEditor } from "@/components/activity/tag-editor";
 import { SatisfactionToggle } from "@/components/activity/satisfaction-toggle";
 import { ExcursionMetricStrip } from "@/components/activity/excursion-metric-strip";
+import { OhlcChart } from "@/components/activity/ohlc-chart";
 
 export const dynamic = "force-dynamic";
 
@@ -206,6 +207,23 @@ export default async function TradeDetailPage({
                 </span>{" "}
                 realized on {fmtCapital(capital)} capital
               </p>
+            </div>
+          </section>
+
+          {/* ── price action (OHLC candles + entry/exit/MAE/MFE markers) ─
+              Wave 11. Client-side fetch from /api/activities/<id>/klines so
+              the page SSR isn't blocked by a slow exchange call. Falls back
+              to an italic-serif empty-state when the symbol+exchange isn't
+              in the v1 kline registry. */}
+          <section className="mt-14">
+            <h2 className="font-serif text-xs font-semibold uppercase tracking-[0.18em] text-text-tertiary">
+              Price action
+            </h2>
+            <p className="mt-2 font-serif text-[12px] italic text-text-tertiary">
+              Candles cover the position&apos;s open-to-close window.
+            </p>
+            <div className="mt-4">
+              <OhlcChart activityId={activity.id} />
             </div>
           </section>
 
