@@ -6,7 +6,14 @@ import {
   SpreadListCard,
   type SpreadListItem,
 } from "@/components/spread/spread-list-card";
-import { EquityCurveChart } from "@/components/spread/equity-curve-chart";
+import {
+  EquityCurveChart,
+  type EquityPoint,
+} from "@/components/spread/equity-curve-chart";
+import {
+  RDistributionChart,
+  type RBarPoint,
+} from "@/components/spread/r-distribution-chart";
 import { FundingTicker } from "@/components/spread/funding-ticker";
 import { NotesFeed } from "@/components/spread/notes-feed";
 import { ActivityMix } from "@/components/spread/activity-mix";
@@ -23,7 +30,16 @@ import {
   getActivityTypeCounts,
   getRecentCloses,
   listActivities,
+  getDailyPnl,
+  getAllClosedActivities,
 } from "@/lib/db/activity";
+import {
+  computeDrawdown,
+  computeStreaks,
+  computeMoreMetrics,
+  computeRDistribution,
+  computeSharpeSortino,
+} from "@/lib/analytics";
 import { fetchSubtypeMetaForIds } from "@/lib/data/db-queries";
 import { feedRowsToActivities } from "@/lib/data/db-adapter";
 
@@ -47,6 +63,15 @@ function describeActivity(a: Activity): string {
   }
 }
 
+// Local-time YYYY-MM-DD — used to align with getDailyPnl's date buckets which
+// come back from Postgres as date strings in the server's TZ.
+function ymdLocal(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
 function bestDelta(a: Activity | null | undefined): string {
   if (!a) return "—";
   if (a.type === "spread") {
@@ -55,17 +80,244 @@ function bestDelta(a: Activity | null | undefined): string {
   return `${a.serial} · ${ACTIVITY_TYPE_LABELS[a.type].toLowerCase()} · ${a.daysLabel}`;
 }
 
+/**
+ * Coerce a possibly-Date `closedAt` value to a YYYY-MM-DD string. postgres.js's
+ * camelCase transform returns timestamptz columns as `Date` instances at
+ * runtime, while the type declares them as `string` (an ISO-shape promise the
+ * adapter normally fulfills). Analytics functions key off `closedAt.slice(...)`
+ * so a raw Date would throw. Normalize before passing through.
+ */
+function ymdOf(closedAt: unknown): string | null {
+  if (closedAt instanceof Date) {
+    if (!Number.isFinite(closedAt.getTime())) return null;
+    return closedAt.toISOString().slice(0, 10);
+  }
+  if (typeof closedAt === "string" && closedAt.length >= 10) {
+    return closedAt.slice(0, 10);
+  }
+  return null;
+}
+
+/**
+ * Walk the closed-activity feed in chronological order, bucketing per
+ * calendar day. Each output point is one bucket with the running cumulative
+ * equity + running peak + drawdown. Days without activity are omitted —
+ * Recharts AreaChart interpolates between them linearly which gives the
+ * curve a clean monotonic stair-step rather than a noisy zigzag.
+ *
+ * Decoupled from `computeDrawdown` because the analytics math library
+ * returns aggregate scalars only; the chart needs the full point series.
+ */
+function buildEquityPoints(
+  rows: { closedAt: string | null; netPnlUsd: string | null }[],
+): EquityPoint[] {
+  // Group by YYYY-MM-DD then sort chronologically. ISO string sort is stable
+  // for date-only buckets.
+  const dayMap = new Map<string, number>();
+  for (const r of rows) {
+    const ymd = ymdOf(r.closedAt);
+    if (!ymd || r.netPnlUsd == null) continue;
+    const pnl = Number(r.netPnlUsd);
+    if (!Number.isFinite(pnl)) continue;
+    dayMap.set(ymd, (dayMap.get(ymd) ?? 0) + pnl);
+  }
+  const ordered = [...dayMap.entries()].sort((a, b) =>
+    a[0].localeCompare(b[0]),
+  );
+
+  let equity = 0;
+  let peak = 0;
+  const points: EquityPoint[] = [];
+  for (const [ymd, dayPnl] of ordered) {
+    equity += dayPnl;
+    if (equity > peak) peak = equity;
+    const label = new Date(`${ymd}T00:00:00`).toLocaleDateString("en-US", {
+      month: "short",
+      day: "numeric",
+    });
+    points.push({
+      date: ymd,
+      label,
+      equity,
+      peak,
+      drawdownUsd: equity - peak,
+    });
+  }
+  return points;
+}
+
+/**
+ * Normalise `closedAt` on a feed row from Date → ISO string. The DB type says
+ * `string | null` but postgres.js hands us `Date` at runtime. Analytics
+ * helpers (and our own buildEquityPoints) call `.slice()` on it, so this
+ * boundary coerces once before the math layer runs.
+ */
+function normalizeClosedAt<T extends { closedAt: unknown }>(
+  rows: T[],
+): T[] {
+  return rows.map((r) => {
+    if (r.closedAt instanceof Date) {
+      return { ...r, closedAt: r.closedAt.toISOString() };
+    }
+    return r;
+  });
+}
+
+// ── formatters for the second KPI row ─────────────────────────────────────
+
+function fmtRatio(n: number | null, suffix = ""): string {
+  if (n == null || !Number.isFinite(n)) return "—";
+  return `${n.toFixed(2)}${suffix}`;
+}
+
+/** Payoff ratio is displayed as "1.4 : 1" per the brief. */
+function fmtPayoff(n: number | null): string {
+  if (n == null || !Number.isFinite(n)) return "—";
+  return `${n.toFixed(2)} : 1`;
+}
+
+function fmtPercent(n: number | null, mult100 = true): string {
+  if (n == null || !Number.isFinite(n)) return "—";
+  const v = mult100 ? n * 100 : n;
+  return `${v.toFixed(1)}%`;
+}
+
+function fmtSharpe(n: number | null, enoughData: boolean): string {
+  if (!enoughData || n == null || !Number.isFinite(n)) return "—";
+  return n.toFixed(2);
+}
+
+function fmtExpectancy(n: number): string {
+  // Expectancy can be ≪ 1 dollar; show 2 dp + signed prefix.
+  return fmtUsd(n, true);
+}
+
+// R-distribution caption helpers — keep formatters tight + mono-friendly.
+function fmtR(n: number, signed = true): string {
+  if (!Number.isFinite(n)) return "—";
+  const sign = signed ? (n >= 0 ? "+" : "−") : "";
+  return `${sign}${Math.abs(n).toFixed(2)}R`;
+}
+
 export default async function SpreadsPage() {
   const { id: userId } = await requireUser();
 
+  // 13-week window ending today, in the server's local TZ. Day buckets are
+  // YYYY-MM-DD strings — see getDailyPnl for the TZ caveat.
+  const today = new Date();
+  const heatmapEnd = ymdLocal(today);
+  const heatmapStart = ymdLocal(
+    new Date(today.getFullYear(), today.getMonth(), today.getDate() - (13 * 7 - 1)),
+  );
+
   // Parallel reads — independent aggregations + recent-closes window + full
-  // list for the equity curve / activity-mix charts that scan the whole set.
-  const [totals, typeCounts, recentRows, allRows] = await Promise.all([
+  // closed-feed for the analytics block (KPIs, equity curve, R distribution).
+  const [
+    totals,
+    typeCounts,
+    recentRows,
+    allRows,
+    closedRows,
+    dailyPnl,
+  ] = await Promise.all([
     getTotals(userId),
     getActivityTypeCounts(userId),
     getRecentCloses(userId, RECENT_COUNT),
     listActivities(userId, { limit: 200, sortField: "closed_at", sortDir: "desc" }),
+    getAllClosedActivities(userId),
+    getDailyPnl(userId, heatmapStart, heatmapEnd),
   ]);
+
+  const firstActivityYmd = totals.firstClose
+    ? totals.firstClose.slice(0, 10)
+    : null;
+
+  // ── Analytics (Wave 9B-1 math, server-side computation) ───────────────────
+  // The metrics module operates on the DB-shape rows directly so we don't
+  // have to round-trip through the display adapter. closedAt comes back as
+  // `Date` from postgres.js's camelCase transform — analytics expects ISO
+  // strings (per ActivityFeedRowDb's type), so we coerce at this boundary.
+  const closedNormalized = normalizeClosedAt(closedRows);
+  const drawdown = computeDrawdown(closedNormalized);
+  const streaks = computeStreaks(closedNormalized);
+  const more = computeMoreMetrics(closedNormalized);
+  const sharpe = computeSharpeSortino(closedNormalized);
+  // 1R = average loss (USD). When there are no losses, fall back to the
+  // grand-average activity size so the histogram still has a sensible
+  // unit; with rUnit=0 the R-distribution helper returns an empty result.
+  const rUnit =
+    more.avgLoss > 0
+      ? more.avgLoss
+      : closedNormalized.length > 0
+        ? Math.max(
+            1,
+            Math.abs(
+              closedNormalized.reduce(
+                (s, r) => s + Number(r.netPnlUsd ?? 0),
+                0,
+              ),
+            ) / closedNormalized.length,
+          )
+        : 0;
+  // Cap the histogram domain at ±5R: a single 50R airdrop win would otherwise
+  // produce 100 mostly-empty bins and squash the meaningful distribution into
+  // a sliver. Overflow is preserved as "+5R+" / "-5R-" buckets on the ends.
+  const R_DOMAIN = 5;
+  const rDistRaw = computeRDistribution(closedNormalized, rUnit, 0.5);
+
+  // Pre-built equity-curve points, ready to ship to the client wrapper.
+  const equityPoints = buildEquityPoints(closedNormalized);
+  const currentEquity =
+    equityPoints.length > 0
+      ? equityPoints[equityPoints.length - 1].equity
+      : 0;
+  const peakUsd = equityPoints.reduce((p, pt) => Math.max(p, pt.peak), 0);
+  const currentDrawdownUsd = Math.max(0, peakUsd - currentEquity);
+
+  // Compress the raw bins into the ±R_DOMAIN window. Bins below -R_DOMAIN
+  // collapse into a single "-5R−" overflow bucket; bins ≥ +R_DOMAIN into a
+  // "+5R+" bucket. Result is a readable categorical x-axis with the long
+  // tail acknowledged but not given visual weight.
+  const rBins: RBarPoint[] = (() => {
+    const out: RBarPoint[] = [];
+    // Underflow accumulator
+    let underCount = 0;
+    let overCount = 0;
+    for (const b of rDistRaw.bins) {
+      const centre = (b.rangeLow + b.rangeHigh) / 2;
+      if (centre < -R_DOMAIN) {
+        underCount += b.count;
+        continue;
+      }
+      if (centre > R_DOMAIN) {
+        overCount += b.count;
+        continue;
+      }
+      out.push({
+        rangeLow: b.rangeLow,
+        rangeHigh: b.rangeHigh,
+        count: b.count,
+        label: fmtR(centre, true).replace(".00R", "R"),
+      });
+    }
+    if (underCount > 0) {
+      out.unshift({
+        rangeLow: -Infinity,
+        rangeHigh: -R_DOMAIN,
+        count: underCount,
+        label: `<−${R_DOMAIN}R`,
+      });
+    }
+    if (overCount > 0) {
+      out.push({
+        rangeLow: R_DOMAIN,
+        rangeHigh: Infinity,
+        count: overCount,
+        label: `>+${R_DOMAIN}R`,
+      });
+    }
+    return out;
+  })();
 
   // Subtype metadata for: best, worst, recent grid, and the full chart set.
   const allInteresting = [
@@ -75,8 +327,8 @@ export default async function SpreadsPage() {
   ];
   const meta = await fetchSubtypeMetaForIds(userId, allInteresting);
 
-  const allDisplays = feedRowsToActivities(allRows, meta);
   const recentDisplays = feedRowsToActivities(recentRows, meta);
+  const allDisplays = feedRowsToActivities(allRows, meta);
   const bestDisplay = totals.best ? feedRowsToActivities([totals.best], meta)[0] : null;
   const worstDisplay = totals.worst ? feedRowsToActivities([totals.worst], meta)[0] : null;
 
@@ -136,8 +388,8 @@ export default async function SpreadsPage() {
       </header>
 
       <div className="px-8 py-8 lg:px-12">
-        {/* ── KPI row · 6 cross-activity cards ─────────────────────────── */}
-        <section className="mb-8 grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-6">
+        {/* ── KPI row · 6 cross-activity cards (top, hero) ─────────────── */}
+        <section className="mb-3 grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-6">
           <KpiCard
             variant="hero"
             label="Net P&L · YTD"
@@ -175,6 +427,93 @@ export default async function SpreadsPage() {
           />
         </section>
 
+        {/* ── KPI row 2 · risk / quality metrics ─────────────────────────
+            Each card carries a one-line italic-serif explanation so the
+            number is self-evident without a glossary. No hero variant —
+            the single amber moment lives upstairs. */}
+        <section className="mb-8 grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-6">
+          <KpiCardWithCaption
+            label="Profit factor"
+            value={fmtRatio(more.profitFactor)}
+            caption="Gross wins divided by gross losses. >1.5 is healthy."
+            delta={
+              more.profitFactor != null
+                ? `${fmtUsd(more.avgWin)} avg win · ${fmtUsd(-more.avgLoss)} avg loss`
+                : "needs both wins + losses"
+            }
+          />
+          <KpiCardWithCaption
+            label="Payoff ratio"
+            value={fmtPayoff(more.payoffRatio)}
+            caption="Average win size relative to average loss."
+            delta={
+              more.payoffRatio != null
+                ? "win-size : loss-size"
+                : "needs both wins + losses"
+            }
+          />
+          <KpiCardWithCaption
+            label="Expectancy"
+            value={fmtExpectancy(more.expectancy)}
+            tone={more.expectancy >= 0 ? "up" : "down"}
+            caption="Average dollar P&L per activity, all-in."
+            delta={
+              closedRows.length > 0
+                ? `over ${closedRows.length} closed activities`
+                : "no data yet"
+            }
+          />
+          <KpiCardWithCaption
+            label="Max drawdown"
+            value={fmtPercent(drawdown.maxDrawdownPct)}
+            tone="down"
+            caption="Worst peak-to-trough drop on equity."
+            delta={
+              drawdown.maxDrawdownUsd > 0
+                ? `${fmtUsd(-drawdown.maxDrawdownUsd)} from ${
+                    drawdown.peakAt
+                      ? new Date(drawdown.peakAt).toLocaleDateString("en-US", {
+                          month: "short",
+                          day: "numeric",
+                        })
+                      : "—"
+                  }`
+                : "no drawdown yet"
+            }
+          />
+          <KpiCardWithCaption
+            label="Loss streak"
+            value={
+              closedRows.length > 0 ? String(streaks.longestLossStreak) : "—"
+            }
+            tone={streaks.longestLossStreak > 0 ? "down" : "neutral"}
+            caption="Longest run of consecutive losing activities."
+            delta={
+              streaks.currentStreak.kind === "loss" &&
+              streaks.currentStreak.length > 0
+                ? `now: ${streaks.currentStreak.length} in a row`
+                : `now: ${
+                    streaks.currentStreak.kind === "win"
+                      ? `${streaks.currentStreak.length} wins`
+                      : "no streak"
+                  }`
+            }
+          />
+          <KpiCardWithCaption
+            label="Sharpe"
+            value={fmtSharpe(sharpe.sharpe, sharpe.enoughData)}
+            tone={
+              sharpe.enoughData && sharpe.sharpe >= 0 ? "up" : "down"
+            }
+            caption="Risk-adjusted return, annualized. >1 is good."
+            delta={
+              sharpe.enoughData
+                ? `${sharpe.sampleDays} active days · ann. ${sharpe.annualizationFactor}d`
+                : `needs ≥7 active days (${sharpe.sampleDays} so far)`
+            }
+          />
+        </section>
+
         {/* ── heatmap + funding ticker ──────────────────────────────────── */}
         <section className="mb-8 grid grid-cols-1 gap-6 xl:grid-cols-[1.6fr_1fr]">
           <div className="rounded-md border border-border bg-surface">
@@ -190,7 +529,11 @@ export default async function SpreadsPage() {
               </Link>
             </div>
             <div className="px-6 py-6">
-              <CalendarHeatmap />
+              <CalendarHeatmap
+                days={dailyPnl}
+                endDate={heatmapEnd}
+                firstActivityDate={firstActivityYmd}
+              />
             </div>
           </div>
 
@@ -236,7 +579,7 @@ export default async function SpreadsPage() {
           )}
         </section>
 
-        {/* ── equity curve ──────────────────────────────────────────────── */}
+        {/* ── equity curve · running cumulative net P&L ─────────────────── */}
         <section className="mb-10 rounded-md border border-border bg-surface p-6">
           <div className="mb-4 flex items-baseline justify-between">
             <div>
@@ -244,16 +587,63 @@ export default async function SpreadsPage() {
                 Equity curve · cumulative realized
               </h3>
               <p className="mt-1 font-serif text-[12px] italic text-text-tertiary">
-                Stacked by activity type · sale/airdrop dampened for scale
+                Running sum of net P&L across every closed activity. Dotted line is the all-time high.
               </p>
             </div>
             <span className="font-mono text-[11px] text-text-tertiary">
               {totals.firstClose
-                ? `${new Date(totals.firstClose).toLocaleDateString("en-US", { month: "short", day: "numeric" })} → ${new Date(totals.lastClose ?? Date.now()).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}`
+                ? `${new Date(totals.firstClose).toLocaleDateString("en-US", { month: "short", day: "numeric" })} → ${new Date(totals.lastClose ?? totals.firstClose).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}`
                 : "—"}
             </span>
           </div>
-          <EquityCurveChart data={allDisplays} />
+          <EquityCurveChart
+            points={equityPoints}
+            peakUsd={peakUsd}
+            currentEquity={currentEquity}
+            currentDrawdownUsd={currentDrawdownUsd}
+          />
+        </section>
+
+        {/* ── R-multiple distribution ───────────────────────────────────── */}
+        <section className="mb-10 rounded-md border border-border bg-surface p-6">
+          <div className="mb-4 flex items-baseline justify-between">
+            <div>
+              <h3 className="font-serif text-[12px] font-semibold uppercase tracking-[0.16em] text-text">
+                R-multiple distribution
+              </h3>
+              <p className="mt-1 font-serif text-[12px] italic text-text-tertiary">
+                {rUnit > 0
+                  ? `1R = average loss (${fmtUsd(rUnit)}). Wins above +1R cover more than one losing trade.`
+                  : "1R = average loss. Wins above +1R cover more than one losing trade."}
+              </p>
+            </div>
+            {rBins.length > 0 && (
+              <span className="font-mono text-[11px] text-text-tertiary">
+                Median: {fmtR(rDistRaw.median)} · Mean: {fmtR(rDistRaw.mean)} · Positive: {rDistRaw.positiveCount} · Negative: {rDistRaw.negativeCount}
+              </span>
+            )}
+          </div>
+          <RDistributionChart bins={rBins} />
+        </section>
+
+        {/* ── performance by tag (Wave 10-2 placeholder) ─────────────────── */}
+        <section className="mb-10 rounded-md border border-border bg-surface p-6">
+          <div className="mb-4 flex items-baseline justify-between">
+            <h3 className="font-serif text-[12px] font-semibold uppercase tracking-[0.16em] text-text">
+              Performance by tag
+            </h3>
+            <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-text-tertiary">
+              coming soon
+            </span>
+          </div>
+          <div className="flex flex-col items-center justify-center gap-2 rounded-md border border-dashed border-border bg-inset py-10">
+            <p className="font-serif text-sm italic text-text-secondary">
+              Tag-grouped metrics will appear here once you tag your trades.
+            </p>
+            <p className="font-mono text-[10px] uppercase tracking-[0.16em] text-text-tertiary">
+              regime · custom · counterparty
+            </p>
+          </div>
         </section>
 
         {/* ── notes feed + activity mix ─────────────────────────────────── */}
@@ -268,6 +658,47 @@ export default async function SpreadsPage() {
           <span>3 exchanges connected · {totals.count} activities archived</span>
         </footer>
       </div>
+    </div>
+  );
+}
+
+/**
+ * Variant of KpiCard that injects an italic-serif explainer between the
+ * value and the delta line. Localized here because the brief asks for it
+ * on the analytics row only — promoting it into `KpiCard` proper would
+ * require editorial decisions across every screen using the card.
+ */
+function KpiCardWithCaption({
+  label,
+  value,
+  caption,
+  delta,
+  tone = "neutral",
+}: {
+  label: string;
+  value: string;
+  caption: string;
+  delta?: string;
+  tone?: "up" | "down" | "neutral";
+}) {
+  const toneClass =
+    tone === "up" ? "text-up" : tone === "down" ? "text-down" : "text-text";
+  return (
+    <div className="rounded-md border border-border bg-surface px-5 py-4 transition-colors hover:border-border-strong">
+      <p className="font-serif text-[11px] font-semibold uppercase tracking-[0.18em] text-text-tertiary">
+        {label}
+      </p>
+      <p className={`mt-2 font-mono text-[24px] font-medium leading-none tabular-nums ${toneClass}`}>
+        {value}
+      </p>
+      <p className="mt-2 font-serif text-[11px] italic leading-tight text-text-tertiary">
+        {caption}
+      </p>
+      {delta && (
+        <p className="mt-1.5 font-mono text-[10px] tracking-wide text-text-tertiary">
+          {delta}
+        </p>
+      )}
     </div>
   );
 }

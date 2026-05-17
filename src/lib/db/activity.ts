@@ -1146,6 +1146,71 @@ export async function getRecentCloses(
   `;
 }
 
+/**
+ * Every terminal-state activity for the user, oldest → newest. Feeds the
+ * dashboard analytics block (equity curve, drawdown, R-distribution,
+ * Sharpe). Closed-only because the math is over realised P&L.
+ *
+ * `vesting` is included because partially-vested sales already carry their
+ * mark-to-market on the supertype row, so they belong in the equity walk.
+ * Limit 5000 is a safety belt — single-digit-ms read in practice.
+ */
+export async function getAllClosedActivities(
+  userId: string,
+): Promise<ActivityFeedRowDb[]> {
+  return listActivities(userId, {
+    status: ['closed', 'expired', 'claimed', 'vesting'] as ActivityStatus[],
+    limit: 5000,
+    sortField: 'closed_at',
+    sortDir: 'asc',
+  });
+}
+
+/**
+ * Daily aggregated net P&L for the dashboard calendar heatmap.
+ *
+ * Buckets by `closed_at::date` in the **server's local timezone**. v1 is
+ * single-user and the server / app run in the same TZ, so this is fine.
+ * v2 will need a `?tz=` param to bucket in the user's wall-clock day.
+ *
+ * Days with zero activity are NOT returned — the caller (heatmap renderer)
+ * fills in the missing dates and treats them as no-activity neutrals.
+ *
+ * @param startDate YYYY-MM-DD inclusive
+ * @param endDate   YYYY-MM-DD inclusive
+ */
+export interface DailyPnlRow {
+  date: string;     // YYYY-MM-DD
+  netPnl: number;
+  count: number;
+}
+
+export async function getDailyPnl(
+  userId: string,
+  startDate: string,
+  endDate: string,
+): Promise<DailyPnlRow[]> {
+  const rows = await sql<
+    { date: string; netPnl: string | null; count: string }[]
+  >`
+    SELECT
+      to_char(closed_at::date, 'YYYY-MM-DD') AS date,
+      sum(net_pnl_usd)::text                 AS net_pnl,
+      count(*)::text                         AS count
+    FROM public.v_activity_feed
+    WHERE user_id = ${userId}::uuid
+      AND closed_at IS NOT NULL
+      AND closed_at::date BETWEEN ${startDate}::date AND ${endDate}::date
+    GROUP BY closed_at::date
+    ORDER BY closed_at::date ASC
+  `;
+  return rows.map((r) => ({
+    date: r.date,
+    netPnl: Number(r.netPnl ?? 0),
+    count: Number(r.count ?? 0),
+  }));
+}
+
 // ============================================================================
 // Helpers
 // ============================================================================
