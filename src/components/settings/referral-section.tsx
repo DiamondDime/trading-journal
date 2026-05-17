@@ -17,13 +17,16 @@ import { ArrowUpRight } from "lucide-react";
 
 import type { CatalogExchange } from "@/lib/db/exchanges";
 import { ExchangeLogo } from "@/components/settings/exchange-logo";
+import { getT } from "@/lib/i18n/server";
+import type { TFunction } from "@/lib/i18n/resolve";
 
 interface Props {
   /** Catalog entries with `referralUrl != null`. Pass already-filtered list. */
   referrals: CatalogExchange[];
 }
 
-export function ReferralSection({ referrals }: Props) {
+export async function ReferralSection({ referrals }: Props) {
+  const t = await getT();
   return (
     <section
       aria-labelledby="recommended-exchanges-heading"
@@ -36,32 +39,30 @@ export function ReferralSection({ referrals }: Props) {
             id="recommended-exchanges-heading"
             className="font-serif text-[18px] font-medium leading-tight text-text"
           >
-            Recommended exchanges
+            {t("settings.exchanges.referralSection.title")}
           </h3>
           <p className="mt-1 font-serif text-[13px] italic text-text-secondary">
-            Sign up via our referral links to support the project — no extra
-            cost to you.
+            {t("settings.exchanges.referralSection.subtitle")}
           </p>
         </div>
         <span className="font-mono text-[10px] uppercase tracking-[0.18em] text-text-tertiary">
           {referrals.length === 0
-            ? "No partners yet"
-            : `${referrals.length} partner${referrals.length === 1 ? "" : "s"}`}
+            ? t("settings.exchanges.referralSection.noPartners")
+            : t.plural("settings.exchanges.referralSection.partnerCount", referrals.length)}
         </span>
       </div>
 
       {/* ─── Card (rows + disclosure) ────────────────────────────────── */}
       <div className="overflow-hidden rounded-md border border-border bg-surface">
-        {referrals.length === 0 ? <EmptyReferralRow /> : null}
+        {referrals.length === 0 ? <EmptyReferralRow t={t} /> : null}
 
         {referrals.map((ex) => (
-          <ReferralRow key={ex.code} exchange={ex} />
+          <ReferralRow key={ex.code} exchange={ex} t={t} />
         ))}
 
         <div className="border-t border-border-subtle bg-inset px-5 py-3">
           <p className="font-serif text-[11.5px] italic leading-snug text-text-tertiary">
-            We earn a referral fee if you sign up via these links. You can also
-            sign up directly at the exchange — no obligation.
+            {t("settings.exchanges.referralSection.disclosure")}
           </p>
         </div>
       </div>
@@ -71,7 +72,13 @@ export function ReferralSection({ referrals }: Props) {
 
 /* ----------------------------------------------------------- One row */
 
-function ReferralRow({ exchange }: { exchange: CatalogExchange }) {
+function ReferralRow({
+  exchange,
+  t,
+}: {
+  exchange: CatalogExchange;
+  t: TFunction;
+}) {
   // Defensive: caller is supposed to pre-filter, but a stale callsite shouldn't
   // be able to render a row that points nowhere. If the URL is null, drop out.
   if (!exchange.referralUrl) return null;
@@ -107,7 +114,7 @@ function ReferralRow({ exchange }: { exchange: CatalogExchange }) {
       </div>
 
       <span className="inline-flex shrink-0 items-center gap-1 font-mono text-[10px] uppercase tracking-[0.18em] text-text-secondary transition-colors group-hover:text-text">
-        Get started
+        {t("settings.exchanges.referralSection.cta")}
         <ArrowUpRight className="h-3 w-3" />
       </span>
     </a>
@@ -116,15 +123,11 @@ function ReferralRow({ exchange }: { exchange: CatalogExchange }) {
 
 /* ---------------------------------------------------- Empty row */
 
-function EmptyReferralRow() {
+function EmptyReferralRow({ t }: { t: TFunction }) {
   return (
     <div className="border-b border-border-subtle px-5 py-5">
       <p className="font-serif text-[13px] italic leading-snug text-text-secondary">
-        No referral partners are configured yet. Once the catalog has{" "}
-        <span className="font-mono not-italic text-text-tertiary">
-          referral_url
-        </span>{" "}
-        values, recommended exchanges land here.
+        {t("settings.exchanges.referralSection.emptyBody")}
       </p>
     </div>
   );

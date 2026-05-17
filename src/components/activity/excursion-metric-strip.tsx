@@ -1,5 +1,6 @@
 import { BackfillButton } from "./backfill-button";
 import type { ExcursionRow } from "@/lib/db/satellite";
+import { getT } from "@/lib/i18n/server";
 
 interface ExcursionMetricStripProps {
   activityId: string;
@@ -53,7 +54,7 @@ interface ExcursionMetricStripProps {
  * When the excursion row is entirely null (no backfill has ever run), we
  * render the empty-state with a backfill trigger.
  */
-export function ExcursionMetricStrip({
+export async function ExcursionMetricStrip({
   activityId,
   excursion,
   avgLossUsd,
@@ -62,6 +63,7 @@ export function ExcursionMetricStrip({
   netPnlUsd,
   qty,
 }: ExcursionMetricStripProps) {
+  const t = await getT();
   // Empty state — no excursion row at all. Show the inline backfill CTA.
   if (excursion === null) {
     return (
@@ -69,17 +71,16 @@ export function ExcursionMetricStrip({
         <div className="flex items-baseline justify-between gap-3">
           <div>
             <h2 className="font-serif text-xs font-semibold uppercase tracking-[0.18em] text-text-tertiary">
-              Excursion · R-units
+              {t("activity.excursion.title")}
             </h2>
             <p className="mt-1 font-serif text-[12px] italic text-text-tertiary">
-              Best/worst price moves while the trade was open, in units of an
-              average loss.
+              {t("activity.excursion.subtitle")}
             </p>
           </div>
         </div>
         <div className="mt-4 flex flex-col items-start gap-3 rounded-md border border-dashed border-border bg-inset px-4 py-5">
           <p className="font-mono text-[11px] text-text-tertiary">
-            No excursion data yet
+            {t("activity.excursion.empty")}
           </p>
           <BackfillButton activityId={activityId} />
         </div>
@@ -132,47 +133,46 @@ export function ExcursionMetricStrip({
       <div className="flex items-baseline justify-between gap-3">
         <div>
           <h2 className="font-serif text-xs font-semibold uppercase tracking-[0.18em] text-text-tertiary">
-            Excursion · R-units
+            {t("activity.excursion.title")}
           </h2>
           <p className="mt-1 font-serif text-[12px] italic text-text-tertiary">
-            Best/worst price moves while the trade was open, in units of an
-            average loss.
+            {t("activity.excursion.subtitle")}
           </p>
         </div>
         {excursion.source === "kline_backfill" && excursion.backfilledAt && (
           <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-text-tertiary">
-            Backfilled{" "}
-            {new Date(excursion.backfilledAt).toLocaleDateString("en-US", {
-              month: "short",
-              day: "numeric",
+            {t("activity.excursion.backfilled", {
+              date: new Date(excursion.backfilledAt).toLocaleDateString(
+                t.locale === "ru" ? "ru-RU" : "en-US",
+                { month: "short", day: "numeric" },
+              ),
             })}
           </span>
         )}
       </div>
       <div className="mt-6 grid grid-cols-1 gap-3 md:grid-cols-3">
         <MetricCell
-          label="MFE-R"
+          label={t("activity.excursion.mfeR.label")}
           value={mfeR.label}
           tone={mfeR.tone}
-          caption="Best favorable move in R-units"
+          caption={t("activity.excursion.mfeR.caption")}
         />
         <MetricCell
-          label="MAE-R"
+          label={t("activity.excursion.maeR.label")}
           value={maeR.label}
           tone={maeR.tone}
-          caption="Worst adverse move in R-units"
+          caption={t("activity.excursion.maeR.caption")}
         />
         <MetricCell
-          label="Realized R"
+          label={t("activity.excursion.realizedR.label")}
           value={realizedR.label}
           tone={realizedR.tone}
-          caption="What you actually banked"
+          caption={t("activity.excursion.realizedR.caption")}
         />
       </div>
       {rUnit === null && (
         <p className="mt-3 font-mono text-[10px] uppercase tracking-[0.14em] text-text-tertiary">
-          R-units unavailable — need at least one losing closed activity for the
-          baseline.
+          {t("activity.excursion.rUnavailable")}
         </p>
       )}
     </section>

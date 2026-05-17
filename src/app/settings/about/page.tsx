@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { ArrowUpRight, Heart } from "lucide-react";
+import { getT } from "@/lib/i18n/server";
 
 export const dynamic = "force-static";
 
@@ -7,24 +8,25 @@ const APP_VERSION = "0.1.0";
 const LICENSE = "AGPL-3.0";
 const REPO_URL = "https://github.com/skywalqr/crypto-spread-journal";
 
-export default function AboutSettingsPage() {
+export default async function AboutSettingsPage() {
+  const t = await getT();
+
   return (
     <div className="space-y-8">
       <div>
         <h2 className="font-serif text-[24px] font-medium leading-tight text-text">
-          About
+          {t("common.about")}
         </h2>
         <p className="mt-1 font-serif text-[13px] italic text-text-secondary">
-          A private, single-user journal for crypto spread specialists. Runs
-          locally against your own Postgres — no cloud, no telemetry.
+          {t("settings.about.subtitle")}
         </p>
       </div>
 
       <dl className="grid grid-cols-1 divide-y divide-border rounded-md border border-border bg-surface text-[13px]">
-        <FieldRow label="Version" value={APP_VERSION} />
-        <FieldRow label="License" value={LICENSE} />
+        <FieldRow label={t("settings.about.version")} value={APP_VERSION} />
+        <FieldRow label={t("settings.about.license")} value={LICENSE} />
         <FieldRow
-          label="Repository"
+          label={t("settings.about.repository")}
           value={
             <a
               href={REPO_URL}
@@ -37,7 +39,7 @@ export default function AboutSettingsPage() {
             </a>
           }
         />
-        <FieldRow label="Build" value={`Next.js 16 · React 19`} />
+        <FieldRow label={t("settings.about.build")} value={`Next.js 16 · React 19`} />
       </dl>
 
       {/* ─── Support the project ─────────────────────────────────────────
@@ -61,19 +63,17 @@ export default function AboutSettingsPage() {
               id="support-heading"
               className="font-serif text-[16px] font-medium leading-tight text-text"
             >
-              Support the project
+              {t("settings.about.supportTitle")}
             </h3>
             <p className="mt-1.5 font-serif text-[13px] italic leading-snug text-text-secondary">
-              If you find the journal useful, sign up to a new exchange via one
-              of our referral links — no extra cost to you, and it keeps the
-              lights on for open development.
+              {t("settings.about.supportBody")}
             </p>
 
             <Link
               href="/settings/exchanges"
               className="mt-3 inline-flex items-center gap-1.5 font-mono text-[11px] uppercase tracking-[0.18em] text-text underline decoration-text-tertiary decoration-1 underline-offset-2 transition-colors hover:decoration-text"
             >
-              View recommended exchanges
+              {t("settings.about.supportCta")}
               <ArrowUpRight className="h-3 w-3" />
             </Link>
           </div>
@@ -81,7 +81,7 @@ export default function AboutSettingsPage() {
       </section>
 
       <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-text-tertiary">
-        Made for spread traders · open source
+        {t("settings.about.footer")}
       </p>
     </div>
   );

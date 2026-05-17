@@ -12,13 +12,23 @@
  * obvious upgrade is a generated tsvector column + tsquery — the helper's
  * call signature absorbs that change with no API breakage.
  */
+import type { Metadata } from "next";
 import { Suspense } from "react";
 import { requireUser } from "@/lib/auth/server";
 import { listAllNotes, countAllNotes, type NoteListFilters } from "@/lib/db/notes";
 import { listAllTagsForUser } from "@/lib/db/satellite";
 import { NotesBrowser } from "@/components/notes/notes-browser";
+import { getT } from "@/lib/i18n/server";
 
 export const dynamic = "force-dynamic";
+
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getT();
+  return {
+    title: `${t("notes.title")} · ${t("app.name")}`,
+    description: t("notes.subtitle"),
+  };
+}
 
 interface NotesPageProps {
   searchParams: Promise<Record<string, string | string[] | undefined>>;

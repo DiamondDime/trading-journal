@@ -107,6 +107,7 @@ export function Sidebar() {
           <input
             type="text"
             placeholder={t("sidebar.search")}
+            aria-label={t("sidebar.searchAria")}
             className="flex-1 bg-transparent text-[12px] text-text placeholder:text-text-tertiary focus:outline-none"
           />
           <kbd className="hidden sm:inline-block font-mono text-[9px] text-text-tertiary border border-border rounded px-1 py-px">
@@ -256,10 +257,12 @@ function SidebarFooter() {
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2.5">
           <div className="flex h-8 w-8 items-center justify-center rounded-full bg-brand font-mono text-[11px] font-semibold text-white">
-            AS
+            {t("sidebar.user.initials")}
           </div>
           <div className="flex flex-col leading-tight">
-            <span className="text-[12px] text-text font-medium">Andrew S.</span>
+            <span className="text-[12px] text-text font-medium">
+              {t("sidebar.user.displayName")}
+            </span>
             <span className="font-mono text-[10px] text-text-tertiary">
               {t("sidebar.role")}
             </span>

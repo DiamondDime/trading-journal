@@ -1,15 +1,15 @@
+import Link from "next/link";
+import { ArrowRight } from "lucide-react";
 import { requireUser } from "@/lib/auth/server";
 import { getT } from "@/lib/i18n/server";
 import { sql } from "@/lib/db/client";
 import {
   listExchangeCatalog,
-  filterReferralExchanges,
   type CatalogExchange,
 } from "@/lib/db/exchanges";
 import { AddExchangeDialog } from "@/components/settings/add-exchange-dialog";
 import { ExchangesTable } from "@/components/settings/exchanges-table";
 import { EmptyExchanges } from "@/components/settings/empty-exchanges";
-import { ReferralSection } from "@/components/settings/referral-section";
 import type {
   ExchangeConnectionRow,
   CatalogEntry,
@@ -70,7 +70,6 @@ export default async function ExchangesSettingsPage() {
     listExchangeCatalog(),
   ]);
 
-  const referrals = filterReferralExchanges(catalog);
   const catalogEntries = catalog.map(toCatalogEntry);
 
   const hasAny = connections.length > 0;
@@ -90,12 +89,25 @@ export default async function ExchangesSettingsPage() {
         {hasAny && <AddExchangeDialog catalog={catalogEntries} />}
       </div>
 
-      {/* Recommended (referral) rail — sits above the connected table per
-          Wave 12C spec. Hidden completely if there's no chrome at all on
-          the page (empty + no partners would just be noise). */}
-      {(referrals.length > 0 || hasAny) && (
-        <ReferralSection referrals={referrals} />
-      )}
+      {/* Pointer to /partners — replaces the old in-page ReferralSection.
+          Settings stays purely operational; marketing lives on /partners. */}
+      <Link
+        href="/partners"
+        className="flex items-start gap-4 rounded-md border border-dashed border-border bg-surface px-5 py-4 transition-colors hover:border-border-strong hover:bg-subtle"
+      >
+        <div className="min-w-0 flex-1">
+          <p className="font-serif text-[14px] font-medium text-text">
+            {t("settings.exchanges.partnersPointer.title")}
+          </p>
+          <p className="mt-1 font-serif text-[12.5px] italic leading-snug text-text-tertiary">
+            {t("settings.exchanges.partnersPointer.body")}
+          </p>
+        </div>
+        <span className="inline-flex shrink-0 items-center gap-1 font-mono text-[10px] uppercase tracking-[0.18em] text-text-secondary">
+          {t("settings.exchanges.partnersPointer.cta")}
+          <ArrowRight className="h-3 w-3" />
+        </span>
+      </Link>
 
       {hasAny ? (
         <div className="space-y-3">

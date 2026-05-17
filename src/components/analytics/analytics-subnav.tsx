@@ -25,7 +25,7 @@ export function AnalyticsSubnav() {
     { href: "/analytics/regime", label: t("analytics.nav.regime"), caption: t("analytics.navCaptions.regime") },
   ];
   return (
-    <nav className="border-b border-border bg-surface">
+    <nav className="border-b border-border bg-surface" aria-label={t("subnav.analytics.aria")}>
       <div className="flex items-end gap-1 overflow-x-auto px-8 lg:px-12">
         {TABS.map((tab) => {
           const isActive = pathname === tab.href;

@@ -3,6 +3,7 @@
 import * as React from "react";
 import { Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useT } from "@/lib/i18n/client";
 
 interface SatisfactionToggleProps {
   activityId: string;
@@ -67,6 +68,7 @@ export function SatisfactionToggle({
   initialSatisfaction,
   initialReason,
 }: SatisfactionToggleProps) {
+  const t = useT();
   const [state, setState] = React.useState<State>(toState(initialSatisfaction));
   const [serverState, setServerState] = React.useState<State>(
     toState(initialSatisfaction),
@@ -120,7 +122,7 @@ export function SatisfactionToggle({
         if (seq !== requestSeqRef.current) return;
         if (res.status === 404) {
           setStatus("error");
-          setErrorMsg("This activity no longer exists.");
+          setErrorMsg(t("activity.satisfaction.errors.notFound"));
           // Roll back to server-confirmed state.
           setState(serverState);
           setReason(serverReason);
@@ -129,7 +131,10 @@ export function SatisfactionToggle({
         if (!res.ok) {
           const json = await res.json().catch(() => null);
           setStatus("error");
-          setErrorMsg(json?.error?.message ?? `Save failed (${res.status})`);
+          setErrorMsg(
+            json?.error?.message ??
+              t("activity.satisfaction.errors.failed", { status: res.status }),
+          );
           setState(serverState);
           setReason(serverReason);
           return;
@@ -150,7 +155,7 @@ export function SatisfactionToggle({
         setReason(serverReason);
       }
     },
-    [activityId, serverState, serverReason],
+    [activityId, serverState, serverReason, t],
   );
 
   function handlePillClick(next: State) {
@@ -196,25 +201,25 @@ export function SatisfactionToggle({
     <div className="flex flex-col gap-2">
       <div
         role="group"
-        aria-label="Execution satisfaction"
+        aria-label={t("activity.satisfaction.groupAria")}
         className="inline-flex items-stretch overflow-hidden rounded-md border border-border bg-surface"
       >
         <PillButton
-          label="Clean execution"
+          label={t("activity.satisfaction.pillUp")}
           symbol="▲"
           active={state === "up"}
           tone="up"
           onClick={() => handlePillClick("up")}
         />
         <PillButton
-          label="No rating"
+          label={t("activity.satisfaction.pillNeutral")}
           symbol="—"
           active={state === "neutral"}
           tone="neutral"
           onClick={() => handlePillClick("neutral")}
         />
         <PillButton
-          label="Tilted execution"
+          label={t("activity.satisfaction.pillDown")}
           symbol="▼"
           active={state === "down"}
           tone="down"
@@ -231,10 +236,10 @@ export function SatisfactionToggle({
           onBlur={handleReasonBlur}
           placeholder={
             state === "up"
-              ? "Why this one worked — quick note"
-              : "What you'd do differently next time"
+              ? t("activity.satisfaction.placeholderUp")
+              : t("activity.satisfaction.placeholderDown")
           }
-          aria-label="Satisfaction reason"
+          aria-label={t("activity.satisfaction.reasonAria")}
           className={cn(
             "w-full max-w-md rounded-md border border-border bg-surface px-3 py-2",
             "font-serif text-[13px] italic text-text",
@@ -252,22 +257,32 @@ export function SatisfactionToggle({
         {status === "saving" && (
           <>
             <Loader2 className="h-3 w-3 animate-spin" aria-hidden="true" />
-            Saving…
+            {t("common.loading")}
           </>
         )}
         {status === "saved" && state === "neutral" && (
-          <span>No rating</span>
+          <span>{t("activity.satisfaction.pillNeutral")}</span>
         )}
-        {status === "saved" && state === "up" && <span>Saved · clean</span>}
-        {status === "saved" && state === "down" && <span>Saved · tilted</span>}
+        {status === "saved" && state === "up" && (
+          <span>{t("activity.satisfaction.savedUp")}</span>
+        )}
+        {status === "saved" && state === "down" && (
+          <span>{t("activity.satisfaction.savedDown")}</span>
+        )}
         {status === "idle" && state === "neutral" && (
-          <span>Rate this activity</span>
+          <span>{t("activity.satisfaction.idle")}</span>
         )}
         {status === "idle" && state !== "neutral" && (
-          <span>{state === "up" ? "Clean" : "Tilted"}</span>
+          <span>
+            {state === "up"
+              ? t("activity.satisfaction.idleUp")
+              : t("activity.satisfaction.idleDown")}
+          </span>
         )}
         {status === "error" && (
-          <span className="text-down">{errorMsg ?? "Save failed"}</span>
+          <span className="text-down">
+            {errorMsg ?? t("activity.satisfaction.errors.generic")}
+          </span>
         )}
       </div>
     </div>

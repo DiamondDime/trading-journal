@@ -3,6 +3,7 @@
 import * as React from "react";
 import { X, Plus, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useT } from "@/lib/i18n/client";
 
 interface TagEditorProps {
   activityId: string;
@@ -47,6 +48,7 @@ const MAX_TAGS = 40;
  *   and hide the chips already on this activity. Dropdown shows up to 8 hits.
  */
 export function TagEditor({ activityId, initialTags }: TagEditorProps) {
+  const t = useT();
   const [tags, setTags] = React.useState<readonly string[]>(initialTags);
   const [serverTags, setServerTags] =
     React.useState<readonly string[]>(initialTags);
@@ -142,7 +144,7 @@ export function TagEditor({ activityId, initialTags }: TagEditorProps) {
 
           if (res.status === 404) {
             setStatus("error");
-            setErrorMsg("This activity no longer exists.");
+            setErrorMsg(t("activity.tags.errors.notFound"));
             setTags(serverTags);
             return;
           }
@@ -150,7 +152,8 @@ export function TagEditor({ activityId, initialTags }: TagEditorProps) {
             const json = await res.json().catch(() => null);
             setStatus("error");
             setErrorMsg(
-              json?.error?.message ?? `Save failed (${res.status})`,
+              json?.error?.message ??
+                t("activity.tags.errors.failed", { status: res.status }),
             );
             setTags(serverTags);
             return;
@@ -183,7 +186,7 @@ export function TagEditor({ activityId, initialTags }: TagEditorProps) {
         }
       }, SAVE_DEBOUNCE_MS);
     },
-    [activityId, serverTags],
+    [activityId, serverTags, t],
   );
 
   /**
@@ -195,11 +198,11 @@ export function TagEditor({ activityId, initialTags }: TagEditorProps) {
     const trimmed = raw.trim();
     if (!trimmed) return;
     if (trimmed.length > MAX_TAG_LEN) {
-      setErrorMsg(`Tag too long (max ${MAX_TAG_LEN} chars)`);
+      setErrorMsg(t("activity.tags.errors.tooLong", { max: MAX_TAG_LEN }));
       return;
     }
     if (tags.length >= MAX_TAGS) {
-      setErrorMsg(`Too many tags (max ${MAX_TAGS})`);
+      setErrorMsg(t("activity.tags.errors.tooMany", { max: MAX_TAGS }));
       return;
     }
     const lc = trimmed.toLowerCase();
@@ -338,7 +341,7 @@ export function TagEditor({ activityId, initialTags }: TagEditorProps) {
             <button
               type="button"
               onClick={() => removeTag(tag)}
-              aria-label={`Remove tag ${tag}`}
+              aria-label={t("activity.tags.ariaRemove", { tag })}
               className="text-text-tertiary transition-colors hover:text-down"
             >
               <X className="h-3 w-3" />
@@ -360,9 +363,11 @@ export function TagEditor({ activityId, initialTags }: TagEditorProps) {
             onBlur={handleInputBlur}
             onFocus={() => setSuggestionsOpen(true)}
             placeholder={
-              tags.length === 0 ? "breakout, london-session…" : "Add tag"
+              tags.length === 0
+                ? t("activity.tags.placeholderEmpty")
+                : t("activity.tags.placeholderAdd")
             }
-            aria-label="Add tag"
+            aria-label={t("activity.tags.ariaAdd")}
             className={cn(
               "flex-1 min-w-[120px] bg-transparent px-1.5 py-1 outline-none",
               "font-mono text-[12px] text-text placeholder:text-text-disabled",
@@ -418,21 +423,23 @@ export function TagEditor({ activityId, initialTags }: TagEditorProps) {
         {status === "saving" && (
           <>
             <Loader2 className="h-3 w-3 animate-spin" aria-hidden="true" />
-            Saving…
+            {t("activity.tags.saving")}
           </>
         )}
         {status === "saved" && tags.length > 0 && (
-          <span>Saved · {tags.length} tag{tags.length === 1 ? "" : "s"}</span>
+          <span>{t.plural("activity.tags.savedWithCount", tags.length)}</span>
         )}
-        {status === "saved" && tags.length === 0 && <span>Saved · no tags</span>}
+        {status === "saved" && tags.length === 0 && (
+          <span>{t("activity.tags.savedEmpty")}</span>
+        )}
         {status === "idle" && tags.length === 0 && (
-          <span>No tags yet — Enter to add</span>
+          <span>{t("activity.tags.idleEmpty")}</span>
         )}
         {status === "idle" && tags.length > 0 && (
-          <span>{tags.length} tag{tags.length === 1 ? "" : "s"}</span>
+          <span>{t.plural("activity.tags.count", tags.length)}</span>
         )}
         {status === "error" && (
-          <span className="text-down">{errorMsg ?? "Save failed"}</span>
+          <span className="text-down">{errorMsg ?? t("activity.tags.saveFailed")}</span>
         )}
       </div>
     </div>

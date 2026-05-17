@@ -1,5 +1,6 @@
 import { requireUser } from "@/lib/auth/server";
 import { getT } from "@/lib/i18n/server";
+import type { MessageKey } from "@/lib/i18n/resolve";
 import {
   getActivityTypeAggregations,
   getCapitalByActivityType,
@@ -9,8 +10,6 @@ import {
   getTotals,
 } from "@/lib/db/activity";
 import {
-  ACTIVITY_TYPE_LABELS,
-  SPREAD_TYPE_LABELS,
   fmtUsd,
   type ActivityType,
   type SpreadType,
@@ -23,6 +22,8 @@ import { BarRank } from "@/components/analytics/bar-rank";
 import { CategoryTable, type CategoryRow } from "@/components/analytics/category-table";
 import { LastUpdatedFooter } from "@/components/analytics/last-updated";
 import { AnalyticsEmptyState, MIN_FOR_ANALYTICS } from "@/components/analytics/empty-state";
+
+type TFn = Awaited<ReturnType<typeof getT>>;
 
 /**
  * Activity Mix — Where is the P&L actually coming from, and how is the
@@ -50,9 +51,33 @@ const SPREAD_TYPE_DB_TO_UI: Record<string, SpreadType> = {
   dex_cex_arb: "dex_cex",
 };
 
-function spreadTypeLabel(dbKey: string): string {
+// Localized labels for the four canonical activity types. Reuses the
+// top-level `activity.*` keys so we stay in sync with sidebar / archive.
+const ACTIVITY_TYPE_I18N_KEY: Record<ActivityType, MessageKey> = {
+  spread: "activity.spread",
+  trade: "activity.trade",
+  sale: "activity.sale",
+  airdrop: "activity.airdrop",
+};
+
+function activityTypeLabel(t: TFn, type: ActivityType): string {
+  return t(ACTIVITY_TYPE_I18N_KEY[type]);
+}
+
+// Localized labels for spread subtypes. Reuses the wizard's `kinds`
+// vocabulary so the user sees the same words on the wizard and the
+// analytics page.
+const SPREAD_SUBTYPE_I18N_KEY: Record<SpreadType, MessageKey> = {
+  cash_carry: "wizard.spread.kinds.cashCarry",
+  funding: "wizard.spread.kinds.funding",
+  cross_exchange: "wizard.spread.kinds.crossEx",
+  calendar: "wizard.spread.kinds.calendar",
+  dex_cex: "wizard.spread.kinds.dexCex",
+};
+
+function spreadTypeLabel(t: TFn, dbKey: string): string {
   const ui = SPREAD_TYPE_DB_TO_UI[dbKey];
-  return ui ? SPREAD_TYPE_LABELS[ui] : dbKey;
+  return ui ? t(SPREAD_SUBTYPE_I18N_KEY[ui]) : dbKey;
 }
 
 function fmtUsdCompact(v: number): string {
@@ -117,32 +142,32 @@ export default async function ActivityMixPage() {
 
   // ── P&L by activity type donut + table ────────────────────────────────
   const totalPnlMagnitude = ACTIVITY_TYPE_ORDER.reduce(
-    (s, t) => s + Math.abs(typeNetPnl[t]),
+    (s, type) => s + Math.abs(typeNetPnl[type]),
     0,
   );
 
   const typeSlices: DonutSlice[] = ACTIVITY_TYPE_ORDER
-    .filter((t) => typeCounts[t] > 0)
-    .map((t) => ({
-      key: t,
-      name: ACTIVITY_TYPE_LABELS[t],
-      value: typeNetPnl[t],
+    .filter((type) => typeCounts[type] > 0)
+    .map((type) => ({
+      key: type,
+      name: activityTypeLabel(t, type),
+      value: typeNetPnl[type],
       tone:
-        typeNetPnl[t] > 0
+        typeNetPnl[type] > 0
           ? "up"
-          : typeNetPnl[t] < 0
+          : typeNetPnl[type] < 0
           ? "down"
           : "neutral",
     }));
 
   const typeRows: CategoryRow[] = ACTIVITY_TYPE_ORDER
-    .filter((t) => typeCounts[t] > 0)
-    .map((t) => {
-      const agg = typeAggs[t];
+    .filter((type) => typeCounts[type] > 0)
+    .map((type) => {
+      const agg = typeAggs[type];
       const scoring = agg.winners + agg.losers;
       return {
-        label: ACTIVITY_TYPE_LABELS[t],
-        sublabel: `${agg.count} ${agg.count === 1 ? "activity" : "activities"}`,
+        label: activityTypeLabel(t, type),
+        sublabel: t.plural("plurals.activities", agg.count),
         count: agg.count,
         netPnl: agg.netPnl,
         avgPnl: agg.count > 0 ? agg.netPnl / agg.count : 0,
@@ -154,16 +179,19 @@ export default async function ActivityMixPage() {
           totalPnlMagnitude > 0
             ? (Math.abs(agg.netPnl) / totalPnlMagnitude) * 100
             : 0,
-        capital: capitalByType[t],
+        capital: capitalByType[type],
       };
     });
 
   // ── Spread subtypes ────────────────────────────────────────────────────
   const subtypeBarRows = spreadSubtypes
     .map((r) => ({
-      label: spreadTypeLabel(r.spreadType),
+      label: spreadTypeLabel(t, r.spreadType),
       value: r.netPnl,
-      meta: `${r.count} · ${(r.winRate * 100).toFixed(0)}% win`,
+      meta: t("analytics.common.winMeta", {
+        count: r.count,
+        pct: (r.winRate * 100).toFixed(0),
+      }),
     }))
     .sort((a, b) => Math.abs(b.value) - Math.abs(a.value));
 
@@ -172,8 +200,8 @@ export default async function ActivityMixPage() {
     0,
   );
   const subtypeTableRows: CategoryRow[] = spreadSubtypes.map((r) => ({
-    label: spreadTypeLabel(r.spreadType),
-    sublabel: `${r.count} ${r.count === 1 ? "spread" : "spreads"}`,
+    label: spreadTypeLabel(t, r.spreadType),
+    sublabel: t.plural("plurals.spreads", r.count),
     count: r.count,
     netPnl: r.netPnl,
     avgPnl: r.avgPnl,
@@ -190,20 +218,23 @@ export default async function ActivityMixPage() {
     .map((a) => ({
       label: a.asset,
       value: a.netPnl,
-      meta: `${a.count} · ${(a.winRate * 100).toFixed(0)}% win`,
+      meta: t("analytics.common.winMeta", {
+        count: a.count,
+        pct: (a.winRate * 100).toFixed(0),
+      }),
     }));
 
   // ── Capital allocation donut ───────────────────────────────────────────
   const totalCapital = ACTIVITY_TYPE_ORDER.reduce(
-    (s, t) => s + capitalByType[t],
+    (s, type) => s + capitalByType[type],
     0,
   );
   const capitalSlices: DonutSlice[] = ACTIVITY_TYPE_ORDER
-    .filter((t) => capitalByType[t] > 0)
-    .map((t) => ({
-      key: t,
-      name: ACTIVITY_TYPE_LABELS[t],
-      value: capitalByType[t],
+    .filter((type) => capitalByType[type] > 0)
+    .map((type) => ({
+      key: type,
+      name: activityTypeLabel(t, type),
+      value: capitalByType[type],
       // Capital allocation is neutral — no win/loss tone for "where the
       // money was parked".
       tone: "neutral",
@@ -287,7 +318,7 @@ export default async function ActivityMixPage() {
                   : "—"
               }
               centerCaption={t("analytics.activityMix.donut.acrossTypes", {
-                count: ACTIVITY_TYPE_ORDER.filter((t) => capitalByType[t] > 0).length,
+                count: ACTIVITY_TYPE_ORDER.filter((type) => capitalByType[type] > 0).length,
               })}
             />
             <CapitalDonutCallouts
@@ -392,7 +423,7 @@ async function CapitalDonutCallouts({
               }
             >
               <span className="text-left font-serif text-[12px] not-italic text-text">
-                {ACTIVITY_TYPE_LABELS[type]}
+                {activityTypeLabel(t, type)}
               </span>
               <span className="text-text-secondary">
                 {cap > 0 ? fmtUsdCompact(cap) : "—"}

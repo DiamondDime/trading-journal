@@ -15,6 +15,7 @@ import {
   getActivitiesByDateRange,
   getTotals,
 } from "@/lib/db/activity";
+import { getT } from "@/lib/i18n/server";
 
 /**
  * Full-page month-view calendar.
@@ -35,10 +36,13 @@ import {
 
 export const dynamic = "force-dynamic";
 
-export const metadata: Metadata = {
-  title: "Calendar · Spread Journal",
-  description: "Activities by day, in a month-view grid.",
-};
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getT();
+  return {
+    title: `${t("calendar.title")} · ${t("app.name")}`,
+    description: t("calendar.subtitle"),
+  };
+}
 
 interface CalendarPageProps {
   searchParams: Promise<Record<string, string | string[] | undefined>>;

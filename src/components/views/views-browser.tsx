@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { ArrowRight, Pencil, Plus, Trash2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useT, useLocale } from "@/lib/i18n/client";
+import type { TFunction } from "@/lib/i18n/resolve";
 import {
   Dialog,
   DialogContent,
@@ -27,9 +28,9 @@ interface ViewsBrowserProps {
 /**
  * Pretty-print a saved view's URL for the description column. Strips the
  * leading "/spreads/archive" so the eye lands on the differentiating part of
- * the URL (the filter params). Empty string → "all activity".
+ * the URL (the filter params). Empty string → localized "all activity".
  */
-function prettyPath(qs: string): string {
+function prettyPath(qs: string, t: TFunction): string {
   if (!qs) return "—";
   try {
     const u = new URL(qs, "https://invalid.local");
@@ -47,17 +48,17 @@ function prettyPath(qs: string): string {
     if (status) parts.push(status.replace(/,/g, "+"));
     if (outcome) parts.push(outcome);
     if (q) parts.push(`"${q}"`);
-    if (parts.length === 0) return "all activity";
+    if (parts.length === 0) return t("views.allActivity");
     return parts.join(" · ");
   } catch {
     return qs;
   }
 }
 
-function fmtRelative(iso: string | null, locale: "en" | "ru"): string {
-  if (!iso) return locale === "ru" ? "никогда" : "Never";
+function fmtRelative(iso: string | null, locale: "en" | "ru", t: TFunction): string {
+  if (!iso) return t("views.never");
   const date = new Date(iso);
-  if (!Number.isFinite(date.getTime())) return locale === "ru" ? "никогда" : "Never";
+  if (!Number.isFinite(date.getTime())) return t("views.never");
   const diff = Date.now() - date.getTime();
   const sec = Math.max(0, Math.floor(diff / 1000));
   const rtf = new Intl.RelativeTimeFormat(locale === "ru" ? "ru-RU" : "en-US", { numeric: "auto" });
@@ -104,7 +105,7 @@ export function ViewsBrowser({ initialViews, prefillFrom }: ViewsBrowserProps) {
   const refresh = async () => {
     try {
       const res = await fetch("/api/saved-views", { headers: { accept: "application/json" } });
-      if (!res.ok) throw new Error("Failed to refresh views");
+      if (!res.ok) throw new Error(t("views.errors.refreshFailed"));
       const json = (await res.json()) as { data: ViewWithCount[] };
       // Server doesn't recompute counts here — they update on next full
       // page load. Splice in any rows we don't already know about.
@@ -118,15 +119,13 @@ export function ViewsBrowser({ initialViews, prefillFrom }: ViewsBrowserProps) {
         })) as ViewWithCount[];
       });
     } catch (err) {
-      setFlashError(err instanceof Error ? err.message : "Failed to refresh");
+      setFlashError(err instanceof Error ? err.message : t("views.errors.refreshFailed"));
     }
   };
 
   const handleApply = async (view: ViewWithCount) => {
     if (!view.queryString) {
-      setFlashError(
-        `"${view.name}" has no URL stored — open Edit to set one.`,
-      );
+      setFlashError(t("views.errors.noUrl", { name: view.name }));
       return;
     }
     // Bump lastAppliedAt fire-and-forget — non-blocking. Failure is silent
@@ -237,7 +236,7 @@ export function ViewsBrowser({ initialViews, prefillFrom }: ViewsBrowserProps) {
                   title={view.queryString || "—"}
                   className="font-serif text-[12px] italic text-text-secondary line-clamp-1"
                 >
-                  {prettyPath(view.queryString)}
+                  {prettyPath(view.queryString, t)}
                 </code>
 
                 <span className="text-right font-mono text-[12px] tabular-nums text-text">
@@ -248,7 +247,7 @@ export function ViewsBrowser({ initialViews, prefillFrom }: ViewsBrowserProps) {
                 </span>
 
                 <span className="text-right font-mono text-[10px] uppercase tracking-[0.14em] text-text-tertiary">
-                  {fmtRelative(view.lastAppliedAt, locale)}
+                  {fmtRelative(view.lastAppliedAt, locale, t)}
                 </span>
 
                 <div className="flex items-center justify-end gap-1">
@@ -374,7 +373,7 @@ function ViewFormDialog({
             | null;
           throw new Error(
             errJson?.error?.message ??
-              `Failed to create view (${res.status})`,
+              t("views.errors.createFailed", { status: res.status }),
           );
         }
       } else if (mode === "edit" && view) {
@@ -389,13 +388,13 @@ function ViewFormDialog({
             | null;
           throw new Error(
             errJson?.error?.message ??
-              `Failed to update view (${res.status})`,
+              t("views.errors.updateFailed", { status: res.status }),
           );
         }
       }
       await onSuccess();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed");
+      setError(err instanceof Error ? err.message : t("views.errors.generic"));
     } finally {
       setSubmitting(false);
     }
@@ -475,7 +474,7 @@ function ViewFormDialog({
               onClick={onClose}
               className="rounded-md border border-border bg-surface px-4 py-2 font-mono text-[11px] uppercase tracking-[0.16em] text-text-secondary hover:bg-subtle hover:text-text"
             >
-              {t("views.cancel")}
+              {t("common.cancel")}
             </button>
             <button
               type="submit"
@@ -485,7 +484,7 @@ function ViewFormDialog({
                 "disabled:cursor-not-allowed disabled:opacity-50",
               )}
             >
-              {submitting ? t("views.saving") : t("views.save")}
+              {submitting ? t("views.saving") : t("common.save")}
             </button>
           </DialogFooter>
         </form>
@@ -521,12 +520,12 @@ function DeleteConfirmDialog({
           | { error?: { message?: string } }
           | null;
         throw new Error(
-          errJson?.error?.message ?? `Failed to delete (${res.status})`,
+          errJson?.error?.message ?? t("views.errors.deleteFailed", { status: res.status }),
         );
       }
       await onSuccess();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed");
+      setError(err instanceof Error ? err.message : t("views.errors.generic"));
       setSubmitting(false);
     }
   };
@@ -554,7 +553,7 @@ function DeleteConfirmDialog({
             onClick={onClose}
             className="rounded-md border border-border bg-surface px-4 py-2 font-mono text-[11px] uppercase tracking-[0.16em] text-text-secondary hover:bg-subtle hover:text-text"
           >
-            {t("views.cancel")}
+            {t("common.cancel")}
           </button>
           <button
             type="button"
@@ -562,7 +561,7 @@ function DeleteConfirmDialog({
             disabled={submitting}
             className="rounded-md border border-down bg-down px-4 py-2 font-mono text-[11px] uppercase tracking-[0.16em] text-app transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
           >
-            {submitting ? t("views.saving") : t("views.deleteDialog.confirm")}
+            {submitting ? t("views.deleting") : t("views.deleteDialog.confirm")}
           </button>
         </DialogFooter>
       </DialogContent>

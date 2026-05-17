@@ -4,6 +4,7 @@ import * as React from "react";
 import { useRouter } from "next/navigation";
 import { Loader2, RefreshCw, Trash2 } from "lucide-react";
 
+import { useT } from "@/lib/i18n/client";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -24,6 +25,7 @@ interface Props {
 
 export function ExchangeRowActions({ connectionId, exchangeName }: Props) {
   const router = useRouter();
+  const t = useT();
 
   const [syncing, setSyncing] = React.useState(false);
   const [syncMessage, setSyncMessage] = React.useState<{
@@ -59,17 +61,17 @@ export function ExchangeRowActions({ connectionId, exchangeName }: Props) {
         const msg =
           (body && "error" in body && body.error?.message) ||
           (res.status === 409
-            ? "A sync is already running for this connection."
-            : `Sync failed (status ${res.status}).`);
+            ? t("settings.exchanges.row.errors.syncRunning")
+            : t("settings.exchanges.row.errors.syncFailed", { status: res.status }));
         setSyncMessage({ tone: "err", text: msg });
       } else {
-        setSyncMessage({ tone: "ok", text: "Sync queued." });
+        setSyncMessage({ tone: "ok", text: t("settings.exchanges.row.syncQueued") });
         router.refresh();
       }
     } catch (e) {
       setSyncMessage({
         tone: "err",
-        text: e instanceof Error ? e.message : "Network error",
+        text: e instanceof Error ? e.message : t("settings.exchanges.row.errors.network"),
       });
     } finally {
       setSyncing(false);
@@ -88,7 +90,8 @@ export function ExchangeRowActions({ connectionId, exchangeName }: Props) {
           | { error?: { message?: string } }
           | null;
         setDeleteError(
-          body?.error?.message ?? `Delete failed (status ${res.status}).`,
+          body?.error?.message ??
+            t("settings.exchanges.row.errors.deleteFailed", { status: res.status }),
         );
         setDeleting(false);
         return;
@@ -97,7 +100,9 @@ export function ExchangeRowActions({ connectionId, exchangeName }: Props) {
       setDeleting(false);
       router.refresh();
     } catch (e) {
-      setDeleteError(e instanceof Error ? e.message : "Network error");
+      setDeleteError(
+        e instanceof Error ? e.message : t("settings.exchanges.row.errors.network"),
+      );
       setDeleting(false);
     }
   }
@@ -124,14 +129,16 @@ export function ExchangeRowActions({ connectionId, exchangeName }: Props) {
         onClick={onSyncNow}
         disabled={syncing}
         className="font-mono text-[10px] uppercase tracking-[0.12em]"
-        aria-label={`Sync ${exchangeName} now`}
+        aria-label={t("settings.exchanges.row.syncAria", { name: exchangeName })}
       >
         {syncing ? (
           <Loader2 className="h-3 w-3 animate-spin" />
         ) : (
           <RefreshCw className="h-3 w-3" />
         )}
-        {syncing ? "Syncing…" : "Sync now"}
+        {syncing
+          ? t("settings.exchanges.row.syncing")
+          : t("settings.exchanges.row.syncNow")}
       </Button>
 
       <Dialog
@@ -149,7 +156,7 @@ export function ExchangeRowActions({ connectionId, exchangeName }: Props) {
             type="button"
             size="icon-sm"
             variant="ghost"
-            aria-label={`Disconnect ${exchangeName}`}
+            aria-label={t("settings.exchanges.row.disconnectAria", { name: exchangeName })}
             className="text-text-tertiary hover:text-down"
           >
             <Trash2 className="h-3.5 w-3.5" />
@@ -158,11 +165,14 @@ export function ExchangeRowActions({ connectionId, exchangeName }: Props) {
 
         <DialogContent className="sm:max-w-[460px]">
           <DialogHeader>
-            <DialogEyebrow>Confirm disconnect</DialogEyebrow>
-            <DialogTitle>Disconnect {exchangeName}?</DialogTitle>
+            <DialogEyebrow>
+              {t("settings.exchanges.row.confirmEyebrow")}
+            </DialogEyebrow>
+            <DialogTitle>
+              {t("settings.exchanges.row.confirmTitle", { name: exchangeName })}
+            </DialogTitle>
             <DialogDescription>
-              Your imported fills stay where they are. To restart imports,
-              reconnect with a new key.
+              {t("settings.exchanges.row.confirmDesc")}
             </DialogDescription>
           </DialogHeader>
 
@@ -170,15 +180,15 @@ export function ExchangeRowActions({ connectionId, exchangeName }: Props) {
             <ul className="space-y-1.5 font-serif text-[13px] text-text-secondary">
               <li className="flex items-start gap-2">
                 <span aria-hidden className="mt-1.5 h-0.5 w-2 bg-text-tertiary" />
-                Encrypted credentials are removed from the database.
+                {t("settings.exchanges.row.confirmBullet1")}
               </li>
               <li className="flex items-start gap-2">
                 <span aria-hidden className="mt-1.5 h-0.5 w-2 bg-text-tertiary" />
-                In-flight sync jobs will stop.
+                {t("settings.exchanges.row.confirmBullet2")}
               </li>
               <li className="flex items-start gap-2">
                 <span aria-hidden className="mt-1.5 h-0.5 w-2 bg-text-tertiary" />
-                Previously imported fills are kept for your records.
+                {t("settings.exchanges.row.confirmBullet3")}
               </li>
             </ul>
 
@@ -202,7 +212,7 @@ export function ExchangeRowActions({ connectionId, exchangeName }: Props) {
               disabled={deleting}
               className="font-mono text-[11px] uppercase tracking-[0.12em] text-text-secondary"
             >
-              Cancel
+              {t("common.cancel")}
             </Button>
             <Button
               type="button"
@@ -213,7 +223,9 @@ export function ExchangeRowActions({ connectionId, exchangeName }: Props) {
               className="font-mono text-[11px] uppercase tracking-[0.12em]"
             >
               {deleting && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
-              {deleting ? "Disconnecting…" : "Disconnect"}
+              {deleting
+                ? t("settings.exchanges.row.disconnecting")
+                : t("settings.exchanges.row.disconnect")}
             </Button>
           </DialogFooter>
         </DialogContent>

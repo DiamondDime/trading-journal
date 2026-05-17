@@ -15,6 +15,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
+import { useT } from "@/lib/i18n/client";
 
 interface DeleteButtonProps {
   activityId: string;
@@ -41,6 +42,7 @@ export function DeleteButton({
   serial,
 }: DeleteButtonProps) {
   const router = useRouter();
+  const t = useT();
   const [open, setOpen] = React.useState(false);
   const [pending, setPending] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
@@ -54,7 +56,10 @@ export function DeleteButton({
       });
       if (!res.ok && res.status !== 204) {
         const body = await res.json().catch(() => null);
-        setError(body?.error?.message ?? `Delete failed (${res.status})`);
+        setError(
+          body?.error?.message ??
+            t("activity.delete.errors.failed", { status: res.status }),
+        );
         setPending(false);
         return;
       }
@@ -69,7 +74,14 @@ export function DeleteButton({
     }
   }
 
-  const typeLabel = activityType;
+  const typeLabel =
+    activityType === "spread"
+      ? t("activity.spread")
+      : activityType === "trade"
+        ? t("activity.trade")
+        : activityType === "sale"
+          ? t("activity.sale")
+          : t("activity.airdrop");
   const idSuffix = serial ?? `#${activityId.slice(0, 4).toUpperCase()}`;
 
   return (
@@ -84,15 +96,16 @@ export function DeleteButton({
           )}
         >
           <Trash2 className="h-3 w-3" />
-          Delete
+          {t("common.delete")}
         </button>
       </DialogTrigger>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Delete this {typeLabel}?</DialogTitle>
+          <DialogTitle>
+            {t("activity.delete.title", { type: typeLabel })}
+          </DialogTitle>
           <DialogDescription>
-            {idSuffix} will be hidden from your journal. Any attached note is
-            hidden alongside it.
+            {t("activity.delete.desc", { idSuffix })}
           </DialogDescription>
         </DialogHeader>
         <DialogBody>
@@ -106,9 +119,7 @@ export function DeleteButton({
           )}
           {!error && (
             <p className="font-serif text-[13px] italic leading-snug text-text-secondary">
-              This is a soft-delete: the row stays in the database with a
-              deleted_at stamp. Recovery from settings is planned for v2 — for
-              now, re-create the entry manually if you need it back.
+              {t("activity.delete.softDeleteHint")}
             </p>
           )}
         </DialogBody>
@@ -124,7 +135,7 @@ export function DeleteButton({
                 "disabled:cursor-not-allowed disabled:opacity-60",
               )}
             >
-              Cancel
+              {t("common.cancel")}
             </button>
           </DialogClose>
           <button
@@ -138,7 +149,9 @@ export function DeleteButton({
               "disabled:cursor-not-allowed disabled:opacity-60",
             )}
           >
-            {pending ? "Deleting…" : `Delete ${typeLabel}`}
+            {pending
+              ? t("activity.delete.deleting")
+              : t("activity.delete.confirmCta", { type: typeLabel })}
           </button>
         </DialogFooter>
       </DialogContent>

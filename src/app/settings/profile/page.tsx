@@ -1,5 +1,6 @@
 import { sql } from "@/lib/db/client";
 import { getCurrentUser } from "@/lib/auth/server";
+import { getT } from "@/lib/i18n/server";
 
 export const dynamic = "force-dynamic";
 
@@ -21,6 +22,7 @@ async function loadProfile(userId: string): Promise<ProfileRow | null> {
 }
 
 export default async function ProfileSettingsPage() {
+  const t = await getT();
   const user = await getCurrentUser();
   const profile = user ? await loadProfile(user.id) : null;
 
@@ -28,30 +30,34 @@ export default async function ProfileSettingsPage() {
     <div className="space-y-8">
       <div>
         <h2 className="font-serif text-[24px] font-medium leading-tight text-text">
-          Profile
+          {t("common.profile")}
         </h2>
         <p className="mt-1 font-serif text-[13px] italic text-text-secondary">
-          The single-user identity attached to this journal. Editable UI lands
-          in a later release; values are sourced from your local Postgres
-          today.
+          {t("settings.profile.subtitle")}
         </p>
       </div>
 
       <dl className="grid grid-cols-1 divide-y divide-border rounded-md border border-border bg-surface text-[13px]">
         <FieldRow
-          label="Display name"
+          label={t("settings.profile.displayName")}
           value={profile?.displayName ?? "—"}
         />
-        <FieldRow label="Email" value={user?.email ?? profile?.email ?? "—"} />
-        <FieldRow label="Timezone" value={profile?.timezone ?? "—"} />
         <FieldRow
-          label="Base currency"
+          label={t("settings.profile.email")}
+          value={user?.email ?? profile?.email ?? "—"}
+        />
+        <FieldRow
+          label={t("settings.profile.timezone")}
+          value={profile?.timezone ?? "—"}
+        />
+        <FieldRow
+          label={t("settings.profile.baseCurrency")}
           value={profile?.baseCurrency ?? "—"}
         />
       </dl>
 
       <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-text-tertiary">
-        Read-only · v1
+        {t("settings.profile.footer")}
       </p>
     </div>
   );

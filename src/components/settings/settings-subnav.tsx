@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 
 import { cn } from "@/lib/utils";
+import { useT } from "@/lib/i18n/client";
 
 interface SubnavItem {
   label: string;
@@ -11,29 +12,30 @@ interface SubnavItem {
   caption: string;
 }
 
-const items: SubnavItem[] = [
-  {
-    label: "Exchanges",
-    href: "/settings/exchanges",
-    caption: "Connections & API keys",
-  },
-  {
-    label: "Profile",
-    href: "/settings/profile",
-    caption: "Identity & locale",
-  },
-  {
-    label: "About",
-    href: "/settings/about",
-    caption: "Build & license",
-  },
-];
-
 export function SettingsSubnav() {
   const pathname = usePathname();
+  const t = useT();
+
+  const items: SubnavItem[] = [
+    {
+      label: t("settings.sections.exchanges"),
+      href: "/settings/exchanges",
+      caption: t("subnav.settings.exchangesCaption"),
+    },
+    {
+      label: t("settings.sections.profile"),
+      href: "/settings/profile",
+      caption: t("subnav.settings.profileCaption"),
+    },
+    {
+      label: t("settings.sections.about"),
+      href: "/settings/about",
+      caption: t("subnav.settings.aboutCaption"),
+    },
+  ];
 
   return (
-    <nav aria-label="Settings sections">
+    <nav aria-label={t("subnav.settings.aria")}>
       <ul className="flex flex-col gap-1.5">
         {items.map((item) => {
           const isActive =

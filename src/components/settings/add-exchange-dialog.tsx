@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { ArrowLeft, Plus, Loader2 } from "lucide-react";
 
 import { cn } from "@/lib/utils";
+import { useT } from "@/lib/i18n/client";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -41,6 +42,7 @@ const initialCreds = {
 
 export function AddExchangeDialog({ catalog, variant = "default" }: Props) {
   const router = useRouter();
+  const t = useT();
   const [open, setOpen] = React.useState(false);
   const [step, setStep] = React.useState<Step>("pick");
   const [exchangeCode, setExchangeCode] = React.useState<string | null>(null);
@@ -120,10 +122,10 @@ export function AddExchangeDialog({ catalog, variant = "default" }: Props) {
         const msg =
           body?.error?.message ??
           (res.status === 409
-            ? "A connection with that label already exists for this exchange."
+            ? t("settings.exchanges.dialog.errors.duplicate")
             : res.status === 422
-              ? "Credentials were rejected. Use a read-only key (no withdraw scope)."
-              : `Failed to add connection (status ${res.status}).`);
+              ? t("settings.exchanges.dialog.errors.rejected")
+              : t("settings.exchanges.dialog.errors.failed", { status: res.status }));
         setError(msg);
         setSubmitting(false);
         return;
@@ -138,7 +140,7 @@ export function AddExchangeDialog({ catalog, variant = "default" }: Props) {
       setError(
         err instanceof Error
           ? err.message
-          : "Network error. Check the dev server and try again.",
+          : t("settings.exchanges.dialog.errors.network"),
       );
       setSubmitting(false);
     }
@@ -154,7 +156,7 @@ export function AddExchangeDialog({ catalog, variant = "default" }: Props) {
             data-testid="add-exchange-trigger"
           >
             <Plus className="h-4 w-4" />
-            Connect your first exchange
+            {t("settings.exchanges.empty.primaryCta")}
           </Button>
         ) : (
           <Button
@@ -164,7 +166,7 @@ export function AddExchangeDialog({ catalog, variant = "default" }: Props) {
             data-testid="add-exchange-trigger"
           >
             <Plus className="h-3.5 w-3.5" />
-            Add exchange
+            {t("settings.exchanges.addButton")}
           </Button>
         )}
       </DialogTrigger>
@@ -172,19 +174,21 @@ export function AddExchangeDialog({ catalog, variant = "default" }: Props) {
       <DialogContent className="sm:max-w-[640px]">
         <DialogHeader>
           <DialogEyebrow>
-            {step === "pick" ? "Step 1 of 2 · Exchange" : "Step 2 of 2 · Credentials"}
+            {step === "pick"
+              ? t("settings.exchanges.dialog.step1")
+              : t("settings.exchanges.dialog.step2")}
           </DialogEyebrow>
           <DialogTitle>
             {step === "pick"
-              ? "Connect an exchange"
+              ? t("settings.exchanges.dialog.titlePick")
               : selectedExchange
-                ? `Connect ${selectedExchange.displayName}`
-                : "Connect an exchange"}
+                ? t("settings.exchanges.dialog.title", { exchange: selectedExchange.displayName })
+                : t("settings.exchanges.dialog.titlePick")}
           </DialogTitle>
           <DialogDescription>
             {step === "pick"
-              ? "Choose which exchange you'd like to import fills from."
-              : "Paste an API key/secret. Use read-only scope only — keys with withdraw permission will be rejected on first sync."}
+              ? t("settings.exchanges.dialog.descPick")
+              : t("settings.exchanges.dialog.descCredentials")}
           </DialogDescription>
         </DialogHeader>
 
@@ -226,6 +230,7 @@ function ExchangePickStep({
   onPick: (code: string) => void;
   onCancel: () => void;
 }) {
+  const t = useT();
   return (
     <>
       <DialogBody>
@@ -233,7 +238,7 @@ function ExchangePickStep({
             — keeps the footer (Cancel) always reachable even at 20+ venues. */}
         <div
           role="radiogroup"
-          aria-label="Exchange"
+          aria-label={t("fields.exchange")}
           className="grid max-h-[420px] grid-cols-2 gap-2 overflow-y-auto pr-1"
         >
           {catalog.map((c) => (
@@ -277,7 +282,7 @@ function ExchangePickStep({
           className="font-mono text-[11px] uppercase tracking-[0.12em] text-text-secondary"
           onClick={onCancel}
         >
-          Cancel
+          {t("common.cancel")}
         </Button>
       </DialogFooter>
     </>
@@ -328,6 +333,7 @@ function CredentialsStep({
   onBack,
   onSubmit,
 }: CredentialsStepProps) {
+  const t = useT();
   // Focus the first field when step 2 mounts. We query by id rather than ref
   // because the underlying WizardInput types itself with HTMLAttributes
   // (which doesn't expose `ref`).
@@ -354,9 +360,9 @@ function CredentialsStep({
     >
       <DialogBody className="space-y-5">
         <WizardField
-          label="Label"
+          label={t("settings.exchanges.dialog.fields.label")}
           htmlFor={labelFieldId}
-          helper="A short name only you'll see. e.g. 'Binance main'."
+          helper={t("settings.exchanges.dialog.fields.labelHelper")}
           required
         >
           <WizardInput
@@ -366,7 +372,11 @@ function CredentialsStep({
               setCreds((p) => ({ ...p, label: e.target.value }))
             }
             placeholder={
-              exchange ? `${exchange.displayName} main` : "Connection label"
+              exchange
+                ? t("settings.exchanges.dialog.fields.labelPlaceholderNamed", {
+                    exchange: exchange.displayName,
+                  })
+                : t("settings.exchanges.dialog.fields.labelPlaceholder")
             }
             maxLength={40}
             required
@@ -376,9 +386,9 @@ function CredentialsStep({
         </WizardField>
 
         <WizardField
-          label="API key"
+          label={t("fields.apiKey")}
           htmlFor={apiKeyFieldId}
-          helper="The public half of your read-only key."
+          helper={t("settings.exchanges.dialog.fields.apiKeyHelper")}
           required
         >
           <WizardInput
@@ -398,9 +408,9 @@ function CredentialsStep({
         </WizardField>
 
         <WizardField
-          label="API secret"
+          label={t("fields.apiSecret")}
           htmlFor={apiSecretFieldId}
-          helper="Hidden after entry. Encrypted at rest with AES-256-GCM."
+          helper={t("settings.exchanges.dialog.fields.apiSecretHelper")}
           required
         >
           <WizardInput
@@ -420,9 +430,11 @@ function CredentialsStep({
 
         {needsPassphrase && (
           <WizardField
-            label="Passphrase"
+            label={t("fields.passphrase")}
             htmlFor={passphraseFieldId}
-            helper={`${exchange?.displayName ?? "This exchange"} requires the passphrase you set when creating the API key.`}
+            helper={t("settings.exchanges.dialog.fields.passphraseHelper", {
+              exchange: exchange?.displayName ?? t("settings.exchanges.dialog.fields.thisExchangeFallback"),
+            })}
             required
           >
             <WizardInput
@@ -443,17 +455,10 @@ function CredentialsStep({
 
         <div className="rounded-md border border-border-subtle bg-inset p-3">
           <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-text-tertiary">
-            Security
+            {t("settings.exchanges.dialog.securityTitle")}
           </p>
           <p className="mt-1.5 font-serif text-[12px] italic leading-snug text-text-secondary">
-            Your keys are encrypted at rest with AES-256-GCM. We verify the key
-            against the exchange on the first sync — until then the connection
-            status stays{" "}
-            <span className="font-mono not-italic">pending</span>. Use a
-            read-only key; keys with withdraw permission will be rejected at
-            sync. Click{" "}
-            <span className="font-mono not-italic">Sync now</span> after adding
-            to test the credentials.
+            {t("settings.exchanges.dialog.securityBody")}
           </p>
         </div>
 
@@ -479,7 +484,7 @@ function CredentialsStep({
           className="font-mono text-[11px] uppercase tracking-[0.12em] text-text-secondary"
         >
           <ArrowLeft className="h-3.5 w-3.5" />
-          Back
+          {t("common.back")}
         </Button>
         <Button
           type="submit"
@@ -488,7 +493,9 @@ function CredentialsStep({
           className="font-mono text-[11px] uppercase tracking-[0.12em]"
         >
           {submitting && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
-          {submitting ? "Adding…" : "Add connection"}
+          {submitting
+            ? t("settings.exchanges.dialog.adding")
+            : t("settings.exchanges.dialog.submit")}
         </Button>
       </DialogFooter>
     </form>

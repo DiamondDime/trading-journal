@@ -1,5 +1,8 @@
+"use client";
+
 import Link from "next/link";
 import { Pencil } from "lucide-react";
+import { useT } from "@/lib/i18n/client";
 
 export interface WizardSummaryRowProps {
   /** Label shown on the left (mono, uppercase). */
@@ -29,6 +32,7 @@ export function WizardSummaryRow({
   tone = "neutral",
   mono = true,
 }: WizardSummaryRowProps) {
+  const t = useT();
   const toneClass =
     tone === "up"
       ? "text-up"
@@ -59,7 +63,7 @@ export function WizardSummaryRow({
             className="inline-flex items-center gap-1 font-mono text-[9px] uppercase tracking-[0.16em] text-text-tertiary transition-colors hover:text-text"
           >
             <Pencil className="h-2.5 w-2.5" />
-            Edit
+            {t("common.edit")}
           </Link>
         )}
       </div>

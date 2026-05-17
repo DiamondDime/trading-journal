@@ -104,7 +104,10 @@ export default async function RegimeDistributionPage() {
     .map((r) => ({
       label: r.regime,
       value: r.netPnl,
-      meta: `${r.count} · ${(r.winRate * 100).toFixed(0)}% win`,
+      meta: t("analytics.common.winMeta", {
+        count: r.count,
+        pct: (r.winRate * 100).toFixed(0),
+      }),
     }));
 
   return (

@@ -21,8 +21,6 @@ import { ActivityMix } from "@/components/spread/activity-mix";
 import {
   fmtCapital,
   fmtUsd,
-  ACTIVITY_TYPE_LABELS,
-  SPREAD_TYPE_LABELS,
   type Activity,
 } from "@/lib/data/archive-data";
 import { requireUser } from "@/lib/auth/server";
@@ -61,19 +59,6 @@ export const dynamic = "force-dynamic";
 
 const RECENT_COUNT = 8;
 
-function describeActivity(a: Activity): string {
-  switch (a.type) {
-    case "spread":
-      return `${a.variant} · ${a.venues}`;
-    case "trade":
-      return `${a.exchange} · ${a.instrument} · ${a.side}`;
-    case "sale":
-      return `${a.saleKind.toUpperCase()} · ${a.venue}`;
-    case "airdrop":
-      return `${a.protocol} · retro drop`;
-  }
-}
-
 // Local-time YYYY-MM-DD — used to align with getDailyPnl's date buckets which
 // come back from Postgres as date strings in the server's TZ.
 function ymdLocal(d: Date): string {
@@ -81,14 +66,6 @@ function ymdLocal(d: Date): string {
   const m = String(d.getMonth() + 1).padStart(2, "0");
   const day = String(d.getDate()).padStart(2, "0");
   return `${y}-${m}-${day}`;
-}
-
-function bestDelta(a: Activity | null | undefined): string {
-  if (!a) return "—";
-  if (a.type === "spread") {
-    return `${a.serial} · ${SPREAD_TYPE_LABELS[a.spreadType].toLowerCase()} · ${a.daysLabel}`;
-  }
-  return `${a.serial} · ${ACTIVITY_TYPE_LABELS[a.type].toLowerCase()} · ${a.daysLabel}`;
 }
 
 /**
@@ -121,6 +98,7 @@ function ymdOf(closedAt: unknown): string | null {
  */
 function buildEquityPoints(
   rows: { closedAt: string | null; netPnlUsd: string | null }[],
+  intlLocale: string,
 ): EquityPoint[] {
   // Group by YYYY-MM-DD then sort chronologically. ISO string sort is stable
   // for date-only buckets.
@@ -142,7 +120,7 @@ function buildEquityPoints(
   for (const [ymd, dayPnl] of ordered) {
     equity += dayPnl;
     if (equity > peak) peak = equity;
-    const label = new Date(`${ymd}T00:00:00`).toLocaleDateString("en-US", {
+    const label = new Date(`${ymd}T00:00:00`).toLocaleDateString(intlLocale, {
       month: "short",
       day: "numeric",
     });
@@ -221,6 +199,61 @@ export default async function SpreadsPage({ searchParams }: SpreadsPageProps) {
   const t = await getT();
   const locale = await getLocale();
   const intlLocale = locale === "ru" ? "ru-RU" : "en-US";
+
+  // Translated activity-type label (singular, lowercased) for delta lines.
+  function activityTypeLower(type: Activity["type"]): string {
+    switch (type) {
+      case "spread":
+        return t("spreadsList.activityTypeLower.spread");
+      case "trade":
+        return t("spreadsList.activityTypeLower.trade");
+      case "sale":
+        return t("spreadsList.activityTypeLower.sale");
+      case "airdrop":
+        return t("spreadsList.activityTypeLower.airdrop");
+    }
+  }
+
+  // Translated spread-type label (singular, lowercased) for delta lines.
+  function spreadTypeLower(spreadType: string): string {
+    switch (spreadType) {
+      case "cash_carry":
+        return t("spreadsList.spreadTypeLower.cashCarry");
+      case "calendar":
+        return t("spreadsList.spreadTypeLower.calendar");
+      case "funding":
+        return t("spreadsList.spreadTypeLower.funding");
+      case "cross_exchange":
+        return t("spreadsList.spreadTypeLower.crossExchange");
+      case "dex_cex":
+        return t("spreadsList.spreadTypeLower.dexCex");
+      default:
+        return t("spreadsList.spreadTypeLower.cashCarry");
+    }
+  }
+
+  // Build the "describe activity" suffix for the recent-closes grid.
+  function describeActivity(a: Activity): string {
+    switch (a.type) {
+      case "spread":
+        return `${a.variant} · ${a.venues}`;
+      case "trade":
+        return `${a.exchange} · ${a.instrument} · ${a.side}`;
+      case "sale":
+        return `${a.saleKind.toUpperCase()} · ${a.venue}`;
+      case "airdrop":
+        return `${a.protocol} · ${t("spreadsList.retroDrop")}`;
+    }
+  }
+
+  // Build the "best/worst" subtitle for the KPI cards: serial + type + held.
+  function bestDelta(a: Activity | null | undefined): string {
+    if (!a) return "—";
+    if (a.type === "spread") {
+      return `${a.serial} · ${spreadTypeLower(a.spreadType)} · ${a.daysLabel}`;
+    }
+    return `${a.serial} · ${activityTypeLower(a.type)} · ${a.daysLabel}`;
+  }
 
   const rawSearchParams = await searchParams;
   const dashParams = parseDashboardSearchParams(rawSearchParams);
@@ -315,7 +348,7 @@ export default async function SpreadsPage({ searchParams }: SpreadsPageProps) {
   const rDistRaw = computeRDistribution(closedNormalized, rUnit, 0.5);
 
   // Pre-built equity-curve points, ready to ship to the client wrapper.
-  const equityPoints = buildEquityPoints(closedNormalized);
+  const equityPoints = buildEquityPoints(closedNormalized, intlLocale);
   const currentEquity =
     equityPoints.length > 0
       ? equityPoints[equityPoints.length - 1].equity
@@ -404,7 +437,7 @@ export default async function SpreadsPage({ searchParams }: SpreadsPageProps) {
     ? new Date(totals.firstClose).toLocaleDateString(intlLocale, {
         month: "short", day: "numeric", year: "numeric",
       })
-    : (locale === "ru" ? "сегодня" : "today");
+    : t("spreadsList.sinceToday");
 
   return (
     <div className="w-full">
@@ -724,9 +757,7 @@ export default async function SpreadsPage({ searchParams }: SpreadsPageProps) {
             </div>
             {tagAggs.length > 0 && (
               <span className="font-mono text-[11px] text-text-tertiary">
-                {locale === "ru"
-                  ? `${tagAggs.length} ${tagAggs.length === 1 ? "тег" : "тегов"}`
-                  : `${tagAggs.length} distinct ${tagAggs.length === 1 ? "tag" : "tags"}`}
+                {t.plural("spreadsList.distinctTags", tagAggs.length)}
               </span>
             )}
           </div>

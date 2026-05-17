@@ -1,4 +1,7 @@
+"use client";
+
 import { cn } from "@/lib/utils";
+import { useT } from "@/lib/i18n/client";
 
 export interface WizardFieldProps {
   /** Field label — rendered above the input. */
@@ -31,6 +34,7 @@ export function WizardField({
   className,
   children,
 }: WizardFieldProps) {
+  const t = useT();
   return (
     <div
       className={cn(
@@ -47,7 +51,9 @@ export function WizardField({
       >
         {label}
         {required && (
-          <span className="ml-1.5 text-text-disabled">· required</span>
+          <span className="ml-1.5 text-text-disabled">
+            · {t("common.required")}
+          </span>
         )}
       </label>
       <div className={cn(inline ? "flex-1" : "")}>{children}</div>

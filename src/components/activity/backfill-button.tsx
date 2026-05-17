@@ -3,6 +3,7 @@
 import * as React from "react";
 import { Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useT } from "@/lib/i18n/client";
 
 interface BackfillButtonProps {
   activityId: string;
@@ -19,6 +20,7 @@ interface BackfillButtonProps {
  * understands what just happened (the queue isn't implemented yet for v1).
  */
 export function BackfillButton({ activityId }: BackfillButtonProps) {
+  const t = useT();
   const [status, setStatus] = React.useState<"idle" | "pending" | "flashed" | "error">(
     "idle",
   );
@@ -42,12 +44,15 @@ export function BackfillButton({ activityId }: BackfillButtonProps) {
       }
       if (res.status === 404) {
         setStatus("error");
-        setMessage("This activity no longer exists.");
+        setMessage(t("activity.backfill.errors.notFound"));
         return;
       }
       const json = await res.json().catch(() => null);
       setStatus("error");
-      setMessage(json?.error?.message ?? `Request failed (${res.status})`);
+      setMessage(
+        json?.error?.message ??
+          t("activity.backfill.errors.failed", { status: res.status }),
+      );
     } catch (e) {
       setStatus("error");
       setMessage(e instanceof Error ? e.message : String(e));
@@ -70,7 +75,7 @@ export function BackfillButton({ activityId }: BackfillButtonProps) {
         {status === "pending" && (
           <Loader2 className="h-3 w-3 animate-spin" aria-hidden="true" />
         )}
-        Backfill
+        {t("activity.backfill.cta")}
       </button>
       {message && (
         <p

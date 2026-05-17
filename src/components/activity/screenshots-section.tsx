@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { ImagePlus, Loader2, Pencil, Trash2 } from "lucide-react";
 
 import { cn } from "@/lib/utils";
+import { useT } from "@/lib/i18n/client";
 import {
   Dialog,
   DialogBody,
@@ -55,6 +56,7 @@ const MAX_CAPTION = 1000;
 // ──────────────────────────────────────────────────────────────────────────────
 
 export function ScreenshotsSection({ activityId, initialScreenshots }: Props) {
+  const t = useT();
   // Local copy of the server-rendered list — drives append after upload and
   // remove after delete without forcing a full route refresh on every edit.
   const [items, setItems] = React.useState<ScreenshotItem[]>(() => [
@@ -99,9 +101,7 @@ export function ScreenshotsSection({ activityId, initialScreenshots }: Props) {
           className="font-mono text-[10px] uppercase tracking-[0.16em] text-text-tertiary"
           aria-live="polite"
         >
-          {count === 0
-            ? "0 screenshots"
-            : `${count} ${count === 1 ? "screenshot" : "screenshots"}`}
+          {t.plural("activity.screenshots.count", count)}
         </p>
         <UploadTrigger
           activityId={activityId}
@@ -113,12 +113,12 @@ export function ScreenshotsSection({ activityId, initialScreenshots }: Props) {
 
       {items.length === 0 ? (
         <p className="mt-4 rounded-md border border-dashed border-border bg-inset px-4 py-8 text-center font-serif text-[14px] italic text-text-tertiary">
-          No screenshots yet. Click &quot;+ Add screenshot&quot; to upload.
+          {t("activity.screenshots.emptyBody")}
         </p>
       ) : (
         <ul
           className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-3"
-          aria-label="Screenshots"
+          aria-label={t("activity.screenshots.listAria")}
         >
           {items.map((item) => (
             <li key={item.id}>
@@ -130,7 +130,14 @@ export function ScreenshotsSection({ activityId, initialScreenshots }: Props) {
                   "transition-colors hover:border-border-strong",
                   "focus:outline-none focus:ring-1 focus:ring-text",
                 )}
-                aria-label={`Open screenshot: ${item.side}${item.caption ? ` — ${item.caption}` : ""}`}
+                aria-label={
+                  item.caption
+                    ? t("activity.screenshots.openAriaCaptioned", {
+                        side: item.side,
+                        caption: item.caption,
+                      })
+                    : t("activity.screenshots.openAria", { side: item.side })
+                }
               >
                 <ThumbnailImage item={item} />
                 {item.caption && (
@@ -161,6 +168,7 @@ export function ScreenshotsSection({ activityId, initialScreenshots }: Props) {
 // ──────────────────────────────────────────────────────────────────────────────
 
 function ThumbnailImage({ item }: { item: ScreenshotItem }) {
+  const t = useT();
   const hasAnnotation = item.annotationState != null;
   return (
     <div className="relative aspect-square w-full overflow-hidden rounded-sm bg-inset">
@@ -168,7 +176,9 @@ function ThumbnailImage({ item }: { item: ScreenshotItem }) {
           our own protected endpoint; next/image would force public optimisation. */}
       <img
         src={`/api/screenshots/${item.id}/file`}
-        alt={item.caption ?? `${item.side} screenshot`}
+        alt={
+          item.caption ?? t("activity.screenshots.altText", { side: item.side })
+        }
         loading="lazy"
         className="h-full w-full object-cover"
         draggable={false}
@@ -176,8 +186,8 @@ function ThumbnailImage({ item }: { item: ScreenshotItem }) {
       <SideBadge side={item.side} className="absolute left-2 top-2" />
       {hasAnnotation && (
         <span
-          aria-label="annotated"
-          title="Has annotations"
+          aria-label={t("activity.screenshots.annotatedAria")}
+          title={t("activity.screenshots.annotatedTitle")}
           className="absolute right-2 top-2 inline-flex h-5 w-5 items-center justify-center rounded-sm border border-border bg-surface text-text-secondary"
         >
           <Pencil className="h-3 w-3" />
@@ -225,6 +235,7 @@ function UploadTrigger({
   onOpenChange,
   onUploaded,
 }: UploadTriggerProps) {
+  const t = useT();
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogTrigger asChild>
@@ -239,7 +250,7 @@ function UploadTrigger({
           data-testid="add-screenshot-trigger"
         >
           <ImagePlus className="h-3 w-3" />
-          Add screenshot
+          {t("activity.screenshots.add")}
         </button>
       </DialogTrigger>
       <DialogContent className="sm:max-w-[520px]">
@@ -260,6 +271,7 @@ interface UploadFormProps {
 }
 
 function UploadForm({ activityId, onUploaded, onCancel }: UploadFormProps) {
+  const t = useT();
   const fileInputId = React.useId();
   const captionId = React.useId();
   const errorId = React.useId();
@@ -283,20 +295,22 @@ function UploadForm({ activityId, onUploaded, onCancel }: UploadFormProps) {
       // typically reports the right MIME. Fall back to extension check.
       const ext = next.name.split(".").pop()?.toLowerCase() ?? "";
       if (!["png", "jpg", "jpeg", "webp"].includes(ext)) {
-        setError("Unsupported format. Use PNG, JPEG, or WebP.");
+        setError(t("activity.screenshots.errors.unsupported"));
         setFile(null);
         return;
       }
     }
     if (next.size > MAX_BYTES) {
       setError(
-        `File is ${(next.size / 1024 / 1024).toFixed(1)}MB — limit is 10MB.`,
+        t("activity.screenshots.errors.tooLarge", {
+          size: (next.size / 1024 / 1024).toFixed(1),
+        }),
       );
       setFile(null);
       return;
     }
     if (next.size <= 0) {
-      setError("File is empty.");
+      setError(t("activity.screenshots.errors.empty"));
       setFile(null);
       return;
     }
@@ -323,10 +337,10 @@ function UploadForm({ activityId, onUploaded, onCancel }: UploadFormProps) {
         const json = await res.json().catch(() => null);
         const fallback =
           res.status === 413 || res.status === 422
-            ? "Upload rejected — wrong format or too large."
+            ? t("activity.screenshots.errors.rejected")
             : res.status === 404
-              ? "Activity not found — reload and try again."
-              : `Upload failed (${res.status})`;
+              ? t("activity.screenshots.errors.notFound")
+              : t("activity.screenshots.errors.uploadFailed", { status: res.status });
         setError(json?.error?.message ?? fallback);
         setSubmitting(false);
         return;
@@ -369,19 +383,18 @@ function UploadForm({ activityId, onUploaded, onCancel }: UploadFormProps) {
   return (
     <form onSubmit={handleSubmit} aria-describedby={error ? errorId : undefined}>
       <DialogHeader>
-        <DialogEyebrow>Attach a chart screenshot</DialogEyebrow>
-        <DialogTitle>Add screenshot</DialogTitle>
+        <DialogEyebrow>{t("activity.screenshots.attachEyebrow")}</DialogEyebrow>
+        <DialogTitle>{t("activity.screenshots.add")}</DialogTitle>
         <DialogDescription>
-          PNG, JPEG, or WebP up to 10MB. Side tags help you scan the journal at a
-          glance.
+          {t("activity.screenshots.uploadDesc")}
         </DialogDescription>
       </DialogHeader>
 
       <DialogBody className="space-y-5">
         <WizardField
-          label="File"
+          label={t("activity.screenshots.fileLabel")}
           htmlFor={fileInputId}
-          helper={sizeLabel ?? "Pick an image from your machine."}
+          helper={sizeLabel ?? t("activity.screenshots.fileHelper")}
           required
         >
           <input
@@ -405,8 +418,17 @@ function UploadForm({ activityId, onUploaded, onCancel }: UploadFormProps) {
           />
         </WizardField>
 
-        <WizardField label="Side" htmlFor="" helper="Where on the trade arc?" required>
-          <div role="radiogroup" aria-label="Side" className="grid grid-cols-3 gap-2">
+        <WizardField
+          label={t("activity.screenshots.sideLabel")}
+          htmlFor=""
+          helper={t("activity.screenshots.sideHelper")}
+          required
+        >
+          <div
+            role="radiogroup"
+            aria-label={t("activity.screenshots.sideAria")}
+            className="grid grid-cols-3 gap-2"
+          >
             {SIDES.map((s) => (
               <SideRadioCard
                 key={s}
@@ -420,15 +442,15 @@ function UploadForm({ activityId, onUploaded, onCancel }: UploadFormProps) {
         </WizardField>
 
         <WizardField
-          label="Caption"
+          label={t("activity.screenshots.captionLabel")}
           htmlFor={captionId}
-          helper={`Optional · ${captionRemaining} chars left`}
+          helper={t("activity.screenshots.captionHelper", { count: captionRemaining })}
         >
           <WizardTextarea
             id={captionId}
             value={caption}
             onChange={(e) => setCaption(e.target.value.slice(0, MAX_CAPTION))}
-            placeholder="What were you looking at? e.g. 'breakout above prior swing high'"
+            placeholder={t("activity.screenshots.captionPlaceholder")}
             rows={3}
             disabled={submitting}
             maxLength={MAX_CAPTION}
@@ -438,7 +460,7 @@ function UploadForm({ activityId, onUploaded, onCancel }: UploadFormProps) {
         {submitting && (
           <p className="flex items-center gap-2 font-mono text-[11px] text-text-secondary">
             <Loader2 className="h-3 w-3 animate-spin" />
-            Uploading…
+            {t("activity.screenshots.uploading")}
           </p>
         )}
 
@@ -466,7 +488,7 @@ function UploadForm({ activityId, onUploaded, onCancel }: UploadFormProps) {
             "disabled:cursor-not-allowed disabled:opacity-60",
           )}
         >
-          Cancel
+          {t("common.cancel")}
         </button>
         <button
           type="submit"
@@ -479,7 +501,9 @@ function UploadForm({ activityId, onUploaded, onCancel }: UploadFormProps) {
           )}
         >
           {submitting && <Loader2 className="h-3 w-3 animate-spin" />}
-          {submitting ? "Uploading…" : "Upload"}
+          {submitting
+            ? t("activity.screenshots.uploading")
+            : t("activity.screenshots.upload")}
         </button>
       </DialogFooter>
     </form>
@@ -497,6 +521,7 @@ function SideRadioCard({
   disabled: boolean;
   onSelect: () => void;
 }) {
+  const t = useT();
   return (
     <button
       type="button"
@@ -514,11 +539,19 @@ function SideRadioCard({
           : "border-border bg-surface text-text-secondary hover:border-border-strong hover:text-text",
       )}
     >
-      <span>{value}</span>
+      <span>
+        {value === "entry"
+          ? t("activity.screenshots.sides.entry.label")
+          : value === "exit"
+            ? t("activity.screenshots.sides.exit.label")
+            : t("activity.screenshots.sides.context.label")}
+      </span>
       <span className="font-serif text-[10px] italic normal-case tracking-normal text-text-tertiary">
-        {value === "entry" && "at open"}
-        {value === "exit" && "at close"}
-        {value === "context" && "thesis / mid-trade"}
+        {value === "entry"
+          ? t("activity.screenshots.sides.entry.caption")
+          : value === "exit"
+            ? t("activity.screenshots.sides.exit.caption")
+            : t("activity.screenshots.sides.context.caption")}
       </span>
     </button>
   );
@@ -541,6 +574,7 @@ function ScreenshotViewer({
   onDeleted,
   onAnnotated,
 }: ViewerProps) {
+  const t = useT();
   // `mode` controls which child renders inside the viewer. View mode shows a
   // static <img>; annotate mode swaps it for a container where MarkerJS2 takes
   // over. The image element ref is shared across modes — MarkerJS2 needs a
@@ -563,7 +597,10 @@ function ScreenshotViewer({
       });
       if (!res.ok && res.status !== 204) {
         const json = await res.json().catch(() => null);
-        setDeleteError(json?.error?.message ?? `Delete failed (${res.status})`);
+        setDeleteError(
+          json?.error?.message ??
+            t("activity.screenshots.errors.deleteFailed", { status: res.status }),
+        );
         setDeletePending(false);
         return;
       }
@@ -579,9 +616,20 @@ function ScreenshotViewer({
       <DialogContent className="sm:max-w-4xl" hideCloseButton>
         <DialogHeader>
           <DialogEyebrow>
-            Screenshot · {new Date(item.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
+            {t("activity.screenshots.viewerEyebrow", {
+              date: new Date(item.createdAt).toLocaleDateString(t.locale === "ru" ? "ru-RU" : "en-US", {
+                month: "short",
+                day: "numeric",
+                year: "numeric",
+              }),
+            })}
           </DialogEyebrow>
-          <DialogTitle>{item.caption ?? `${item.side[0].toUpperCase()}${item.side.slice(1)} screenshot`}</DialogTitle>
+          <DialogTitle>
+            {item.caption ??
+              t("activity.screenshots.viewerDefaultTitle", {
+                side: `${item.side[0].toUpperCase()}${item.side.slice(1)}`,
+              })}
+          </DialogTitle>
           <DialogDescription>
             <span className="inline-flex items-center gap-2">
               <SideBadge side={item.side} />
@@ -598,13 +646,19 @@ function ScreenshotViewer({
           {mode === "view" ? (
             <ViewerImage
               src={`/api/screenshots/${item.id}/file`}
-              alt={item.caption ?? `${item.side} screenshot`}
+              alt={
+                item.caption ??
+                t("activity.screenshots.altText", { side: item.side })
+              }
             />
           ) : (
             <Annotator
               key={item.id}
               src={`/api/screenshots/${item.id}/file`}
-              alt={item.caption ?? `${item.side} screenshot`}
+              alt={
+                item.caption ??
+                t("activity.screenshots.altText", { side: item.side })
+              }
               initialState={item.annotationState}
               onSaved={async (state) => {
                 // PATCH /api/screenshots/[id] with the new annotation_state.
@@ -638,8 +692,7 @@ function ScreenshotViewer({
           {confirmDelete && (
             <div className="rounded-md border border-down/30 bg-down/5 p-3">
               <p className="font-serif text-[13px] italic text-text-secondary">
-                Delete this screenshot? The file is removed from disk and the
-                metadata row is dropped.
+                {t("activity.screenshots.viewerConfirmDelete")}
               </p>
               {deleteError && (
                 <p
@@ -664,7 +717,7 @@ function ScreenshotViewer({
                     "disabled:cursor-not-allowed disabled:opacity-60",
                   )}
                 >
-                  Cancel
+                  {t("common.cancel")}
                 </button>
                 <button
                   type="button"
@@ -678,7 +731,9 @@ function ScreenshotViewer({
                   )}
                 >
                   {deletePending && <Loader2 className="h-3 w-3 animate-spin" />}
-                  {deletePending ? "Deleting…" : "Delete screenshot"}
+                  {deletePending
+                    ? t("activity.screenshots.deleting")
+                    : t("activity.screenshots.deleteCta")}
                 </button>
               </div>
             </div>
@@ -698,7 +753,7 @@ function ScreenshotViewer({
               )}
             >
               <Trash2 className="h-3 w-3" />
-              Delete
+              {t("common.delete")}
             </button>
             <button
               type="button"
@@ -710,7 +765,9 @@ function ScreenshotViewer({
               )}
             >
               <Pencil className="h-3 w-3" />
-              {item.annotationState ? "Edit annotations" : "Annotate"}
+              {item.annotationState
+                ? t("activity.screenshots.editAnnotations")
+                : t("activity.screenshots.annotate")}
             </button>
             <DialogClose asChild>
               <button
@@ -721,7 +778,7 @@ function ScreenshotViewer({
                   "transition-colors hover:bg-text/90",
                 )}
               >
-                Close
+                {t("common.close")}
               </button>
             </DialogClose>
           </DialogFooter>
@@ -780,6 +837,7 @@ function Annotator({
   onSaved,
   onCancelled,
 }: AnnotatorProps) {
+  const t = useT();
   const imgRef = React.useRef<HTMLImageElement | null>(null);
   const markerAreaRef = React.useRef<unknown | null>(null);
   const [imgLoaded, setImgLoaded] = React.useState(false);
@@ -888,8 +946,7 @@ function Annotator({
           className="max-h-[60vh] w-auto object-contain"
         />
         <p className="font-serif text-[12px] italic text-text-tertiary">
-          Annotation unavailable — couldn&apos;t load the annotator. You can
-          still view and delete this screenshot.
+          {t("activity.screenshots.annotatorUnavailable")}
         </p>
         <button
           type="button"
@@ -900,7 +957,7 @@ function Annotator({
             "transition-colors hover:border-border-strong hover:text-text",
           )}
         >
-          Back
+          {t("common.back")}
         </button>
       </div>
     );
@@ -925,7 +982,7 @@ function Annotator({
         <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-surface/40 backdrop-blur-[1px]">
           <span className="inline-flex items-center gap-2 font-mono text-[10px] uppercase tracking-[0.16em] text-text-secondary">
             <Loader2 className="h-3 w-3 animate-spin" />
-            Loading annotator…
+            {t("activity.screenshots.loadingAnnotator")}
           </span>
         </div>
       )}
