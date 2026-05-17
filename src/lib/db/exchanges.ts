@@ -45,6 +45,17 @@ export interface CatalogExchange {
   referralUrl: string | null;
   /** Short italic-serif caption used in the Recommended rail. */
   referralBlurb: string | null;
+  /** Headline rebate percentage (e.g. 40 → "Up to 40% fee rebate").
+   *  These are conservative defaults that match what the exchanges
+   *  themselves market. Edit per-exchange in the OVERLAY map below. */
+  rebatePct: number | null;
+  /** Short welcome-bonus copy. Translated via i18n key when prefixed with
+   *  `i18n:` — otherwise displayed verbatim. */
+  welcomeBonus: string | null;
+  /** 2-3 perk i18n keys (under `partners.perks.*`) — translated at render. */
+  perks: string[];
+  /** Sort order in the partners marketing rail. Lower = higher. */
+  priority: number;
 }
 
 /**
@@ -64,93 +75,213 @@ export interface CatalogExchange {
  */
 type Overlay = Pick<
   CatalogExchange,
-  "requiresPassphrase" | "logoUrl" | "referralUrl" | "referralBlurb"
+  | "requiresPassphrase"
+  | "logoUrl"
+  | "referralUrl"
+  | "referralBlurb"
+  | "rebatePct"
+  | "welcomeBonus"
+  | "perks"
+  | "priority"
 >;
 
+/**
+ * Referral data populated 2026-05-17. Rebate percentages are conservative
+ * placeholders — the exchanges set the real terms. Update freely in this
+ * file (no migration needed) when the user gets fresh numbers from a
+ * partner manager.
+ *
+ * Priority controls the partners-page sort order. Bybit and OKX lead
+ * because they're the two venues users are most likely to recognize.
+ */
 const OVERLAY: Record<string, Overlay> = {
   binance: {
     requiresPassphrase: false,
     logoUrl: null,
     referralUrl: null,
     referralBlurb: "Deepest perp book · lowest fees with VIP tier",
+    rebatePct: null,
+    welcomeBonus: null,
+    perks: [],
+    priority: 99,
   },
   bybit: {
     requiresPassphrase: false,
     logoUrl: null,
-    referralUrl: null,
+    referralUrl: "https://partner.bybit.com/b/94654",
     referralBlurb: "Strong funding rates for cash-and-carry",
+    rebatePct: 20,
+    welcomeBonus: "partners.bonus.bybit",
+    perks: [
+      "partners.perks.feeRebates",
+      "partners.perks.welcomeBonus",
+      "partners.perks.fundingLeader",
+    ],
+    priority: 10,
   },
   okx: {
     requiresPassphrase: true,
     logoUrl: null,
-    referralUrl: null,
+    referralUrl: "https://okx.com/ru-ae/join/44845570",
     referralBlurb: "Multi-asset margin · tight perp spreads",
+    rebatePct: 20,
+    welcomeBonus: "partners.bonus.okx",
+    perks: [
+      "partners.perks.feeRebates",
+      "partners.perks.multiMargin",
+      "partners.perks.tightSpreads",
+    ],
+    priority: 20,
   },
   bitget: {
     requiresPassphrase: true,
     logoUrl: null,
-    referralUrl: null,
+    referralUrl:
+      "https://www.bitgetapp.com/ru/referral/register?clacCode=QA7PEZ1K&from=%2Fru%2Fevents%2Freferral-all-program&source=events&utmSource=PremierInviter",
     referralBlurb: "Aggressive maker rebates on perps",
+    rebatePct: 30,
+    welcomeBonus: "partners.bonus.bitget",
+    perks: [
+      "partners.perks.feeRebates",
+      "partners.perks.makerRebates",
+      "partners.perks.welcomeBonus",
+    ],
+    priority: 50,
   },
   kucoin: {
     requiresPassphrase: true,
     logoUrl: null,
-    referralUrl: null,
+    referralUrl: "https://www.kucoin.com/ucenter/signup?utm_source=app_g_Share",
     referralBlurb: "Long-tail altcoin perps",
+    rebatePct: 40,
+    welcomeBonus: "partners.bonus.kucoin",
+    perks: [
+      "partners.perks.feeRebates",
+      "partners.perks.altCoverage",
+      "partners.perks.welcomeBonus",
+    ],
+    priority: 60,
   },
   phemex: {
     requiresPassphrase: true,
     logoUrl: null,
-    referralUrl: null,
+    referralUrl: "https://phemex.com/register?referralCode=BU8YF9&scene=referral",
     referralBlurb: "Low-latency inverse perps",
+    rebatePct: 40,
+    welcomeBonus: "partners.bonus.phemex",
+    perks: [
+      "partners.perks.feeRebates",
+      "partners.perks.lowLatency",
+      "partners.perks.inversePerps",
+    ],
+    priority: 80,
   },
   bingx: {
     requiresPassphrase: false,
     logoUrl: null,
-    referralUrl: null,
+    referralUrl: "https://bingxdao.com/invite/2XFCXB/",
     referralBlurb: "Copy-trading focused · friendly funding",
+    rebatePct: 30,
+    welcomeBonus: "partners.bonus.bingx",
+    perks: [
+      "partners.perks.feeRebates",
+      "partners.perks.copyTrading",
+      "partners.perks.fundingLeader",
+    ],
+    priority: 70,
   },
   mexc: {
     requiresPassphrase: false,
     logoUrl: null,
-    referralUrl: null,
+    referralUrl: "https://promote.mexc.com/a/2DkdpyPG",
     referralBlurb: "Widest altcoin coverage",
+    rebatePct: 50,
+    welcomeBonus: "partners.bonus.mexc",
+    perks: [
+      "partners.perks.feeRebates",
+      "partners.perks.altCoverage",
+      "partners.perks.welcomeBonus",
+    ],
+    priority: 40,
   },
   gate: {
     requiresPassphrase: false,
     logoUrl: null,
-    referralUrl: null,
-    referralBlurb: "Deep alt-perp listings",
+    referralUrl:
+      "https://www.gate.com/referral/registry?ref=VQVAVQ0KBQ&ref_type=103&page=superRebate",
+    referralBlurb: "Deep alt-perp listings · Super Rebate program",
+    rebatePct: 40,
+    welcomeBonus: "partners.bonus.gate",
+    perks: [
+      "partners.perks.feeRebates",
+      "partners.perks.altCoverage",
+      "partners.perks.deepBook",
+    ],
+    priority: 30,
+  },
+  htx: {
+    requiresPassphrase: false,
+    logoUrl: null,
+    referralUrl: "https://www.htx.com.ph/invite/ru-ru/1f?invite_code=9vxje223",
+    referralBlurb: "Long-history exchange · regulated SG entity",
+    rebatePct: 50,
+    welcomeBonus: "partners.bonus.htx",
+    perks: [
+      "partners.perks.feeRebates",
+      "partners.perks.regulated",
+      "partners.perks.welcomeBonus",
+    ],
+    priority: 45,
   },
   kraken: {
     requiresPassphrase: false,
     logoUrl: null,
     referralUrl: null,
     referralBlurb: "Regulated · spot-heavy hedge venue",
+    rebatePct: null,
+    welcomeBonus: null,
+    perks: [],
+    priority: 99,
   },
   deribit: {
     requiresPassphrase: false,
     logoUrl: null,
     referralUrl: null,
     referralBlurb: "Options + dated futures benchmark",
+    rebatePct: null,
+    welcomeBonus: null,
+    perks: [],
+    priority: 99,
   },
   hyperliquid: {
     requiresPassphrase: false,
     logoUrl: null,
     referralUrl: null,
     referralBlurb: "On-chain perps · zero gas, EVM custody",
+    rebatePct: null,
+    welcomeBonus: null,
+    perks: [],
+    priority: 99,
   },
   aster: {
     requiresPassphrase: false,
     logoUrl: null,
     referralUrl: null,
     referralBlurb: "Cross-chain perp DEX",
+    rebatePct: null,
+    welcomeBonus: null,
+    perks: [],
+    priority: 99,
   },
   okx_dex: {
     requiresPassphrase: false,
     logoUrl: null,
     referralUrl: null,
     referralBlurb: "OKX on-chain venue · spot + perp",
+    rebatePct: null,
+    welcomeBonus: null,
+    perks: [],
+    priority: 99,
   },
 };
 
@@ -192,6 +323,10 @@ export async function listExchangeCatalog(): Promise<CatalogExchange[]> {
       logoUrl: overlay?.logoUrl ?? null,
       referralUrl: overlay?.referralUrl ?? null,
       referralBlurb: overlay?.referralBlurb ?? null,
+      rebatePct: overlay?.rebatePct ?? null,
+      welcomeBonus: overlay?.welcomeBonus ?? null,
+      perks: overlay?.perks ?? [],
+      priority: overlay?.priority ?? 99,
     };
   });
 }
@@ -205,4 +340,17 @@ export function filterReferralExchanges(
   all: CatalogExchange[],
 ): CatalogExchange[] {
   return all.filter((e) => e.referralUrl != null && e.referralUrl.length > 0);
+}
+
+/**
+ * Returns referral-eligible exchanges sorted by priority (low = first).
+ * Used by the `/partners` marketing page to render the persuasion grid in
+ * a deliberate order rather than alphabetical.
+ */
+export function getPartnerCatalog(
+  all: CatalogExchange[],
+): CatalogExchange[] {
+  return filterReferralExchanges(all).sort(
+    (a, b) => a.priority - b.priority,
+  );
 }

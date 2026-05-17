@@ -13,6 +13,7 @@ import {
   Activity,
   FileText,
   Bookmark,
+  Sparkles,
   Plug,
   Plus,
   Search,
@@ -59,6 +60,7 @@ export function Sidebar() {
       items: [
         { icon: FileText, label: t("sidebar.nav.notes"), href: "/notes" },
         { icon: Bookmark, label: t("sidebar.nav.views"), href: "/views" },
+        { icon: Sparkles, label: t("partners.sidebarLink"), href: "/partners" },
         { icon: Plug, label: t("sidebar.nav.exchanges"), href: "/settings/exchanges" },
       ],
     },

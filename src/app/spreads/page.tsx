@@ -571,6 +571,29 @@ export default async function SpreadsPage({ searchParams }: SpreadsPageProps) {
           />
         </section>
 
+        {/* ── partners callout · only when no exchanges connected ──────── */}
+        {connectedExchangeCount === 0 && (
+          <section className="mb-8">
+            <div className="flex flex-col gap-4 rounded-md border border-border border-l-4 border-l-signature bg-surface px-6 py-5 md:flex-row md:items-center md:justify-between">
+              <div className="flex-1">
+                <h3 className="font-serif text-[14px] font-semibold text-text">
+                  {t("partners.dashboardCallout.title")}
+                </h3>
+                <p className="mt-1 font-serif text-[12px] italic text-text-secondary">
+                  {t("partners.dashboardCallout.body")}
+                </p>
+              </div>
+              <Link
+                href="/partners"
+                className="inline-flex items-center gap-2 self-start rounded-md bg-text px-4 py-2 font-mono text-[11px] uppercase tracking-[0.16em] text-app transition-opacity hover:opacity-90 md:self-auto"
+              >
+                {t("partners.dashboardCallout.cta")}
+                <ArrowRight className="h-3.5 w-3.5" />
+              </Link>
+            </div>
+          </section>
+        )}
+
         {/* ── heatmap + funding ticker ──────────────────────────────────── */}
         <section className="mb-8 grid grid-cols-1 gap-6 xl:grid-cols-[1.6fr_1fr]">
           <div className="rounded-md border border-border bg-surface">
