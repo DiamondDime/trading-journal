@@ -607,3 +607,38 @@ export const UpsertSatisfactionBody = z
   .strict();
 
 export type UpsertSatisfactionData = z.infer<typeof UpsertSatisfactionBody>;
+
+// ============================================================================
+// SavedView schemas (Wave 13C)
+//
+// The on-disk shape stores the URL inside the `filters` jsonb column; the API
+// surface exposes it as a flat `queryString` field. See
+// src/lib/db/saved-views.ts for the rationale.
+// ============================================================================
+
+/** POST /api/saved-views — create a new bookmark. */
+export const CreateSavedViewBody = z
+  .object({
+    name:         z.string().min(1).max(60),
+    description:  z.string().max(200).optional(),
+    queryString:  z.string().min(1).max(2000),
+  })
+  .strict();
+
+export type CreateSavedViewData = z.infer<typeof CreateSavedViewBody>;
+
+/**
+ * PATCH /api/saved-views/[id] — partial edit. Every field optional;
+ * `applied:true` is a convenience flag to bump lastAppliedAt without touching
+ * other fields (used by the Apply button on /views).
+ */
+export const UpdateSavedViewBody = z
+  .object({
+    name:         z.string().min(1).max(60).optional(),
+    description:  z.string().max(200).optional(),
+    queryString:  z.string().min(1).max(2000).optional(),
+    applied:      z.boolean().optional(),
+  })
+  .strict();
+
+export type UpdateSavedViewData = z.infer<typeof UpdateSavedViewBody>;

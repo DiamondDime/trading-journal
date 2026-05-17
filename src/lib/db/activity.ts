@@ -1204,6 +1204,62 @@ export async function getActivityTypeNetPnl(
 }
 
 /**
+ * Per-activity-type aggregations — count, net P&L, winners, losers, capital.
+ * Wider than the simpler getActivityTypeCounts / getActivityTypeNetPnl pair;
+ * this is what the /analytics/activity-mix table consumes to populate its
+ * per-type breakdown row including win rate.
+ */
+export interface ActivityTypeAggRow {
+  count: number;
+  netPnl: number;
+  winners: number;
+  losers: number;
+  capital: number;
+}
+
+export type ActivityTypeAggregations = Record<ActivityType, ActivityTypeAggRow>;
+
+export async function getActivityTypeAggregations(
+  userId: string,
+): Promise<ActivityTypeAggregations> {
+  const rows = await sql<{
+    type: ActivityType;
+    count: string;
+    netPnl: string | null;
+    winners: string;
+    losers: string;
+    capital: string | null;
+  }[]>`
+    SELECT
+      type,
+      count(*)::text                                          AS count,
+      sum(net_pnl_usd)::text                                  AS net_pnl,
+      sum(case when net_pnl_usd > 0 then 1 else 0 end)::text  AS winners,
+      sum(case when net_pnl_usd < 0 then 1 else 0 end)::text  AS losers,
+      sum(coalesce(capital_deployed_usd, 0))::text            AS capital
+    FROM public.v_activity_feed
+    WHERE user_id = ${userId}::uuid
+    GROUP BY type
+  `;
+  const out: ActivityTypeAggregations = {
+    spread:  { count: 0, netPnl: 0, winners: 0, losers: 0, capital: 0 },
+    trade:   { count: 0, netPnl: 0, winners: 0, losers: 0, capital: 0 },
+    sale:    { count: 0, netPnl: 0, winners: 0, losers: 0, capital: 0 },
+    airdrop: { count: 0, netPnl: 0, winners: 0, losers: 0, capital: 0 },
+  };
+  for (const r of rows) {
+    out[r.type] = {
+      count: Number(r.count ?? 0),
+      netPnl: Number(r.netPnl ?? 0),
+      winners: Number(r.winners ?? 0),
+      losers: Number(r.losers ?? 0),
+      capital: Number(r.capital ?? 0),
+    };
+  }
+  return out;
+}
+
+/**
  * Top N most-recently-closed activities (or opened, if no close date) —
  * dashboard "Recent closes" grid.
  */
@@ -1277,6 +1333,70 @@ export interface DailyPnlRow {
   count: number;
 }
 
+/**
+ * Per-activity rows for the full-page calendar view. One row per closed
+ * activity inside the date range. Bucketed by `closed_at::date` in the
+ * server's local timezone (same convention as getDailyPnl).
+ *
+ * Only includes activities with a non-null closed_at — open positions
+ * don't belong on a calendar of finalized P&L.
+ *
+ * `serial` is unset here — the page synthesizes a display serial via the
+ * same makeSerial(id, type) helper used by the archive adapter. Keeping
+ * the SQL minimal keeps this query cheap.
+ *
+ * @param startDate YYYY-MM-DD inclusive
+ * @param endDate   YYYY-MM-DD inclusive
+ */
+export interface ActivityByDateRow {
+  id: ActivityId;
+  type: ActivityType;
+  name: string;
+  /** YYYY-MM-DD — bucket key for the calendar grid. */
+  closedDate: string;
+  /** Original close timestamp (ISO) — used for tooltip ordering. */
+  closedAt: string;
+  netPnl: number;
+}
+
+export async function getActivitiesByDateRange(
+  userId: string,
+  startDate: string,
+  endDate: string,
+): Promise<ActivityByDateRow[]> {
+  const rows = await sql<
+    {
+      id: string;
+      type: ActivityType;
+      name: string;
+      closedDate: string;
+      closedAt: string;
+      netPnl: string | null;
+    }[]
+  >`
+    SELECT
+      id,
+      type,
+      name,
+      to_char(closed_at::date, 'YYYY-MM-DD') AS closed_date,
+      closed_at::text                        AS closed_at,
+      net_pnl_usd::text                      AS net_pnl
+    FROM public.v_activity_feed
+    WHERE user_id = ${userId}::uuid
+      AND closed_at IS NOT NULL
+      AND closed_at::date BETWEEN ${startDate}::date AND ${endDate}::date
+    ORDER BY closed_at ASC
+  `;
+  return rows.map((r) => ({
+    id: r.id as ActivityId,
+    type: r.type,
+    name: r.name,
+    closedDate: r.closedDate,
+    closedAt: r.closedAt,
+    netPnl: Number(r.netPnl ?? 0),
+  }));
+}
+
 export async function getDailyPnl(
   userId: string,
   startDate: string,
@@ -1307,6 +1427,376 @@ export async function getDailyPnl(
     netPnl: Number(r.netPnl ?? 0),
     count: Number(r.count ?? 0),
   }));
+}
+
+// ============================================================================
+// Wave 13B — Analytics-page aggregations
+// ============================================================================
+
+/**
+ * Monthly P&L aggregations for the track-record calendar grid. Buckets in the
+ * server's local TZ (same convention as `getDailyPnl`) and returns YYYY-MM
+ * keys so the renderer can pivot without parsing dates again.
+ *
+ * Months with no activity are NOT returned — the renderer fills empty cells.
+ * We return the count too so the UI can distinguish "zero P&L because no
+ * trades" from "zero P&L because trades cancelled out".
+ */
+export interface MonthlyPnlRow {
+  /** YYYY-MM key. */
+  month: string;
+  netPnl: number;
+  count: number;
+}
+
+export async function getMonthlyPnl(userId: string): Promise<MonthlyPnlRow[]> {
+  const rows = await sql<
+    { month: string; netPnl: string | null; count: string }[]
+  >`
+    SELECT
+      to_char(date_trunc('month', closed_at), 'YYYY-MM') AS month,
+      sum(net_pnl_usd)::text                             AS net_pnl,
+      count(*)::text                                     AS count
+    FROM public.v_activity_feed
+    WHERE user_id = ${userId}::uuid
+      AND closed_at IS NOT NULL
+    GROUP BY date_trunc('month', closed_at)
+    ORDER BY date_trunc('month', closed_at) ASC
+  `;
+  return rows.map((r) => ({
+    month: r.month,
+    netPnl: Number(r.netPnl ?? 0),
+    count: Number(r.count ?? 0),
+  }));
+}
+
+/**
+ * P&L by primary asset (BTC, ETH, SOL, …). `primary_symbol` on the feed is
+ * already the cleaned base for spreads/sales/airdrops, but trades may store
+ * pair strings like "BTC-PERP" / "ETH-USDT". We strip the suffix at the SQL
+ * boundary so trades and spreads aggregate together cleanly.
+ *
+ * Excludes activities without a primary_symbol from the result set.
+ */
+export interface AssetAggRow {
+  asset: string;
+  count: number;
+  netPnl: number;
+  capital: number;
+  winners: number;
+  losers: number;
+  /** winners / (winners + losers). 0 when neither. */
+  winRate: number;
+}
+
+export async function getAssetAggregations(
+  userId: string,
+): Promise<AssetAggRow[]> {
+  const rows = await sql<{
+    asset: string;
+    count: string;
+    netPnl: string | null;
+    capital: string | null;
+    winners: string;
+    losers: string;
+  }[]>`
+    SELECT
+      split_part(primary_symbol, '-', 1)         AS asset,
+      count(*)::text                             AS count,
+      sum(net_pnl_usd)::text                     AS net_pnl,
+      sum(coalesce(capital_deployed_usd, 0))::text AS capital,
+      sum(case when net_pnl_usd > 0 then 1 else 0 end)::text AS winners,
+      sum(case when net_pnl_usd < 0 then 1 else 0 end)::text AS losers
+    FROM public.v_activity_feed
+    WHERE user_id = ${userId}::uuid
+      AND primary_symbol IS NOT NULL
+      AND primary_symbol <> ''
+    GROUP BY split_part(primary_symbol, '-', 1)
+    ORDER BY sum(abs(coalesce(net_pnl_usd, 0))) DESC NULLS LAST
+  `;
+  return rows.map((r) => {
+    const winners = Number(r.winners ?? 0);
+    const losers = Number(r.losers ?? 0);
+    const scoring = winners + losers;
+    return {
+      asset: r.asset,
+      count: Number(r.count ?? 0),
+      netPnl: Number(r.netPnl ?? 0),
+      capital: Number(r.capital ?? 0),
+      winners,
+      losers,
+      winRate: scoring > 0 ? winners / scoring : 0,
+    };
+  });
+}
+
+/**
+ * Per-spread_type aggregations from `activity_spread` joined to the supertype.
+ * Lets the activity-mix page break spreads into cash_carry / funding /
+ * cross_exchange / dex_cex / calendar with full performance metrics.
+ */
+export interface SpreadSubtypeAggRow {
+  spreadType: string;
+  count: number;
+  netPnl: number;
+  capital: number;
+  winners: number;
+  losers: number;
+  /** Fraction in [0, 1]. 0 when scoring=0. */
+  winRate: number;
+  avgPnl: number;
+}
+
+export async function getSpreadSubtypeAggregations(
+  userId: string,
+): Promise<SpreadSubtypeAggRow[]> {
+  const rows = await sql<{
+    spreadType: string;
+    count: string;
+    netPnl: string | null;
+    capital: string | null;
+    winners: string;
+    losers: string;
+  }[]>`
+    SELECT
+      asp.spread_type                                          AS spread_type,
+      count(*)::text                                           AS count,
+      sum(a.net_pnl_usd)::text                                 AS net_pnl,
+      sum(coalesce(a.capital_deployed_usd, 0))::text           AS capital,
+      sum(case when a.net_pnl_usd > 0 then 1 else 0 end)::text AS winners,
+      sum(case when a.net_pnl_usd < 0 then 1 else 0 end)::text AS losers
+    FROM public.activity_spread asp
+    JOIN public.activity a ON a.id = asp.activity_id
+    WHERE a.user_id = ${userId}::uuid
+      AND a.deleted_at IS NULL
+    GROUP BY asp.spread_type
+    ORDER BY count(*) DESC, asp.spread_type ASC
+  `;
+  return rows.map((r) => {
+    const count = Number(r.count ?? 0);
+    const winners = Number(r.winners ?? 0);
+    const losers = Number(r.losers ?? 0);
+    const scoring = winners + losers;
+    const netPnl = Number(r.netPnl ?? 0);
+    return {
+      spreadType: r.spreadType,
+      count,
+      netPnl,
+      capital: Number(r.capital ?? 0),
+      winners,
+      losers,
+      winRate: scoring > 0 ? winners / scoring : 0,
+      avgPnl: count > 0 ? netPnl / count : 0,
+    };
+  });
+}
+
+/**
+ * Hold-time histogram. We bucket the (closed_at − opened_at) interval into
+ * five canonical bands: 0-1d / 1-7d / 1-4w / 1-3m / 3m+. Each band returns
+ * count + sum(net_pnl) so the renderer can show both bars and the secondary
+ * "avg P&L per band" axis.
+ *
+ * Bands done in SQL via a CASE expression — keeps the bucket boundaries in
+ * one place and avoids a second round-trip.
+ */
+export interface HoldTimeBucketRow {
+  bucket: '0-1d' | '1-7d' | '1-4w' | '1-3m' | '3m+';
+  /** Ordering hint so the UI doesn't have to know the canonical sort. */
+  bucketIndex: number;
+  count: number;
+  netPnl: number;
+  avgPnl: number;
+}
+
+const HOLD_BUCKET_ORDER: HoldTimeBucketRow['bucket'][] = [
+  '0-1d',
+  '1-7d',
+  '1-4w',
+  '1-3m',
+  '3m+',
+];
+
+export async function getHoldTimeBuckets(
+  userId: string,
+): Promise<HoldTimeBucketRow[]> {
+  const rows = await sql<{
+    bucket: HoldTimeBucketRow['bucket'];
+    count: string;
+    netPnl: string | null;
+  }[]>`
+    SELECT
+      CASE
+        WHEN extract(epoch from (closed_at - opened_at)) <= 86400          THEN '0-1d'
+        WHEN extract(epoch from (closed_at - opened_at)) <= 604800         THEN '1-7d'
+        WHEN extract(epoch from (closed_at - opened_at)) <= 2419200        THEN '1-4w'
+        WHEN extract(epoch from (closed_at - opened_at)) <= 7776000        THEN '1-3m'
+        ELSE '3m+'
+      END                                       AS bucket,
+      count(*)::text                            AS count,
+      sum(net_pnl_usd)::text                    AS net_pnl
+    FROM public.v_activity_feed
+    WHERE user_id = ${userId}::uuid
+      AND closed_at IS NOT NULL
+      AND opened_at IS NOT NULL
+      AND closed_at >= opened_at
+    GROUP BY bucket
+  `;
+  // Fill missing buckets so the bar chart always renders all five bands.
+  const byBucket = new Map<HoldTimeBucketRow['bucket'], { count: number; netPnl: number }>();
+  for (const r of rows) {
+    byBucket.set(r.bucket, {
+      count: Number(r.count ?? 0),
+      netPnl: Number(r.netPnl ?? 0),
+    });
+  }
+  return HOLD_BUCKET_ORDER.map((bucket, bucketIndex) => {
+    const v = byBucket.get(bucket) ?? { count: 0, netPnl: 0 };
+    return {
+      bucket,
+      bucketIndex,
+      count: v.count,
+      netPnl: v.netPnl,
+      avgPnl: v.count > 0 ? v.netPnl / v.count : 0,
+    };
+  });
+}
+
+/**
+ * Per-regime aggregations via UNNEST(regime_tags). An activity tagged
+ * `['funding-positive', 'risk-on']` contributes to two rows. Same caveat
+ * as `getTagAggregations` — overlap is expected and intentional.
+ *
+ * Wave 13B regime page is the primary consumer; the SQL shape mirrors
+ * getTagAggregations so the analytics table can be cross-rendered.
+ *
+ * Returns rows ordered by count DESC then regime ASC for stable display.
+ */
+export interface RegimeAggRow {
+  regime: string;
+  count: number;
+  netPnl: number;
+  winners: number;
+  losers: number;
+  /** Fraction in [0, 1]. Winners / (winners + losers). 0 when neither. */
+  winRate: number;
+  avgPnl: number;
+  /** Gross wins / |gross losses|. null when there are no losses. */
+  profitFactor: number | null;
+  /** Van Tharp SQN: avg / population stddev * sqrt(N). null when stddev=0 or N<2. */
+  sqn: number | null;
+}
+
+export async function getRegimeAggregations(
+  userId: string,
+): Promise<RegimeAggRow[]> {
+  const rows = await sql<{
+    regime: string;
+    count: string;
+    winCount: string;
+    lossCount: string;
+    pnlCount: string;
+    grossWins: string | null;
+    grossLosses: string | null;
+    totalPnl: string | null;
+    pnlVariance: string | null;
+  }[]>`
+    WITH exploded AS (
+      SELECT
+        unnest(regime_tags)::text AS regime,
+        net_pnl_usd
+      FROM public.v_activity_feed
+      WHERE user_id = ${userId}::uuid
+        AND regime_tags IS NOT NULL
+        AND array_length(regime_tags, 1) > 0
+    )
+    SELECT
+      e.regime                                                  AS regime,
+      count(*)::text                                            AS count,
+      count(*) FILTER (
+        WHERE e.net_pnl_usd IS NOT NULL AND e.net_pnl_usd > 0
+      )::text                                                   AS win_count,
+      count(*) FILTER (
+        WHERE e.net_pnl_usd IS NOT NULL AND e.net_pnl_usd < 0
+      )::text                                                   AS loss_count,
+      count(*) FILTER (WHERE e.net_pnl_usd IS NOT NULL)::text   AS pnl_count,
+      sum(e.net_pnl_usd) FILTER (WHERE e.net_pnl_usd > 0)::text AS gross_wins,
+      sum(abs(e.net_pnl_usd)) FILTER (
+        WHERE e.net_pnl_usd < 0
+      )::text                                                   AS gross_losses,
+      sum(e.net_pnl_usd) FILTER (
+        WHERE e.net_pnl_usd IS NOT NULL
+      )::text                                                   AS total_pnl,
+      -- Population variance for Van Tharp's SQN convention.
+      var_pop(e.net_pnl_usd) FILTER (
+        WHERE e.net_pnl_usd IS NOT NULL
+      )::text                                                   AS pnl_variance
+    FROM exploded e
+    GROUP BY e.regime
+    ORDER BY count(*) DESC, e.regime ASC
+  `;
+  return rows.map((r) => {
+    const count = Number(r.count);
+    const pnlCount = Number(r.pnlCount);
+    const winners = Number(r.winCount);
+    const losers = Number(r.lossCount);
+    const scoring = winners + losers;
+    const grossWins = r.grossWins == null ? 0 : Number(r.grossWins);
+    const grossLosses = r.grossLosses == null ? 0 : Number(r.grossLosses);
+    const totalPnl = r.totalPnl == null ? 0 : Number(r.totalPnl);
+    const variance = r.pnlVariance == null ? 0 : Number(r.pnlVariance);
+    const stddev = Math.sqrt(Math.max(0, variance));
+    const avgPnl = pnlCount > 0 ? totalPnl / pnlCount : 0;
+    return {
+      regime: r.regime,
+      count,
+      netPnl: totalPnl,
+      winners,
+      losers,
+      winRate: scoring > 0 ? winners / scoring : 0,
+      avgPnl,
+      profitFactor: losers > 0 ? grossWins / grossLosses : null,
+      sqn: pnlCount >= 2 && stddev > 0 ? (avgPnl / stddev) * Math.sqrt(pnlCount) : null,
+    };
+  });
+}
+
+/**
+ * Count of activities the user has logged that carry no regime tag at all.
+ * Surfaces on the regime page as a "bulk-tag these N activities" prompt.
+ *
+ * "No regime tag" means `regime_tags IS NULL OR cardinality(regime_tags) = 0`.
+ * Closed status is NOT a filter — open spreads with no regime info are still
+ * worth highlighting.
+ */
+export async function getUntaggedRegimeCount(userId: string): Promise<number> {
+  const [row] = await sql<{ count: string }[]>`
+    SELECT count(*)::text AS count
+    FROM public.v_activity_feed
+    WHERE user_id = ${userId}::uuid
+      AND (regime_tags IS NULL OR cardinality(regime_tags) = 0)
+  `;
+  return Number(row?.count ?? 0);
+}
+
+/**
+ * Capital deployed by activity type — drives the activity-mix capital
+ * allocation donut. Distinct from `getActivityTypeNetPnl` because capital
+ * != P&L (airdrops have 0 capital, sales / spreads carry meaningful
+ * principal).
+ */
+export async function getCapitalByActivityType(
+  userId: string,
+): Promise<ActivityTypeCounts> {
+  const rows = await sql<{ type: ActivityType; capital: string | null }[]>`
+    SELECT type, sum(coalesce(capital_deployed_usd, 0))::text AS capital
+    FROM public.v_activity_feed
+    WHERE user_id = ${userId}::uuid
+    GROUP BY type
+  `;
+  const out: ActivityTypeCounts = { spread: 0, trade: 0, sale: 0, airdrop: 0 };
+  for (const r of rows) out[r.type] = Number(r.capital ?? 0);
+  return out;
 }
 
 // ============================================================================

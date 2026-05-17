@@ -22,3 +22,11 @@ export {
   type SharpeResult,
   type SharpeOptions,
 } from './risk';
+
+export {
+  buildEquityPoints,
+  buildUnderwaterPoints,
+  buildRollingWinRate,
+  pickTopBestWorst,
+  computeCumulativeNet,
+} from './series';

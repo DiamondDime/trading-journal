@@ -1,0 +1,597 @@
+"use client";
+
+import * as React from "react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { ArrowRight, Pencil, Plus, Trash2 } from "lucide-react";
+import { cn } from "@/lib/utils";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogEyebrow,
+  DialogBody,
+  DialogFooter,
+  DialogDescription,
+} from "@/components/ui/dialog";
+import { WizardField, WizardInput } from "@/components/wizard/wizard-field";
+import type { ViewWithCount } from "@/app/views/page";
+
+interface ViewsBrowserProps {
+  initialViews: ViewWithCount[];
+  prefillFrom?: string;
+}
+
+/**
+ * Pretty-print a saved view's URL for the description column. Strips the
+ * leading "/spreads/archive" so the eye lands on the differentiating part of
+ * the URL (the filter params). Empty string → "all activity".
+ */
+function prettyPath(qs: string): string {
+  if (!qs) return "—";
+  try {
+    const u = new URL(qs, "https://invalid.local");
+    const search = u.searchParams;
+    const parts: string[] = [];
+    const activity = search.get("activity");
+    const type = search.get("type");
+    const asset = search.get("asset");
+    const status = search.get("status");
+    const outcome = search.get("outcome");
+    const q = search.get("q");
+    if (activity) parts.push(activity.replace(/,/g, "+"));
+    if (type) parts.push(type.replace(/,/g, "+"));
+    if (asset) parts.push(asset.replace(/,/g, "+"));
+    if (status) parts.push(status.replace(/,/g, "+"));
+    if (outcome) parts.push(outcome);
+    if (q) parts.push(`"${q}"`);
+    if (parts.length === 0) return "all activity";
+    return parts.join(" · ");
+  } catch {
+    return qs;
+  }
+}
+
+function fmtRelative(iso: string | null): string {
+  if (!iso) return "Never";
+  const date = new Date(iso);
+  if (!Number.isFinite(date.getTime())) return "Never";
+  const diff = Date.now() - date.getTime();
+  const sec = Math.max(0, Math.floor(diff / 1000));
+  if (sec < 60) return `${sec}s ago`;
+  const min = Math.floor(sec / 60);
+  if (min < 60) return `${min}m ago`;
+  const hr = Math.floor(min / 60);
+  if (hr < 24) return `${hr}h ago`;
+  const day = Math.floor(hr / 24);
+  if (day < 30) return `${day}d ago`;
+  const mo = Math.floor(day / 30);
+  if (mo < 12) return `${mo}mo ago`;
+  return `${Math.floor(mo / 12)}y ago`;
+}
+
+// ──────────────────────────────────────────────────────────────────────────
+// Component
+// ──────────────────────────────────────────────────────────────────────────
+
+type DialogState =
+  | { mode: "closed" }
+  | { mode: "create"; queryString: string }
+  | { mode: "edit"; view: ViewWithCount }
+  | { mode: "delete"; view: ViewWithCount };
+
+export function ViewsBrowser({ initialViews, prefillFrom }: ViewsBrowserProps) {
+  const router = useRouter();
+  const [views, setViews] = React.useState<ViewWithCount[]>(initialViews);
+  const [dialog, setDialog] = React.useState<DialogState>(() =>
+    prefillFrom ? { mode: "create", queryString: prefillFrom } : { mode: "closed" },
+  );
+  const [flashError, setFlashError] = React.useState<string | null>(null);
+
+  // Strip prefillFrom from the URL once we've consumed it so a page refresh
+  // doesn't keep popping the dialog.
+  React.useEffect(() => {
+    if (!prefillFrom) return;
+    router.replace("/views", { scroll: false });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const refresh = async () => {
+    try {
+      const res = await fetch("/api/saved-views", { headers: { accept: "application/json" } });
+      if (!res.ok) throw new Error("Failed to refresh views");
+      const json = (await res.json()) as { data: ViewWithCount[] };
+      // Server doesn't recompute counts here — they update on next full
+      // page load. Splice in any rows we don't already know about.
+      setViews((prev) => {
+        const byId = new Map(prev.map((v) => [v.id, v]));
+        return json.data.map((v) => ({
+          ...byId.get(v.id),
+          ...v,
+          activitiesCount: byId.get(v.id)?.activitiesCount ?? 0,
+          activitiesCountCapped: byId.get(v.id)?.activitiesCountCapped ?? false,
+        })) as ViewWithCount[];
+      });
+    } catch (err) {
+      setFlashError(err instanceof Error ? err.message : "Failed to refresh");
+    }
+  };
+
+  const handleApply = async (view: ViewWithCount) => {
+    if (!view.queryString) {
+      setFlashError(
+        `"${view.name}" has no URL stored — open Edit to set one.`,
+      );
+      return;
+    }
+    // Bump lastAppliedAt fire-and-forget — non-blocking. Failure is silent
+    // (the apply nav still happens).
+    void fetch(`/api/saved-views/${view.id}`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ applied: true }),
+    });
+    // Navigate. If the stored URL is malformed Next.js will land on the
+    // archive root and the user sees no error here — graceful degrade.
+    try {
+      const url = new URL(view.queryString, window.location.origin);
+      if (url.origin !== window.location.origin) throw new Error("Bad origin");
+      router.push(url.pathname + url.search);
+    } catch {
+      setFlashError(
+        `"${view.name}" had a malformed URL. Open Edit to fix it.`,
+      );
+      router.push("/spreads/archive");
+    }
+  };
+
+  return (
+    <div className="w-full">
+      {/* ── hero strip ──────────────────────────────────────────────────── */}
+      <header className="flex flex-col gap-4 border-b border-border px-8 py-7 md:flex-row md:items-end md:justify-between lg:px-12">
+        <div>
+          <h1 className="font-serif text-[40px] font-medium leading-none tracking-tight text-text">
+            Saved views
+          </h1>
+          <p className="mt-2 font-serif text-sm italic text-text-tertiary">
+            Your filtered archive bookmarks.
+          </p>
+        </div>
+        <div className="flex items-end gap-6">
+          <div className="text-right">
+            <p
+              aria-label={`${views.length} saved views`}
+              className="font-serif text-[44px] font-medium leading-none tracking-tight tabular-nums text-signature"
+            >
+              {views.length.toLocaleString("en-US")}
+            </p>
+            <p className="mt-1 font-mono text-[10px] uppercase tracking-[0.18em] text-text-tertiary">
+              {views.length === 1 ? "view" : "views"}
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() =>
+              setDialog({ mode: "create", queryString: "/spreads/archive" })
+            }
+            className="flex items-center gap-1.5 rounded-md border border-text bg-text px-3 py-2 font-mono text-[11px] uppercase tracking-[0.16em] text-app transition-opacity hover:opacity-90"
+          >
+            <Plus className="h-3.5 w-3.5" />
+            New saved view
+          </button>
+        </div>
+      </header>
+
+      <div className="px-8 py-8 lg:px-12">
+        {flashError && (
+          <div className="mb-6 flex items-start justify-between gap-3 rounded-md border border-down/40 bg-down/10 px-4 py-3 font-mono text-[11px] text-down">
+            <span>{flashError}</span>
+            <button
+              type="button"
+              onClick={() => setFlashError(null)}
+              className="font-mono text-[10px] uppercase tracking-[0.14em] text-down/80 hover:text-down"
+              aria-label="Dismiss error"
+            >
+              dismiss
+            </button>
+          </div>
+        )}
+
+        {views.length === 0 ? (
+          <EmptyState />
+        ) : (
+          <ul className="overflow-hidden rounded-md border border-border bg-surface">
+            {/* Table header */}
+            <li className="grid grid-cols-[1fr_2fr_auto_auto_auto] items-baseline gap-4 border-b border-border px-5 py-3 font-mono text-[9px] uppercase tracking-[0.18em] text-text-tertiary">
+              <span>Name</span>
+              <span>Filters</span>
+              <span className="text-right">Activities</span>
+              <span className="text-right">Last applied</span>
+              <span className="text-right">Actions</span>
+            </li>
+
+            {views.map((view) => (
+              <li
+                key={view.id}
+                className="grid grid-cols-[1fr_2fr_auto_auto_auto] items-center gap-4 border-b border-border-subtle px-5 py-4 transition-colors last:border-b-0 hover:bg-subtle/60"
+              >
+                <button
+                  type="button"
+                  onClick={() => handleApply(view)}
+                  className="flex flex-col items-start gap-0.5 text-left"
+                >
+                  <span className="font-serif text-[15px] font-medium text-text underline-offset-4 hover:underline">
+                    {view.name}
+                  </span>
+                  {view.description && (
+                    <span className="font-serif text-[12px] italic text-text-tertiary line-clamp-1">
+                      {view.description}
+                    </span>
+                  )}
+                </button>
+
+                <code
+                  title={view.queryString || "—"}
+                  className="font-serif text-[12px] italic text-text-secondary line-clamp-1"
+                >
+                  {prettyPath(view.queryString)}
+                </code>
+
+                <span className="text-right font-mono text-[12px] tabular-nums text-text">
+                  {view.activitiesCount}
+                  {view.activitiesCountCapped && (
+                    <span className="text-text-tertiary">+</span>
+                  )}
+                </span>
+
+                <span className="text-right font-mono text-[10px] uppercase tracking-[0.14em] text-text-tertiary">
+                  {fmtRelative(view.lastAppliedAt)}
+                </span>
+
+                <div className="flex items-center justify-end gap-1">
+                  <button
+                    type="button"
+                    onClick={() => handleApply(view)}
+                    aria-label={`Apply ${view.name}`}
+                    className="flex items-center gap-1 rounded-md px-2 py-1 font-mono text-[10px] uppercase tracking-[0.14em] text-text-secondary transition-colors hover:bg-surface hover:text-text"
+                  >
+                    Apply <ArrowRight className="h-3 w-3" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setDialog({ mode: "edit", view })}
+                    aria-label={`Edit ${view.name}`}
+                    className="flex h-7 w-7 items-center justify-center rounded-md text-text-tertiary transition-colors hover:bg-surface hover:text-text"
+                  >
+                    <Pencil className="h-3.5 w-3.5" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setDialog({ mode: "delete", view })}
+                    aria-label={`Delete ${view.name}`}
+                    className="flex h-7 w-7 items-center justify-center rounded-md text-text-tertiary transition-colors hover:bg-down/10 hover:text-down"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+
+      {/* ── dialogs ─────────────────────────────────────────────────────── */}
+      {dialog.mode === "create" && (
+        <ViewFormDialog
+          mode="create"
+          initialQueryString={dialog.queryString}
+          onClose={() => setDialog({ mode: "closed" })}
+          onSuccess={async () => {
+            await refresh();
+            // Reload the page to recompute the activities counts from the
+            // server. Anything fancier (per-view incremental fetch) is
+            // unnecessary for the typical O(10) saved-view count.
+            router.refresh();
+            setDialog({ mode: "closed" });
+          }}
+        />
+      )}
+
+      {dialog.mode === "edit" && (
+        <ViewFormDialog
+          mode="edit"
+          view={dialog.view}
+          onClose={() => setDialog({ mode: "closed" })}
+          onSuccess={async () => {
+            router.refresh();
+            setDialog({ mode: "closed" });
+          }}
+        />
+      )}
+
+      {dialog.mode === "delete" && (
+        <DeleteConfirmDialog
+          view={dialog.view}
+          onClose={() => setDialog({ mode: "closed" })}
+          onSuccess={async () => {
+            setViews((prev) =>
+              prev.filter((v) => v.id !== (dialog as { view: ViewWithCount }).view.id),
+            );
+            router.refresh();
+            setDialog({ mode: "closed" });
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+// ──────────────────────────────────────────────────────────────────────────
+// Dialog: create / edit
+// ──────────────────────────────────────────────────────────────────────────
+
+interface ViewFormDialogProps {
+  mode: "create" | "edit";
+  view?: ViewWithCount;
+  initialQueryString?: string;
+  onClose: () => void;
+  onSuccess: () => Promise<void> | void;
+}
+
+function ViewFormDialog({
+  mode,
+  view,
+  initialQueryString,
+  onClose,
+  onSuccess,
+}: ViewFormDialogProps) {
+  const [name, setName] = React.useState(view?.name ?? "");
+  const [description, setDescription] = React.useState(view?.description ?? "");
+  const [queryString, setQueryString] = React.useState(
+    view?.queryString ?? initialQueryString ?? "/spreads/archive",
+  );
+  const [submitting, setSubmitting] = React.useState(false);
+  const [error, setError] = React.useState<string | null>(null);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError(null);
+    setSubmitting(true);
+    try {
+      if (mode === "create") {
+        const res = await fetch("/api/saved-views", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ name, description, queryString }),
+        });
+        if (!res.ok) {
+          const errJson = (await res.json().catch(() => null)) as
+            | { error?: { code?: string; message?: string } }
+            | null;
+          throw new Error(
+            errJson?.error?.message ??
+              `Failed to create view (${res.status})`,
+          );
+        }
+      } else if (mode === "edit" && view) {
+        const res = await fetch(`/api/saved-views/${view.id}`, {
+          method: "PATCH",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ name, description, queryString }),
+        });
+        if (!res.ok) {
+          const errJson = (await res.json().catch(() => null)) as
+            | { error?: { code?: string; message?: string } }
+            | null;
+          throw new Error(
+            errJson?.error?.message ??
+              `Failed to update view (${res.status})`,
+          );
+        }
+      }
+      await onSuccess();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <Dialog open onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="max-w-xl">
+        <DialogHeader>
+          <DialogEyebrow>
+            {mode === "create" ? "Workshop · new" : "Workshop · edit"}
+          </DialogEyebrow>
+          <DialogTitle>
+            {mode === "create" ? "Save this view" : "Edit saved view"}
+          </DialogTitle>
+          <DialogDescription>
+            Bookmark a filtered archive URL so you can return to the same
+            slice of activities in one click.
+          </DialogDescription>
+        </DialogHeader>
+
+        <form onSubmit={handleSubmit}>
+          <DialogBody>
+            <div className="flex flex-col gap-5">
+              <WizardField label="Name" htmlFor="view-name" required>
+                <WizardInput
+                  id="view-name"
+                  type="text"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  placeholder="Winning trades · Q2"
+                  maxLength={60}
+                  autoFocus
+                  required
+                />
+              </WizardField>
+
+              <WizardField
+                label="Description"
+                htmlFor="view-description"
+                helper="Optional. Reminds future-you why this view matters."
+              >
+                <WizardInput
+                  id="view-description"
+                  type="text"
+                  value={description}
+                  onChange={(e) => setDescription(e.target.value)}
+                  placeholder="The cohort I'm tracking for the retro"
+                  maxLength={200}
+                />
+              </WizardField>
+
+              <WizardField
+                label="URL"
+                htmlFor="view-url"
+                required
+                helper="Must start with /spreads/archive, /calendar, or /spreads."
+              >
+                <WizardInput
+                  id="view-url"
+                  type="text"
+                  value={queryString}
+                  onChange={(e) => setQueryString(e.target.value)}
+                  placeholder="/spreads/archive?activity=trade&outcome=winners"
+                  required
+                />
+              </WizardField>
+
+              {error && (
+                <p className="font-mono text-[11px] text-down">{error}</p>
+              )}
+            </div>
+          </DialogBody>
+
+          <DialogFooter>
+            <button
+              type="button"
+              onClick={onClose}
+              className="rounded-md border border-border bg-surface px-4 py-2 font-mono text-[11px] uppercase tracking-[0.16em] text-text-secondary hover:bg-subtle hover:text-text"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={submitting || name.trim().length === 0}
+              className={cn(
+                "rounded-md border border-text bg-text px-4 py-2 font-mono text-[11px] uppercase tracking-[0.16em] text-app transition-opacity hover:opacity-90",
+                "disabled:cursor-not-allowed disabled:opacity-50",
+              )}
+            >
+              {submitting
+                ? "Saving…"
+                : mode === "create"
+                ? "Create view"
+                : "Save changes"}
+            </button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// ──────────────────────────────────────────────────────────────────────────
+// Dialog: delete confirmation
+// ──────────────────────────────────────────────────────────────────────────
+
+function DeleteConfirmDialog({
+  view,
+  onClose,
+  onSuccess,
+}: {
+  view: ViewWithCount;
+  onClose: () => void;
+  onSuccess: () => Promise<void> | void;
+}) {
+  const [submitting, setSubmitting] = React.useState(false);
+  const [error, setError] = React.useState<string | null>(null);
+
+  const handleDelete = async () => {
+    setSubmitting(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/saved-views/${view.id}`, { method: "DELETE" });
+      if (!res.ok && res.status !== 204) {
+        const errJson = (await res.json().catch(() => null)) as
+          | { error?: { message?: string } }
+          | null;
+        throw new Error(
+          errJson?.error?.message ?? `Failed to delete (${res.status})`,
+        );
+      }
+      await onSuccess();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed");
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <Dialog open onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogEyebrow>Workshop · delete</DialogEyebrow>
+          <DialogTitle>Delete &ldquo;{view.name}&rdquo;?</DialogTitle>
+          <DialogDescription>
+            The bookmark goes away. Your activities are not affected.
+          </DialogDescription>
+        </DialogHeader>
+
+        <DialogBody>
+          {error && (
+            <p className="font-mono text-[11px] text-down">{error}</p>
+          )}
+        </DialogBody>
+
+        <DialogFooter>
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-md border border-border bg-surface px-4 py-2 font-mono text-[11px] uppercase tracking-[0.16em] text-text-secondary hover:bg-subtle hover:text-text"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={handleDelete}
+            disabled={submitting}
+            className="rounded-md border border-down bg-down px-4 py-2 font-mono text-[11px] uppercase tracking-[0.16em] text-app transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {submitting ? "Deleting…" : "Delete view"}
+          </button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// ──────────────────────────────────────────────────────────────────────────
+// Empty state
+// ──────────────────────────────────────────────────────────────────────────
+
+function EmptyState() {
+  return (
+    <div className="flex flex-col items-center justify-center gap-3 rounded-md border border-dashed border-border bg-surface py-16 text-center">
+      <p className="font-serif text-[20px] italic text-text-secondary">
+        No saved views yet.
+      </p>
+      <p className="max-w-md font-serif text-sm italic text-text-tertiary">
+        Use &ldquo;Save this view&rdquo; on the archive page to bookmark your
+        filtered slices. They show up here for one-click reuse.
+      </p>
+      <Link
+        href="/spreads/archive"
+        className="mt-2 inline-flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-[0.18em] text-text-tertiary underline-offset-4 hover:text-text hover:underline"
+      >
+        Open the archive
+        <ArrowRight className="h-3 w-3" />
+      </Link>
+    </div>
+  );
+}

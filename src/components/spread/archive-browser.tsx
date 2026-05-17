@@ -7,6 +7,7 @@ import {
   ArrowDown,
   ArrowUp,
   ArrowUpDown,
+  Bookmark,
   Download,
   Filter as FilterIcon,
   LayoutGrid,
@@ -547,6 +548,20 @@ export function ArchiveBrowser({ data }: { data: Activity[] }) {
                   Reset
                 </button>
               )}
+              {/* "Save this view" — hands the current archive URL to /views
+                  via the prefillFrom query, which opens the create dialog
+                  with the URL pre-filled. */}
+              <SaveThisViewLink
+                queryString={buildUrlQuery({
+                  activity: activityFilters,
+                  type: spreadTypeFilters,
+                  asset: assetFilters,
+                  status: statusFilters,
+                  outcome,
+                  sort,
+                  q: search,
+                })}
+              />
             </div>
           </div>
         </div>
@@ -905,5 +920,29 @@ function ArchiveTableRow({ row }: { row: Activity }) {
         {fmtUsd(row.netPnl, true)}
       </TableCell>
     </TableRow>
+  );
+}
+
+/**
+ * Small Link that hands the current archive URL (encoded as the canonical
+ * `?...` query) to /views via the prefillFrom param. The /views page reads
+ * that param on mount and opens the create dialog with the URL pre-filled.
+ *
+ * Built as a Link (not a button) so the user gets standard ctrl/cmd-click
+ * "open in new tab" behaviour for free.
+ */
+function SaveThisViewLink({ queryString }: { queryString: string }) {
+  const href = queryString
+    ? `/views?prefillFrom=${encodeURIComponent(`/spreads/archive?${queryString}`)}`
+    : `/views?prefillFrom=${encodeURIComponent("/spreads/archive")}`;
+  return (
+    <Link
+      href={href}
+      className="ml-2 flex items-center gap-1 font-mono text-[10px] uppercase tracking-[0.14em] text-text-tertiary hover:text-text"
+      aria-label="Save this view"
+    >
+      <Bookmark className="h-3 w-3" />
+      Save this view
+    </Link>
   );
 }

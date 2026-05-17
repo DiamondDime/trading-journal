@@ -257,3 +257,206 @@ export async function deleteNote(
   `;
   return rows.length > 0;
 }
+
+// ============================================================================
+// listAllNotes — second-brain feed across every activity
+// ============================================================================
+
+/**
+ * Filter shape for the /notes feed. All fields optional — page passes whatever
+ * the search params decoded to. ILIKE matches against the raw body for v1; the
+ * column has a trigram GIN index (notes_body_trgm) so substring queries stay
+ * fast up to mid-five-figure note counts. Beyond that the obvious upgrade is
+ * a generated tsvector + tsquery FTS pair — the schema migration is cheap and
+ * doesn't change this call signature.
+ */
+export interface NoteListFilters {
+  activityType?: ('spread' | 'trade' | 'sale' | 'airdrop')[];
+  /** Single free-form tag (from activity_tag). Multi-tag is v2. */
+  tag?: string;
+  /** ILIKE against notes.body. Sanitised by parameterisation — postgres.js
+   *  parameter binding prevents injection regardless of input shape. */
+  search?: string;
+  sort?: 'newest' | 'oldest' | 'longest' | 'edited';
+  limit?: number;
+  offset?: number;
+}
+
+/**
+ * One row of the second-brain feed: enough to render an editorial card without
+ * a second round-trip. Body is the raw note text; UI handles truncation /
+ * markdown / pre-wrap.
+ */
+export interface AllNoteRow {
+  id: NoteId;
+  activityId: ActivityId;
+  body: string;
+  bodyLength: number;
+  createdAt: Iso8601;
+  updatedAt: Iso8601;
+  activityType: 'spread' | 'trade' | 'sale' | 'airdrop';
+  activityName: string;
+  activityStatus: string;
+  activitySatisfaction: boolean | null;
+  /** Free-form activity_tag strings (not the M:N tags vocabulary). */
+  tags: string[];
+  /** primary_symbol from v_activity_feed — first asset hint for the card. */
+  primarySymbol: string | null;
+  netPnlUsd: string | null;
+}
+
+/**
+ * List every note the user has written, joined to the parent activity so the
+ * card has enough metadata to render without a fan-out fetch. Soft-deleted
+ * activities (deleted_at NOT NULL) are excluded — orphaned notes shouldn't
+ * surface in the feed once the activity is gone.
+ *
+ * Implementation notes:
+ *
+ *   - Empty notes (body trimmed to zero length) are filtered out so the feed
+ *     reads as a journal, not as the row count of placeholder activities.
+ *   - The tag filter joins to activity_tag; otherwise we skip the join to
+ *     keep the unfiltered path cheap (~1 query plan, no extra hash join).
+ *   - Tags are array-aggregated in a correlated subquery so the row shape
+ *     stays one-row-per-note even when an activity has multiple tags.
+ *   - "longest" sort = bytes of body, descending. Approximates the most-
+ *     substantial postmortems without ranking on writer time.
+ *   - Limits are clamped to [1, 100]; offset to >= 0. Defaults: limit=20,
+ *     offset=0. Matches the "load more" pagination in the page.
+ */
+export async function listAllNotes(
+  userId: string,
+  filters: NoteListFilters = {},
+): Promise<AllNoteRow[]> {
+  const {
+    activityType,
+    tag,
+    search,
+    sort = 'newest',
+    limit = 20,
+    offset = 0,
+  } = filters;
+
+  const clampedLimit = Math.max(1, Math.min(100, Math.trunc(limit)));
+  const clampedOffset = Math.max(0, Math.trunc(offset));
+
+  const joinTag = typeof tag === 'string' && tag.length > 0;
+  const searchPattern = typeof search === 'string' && search.length > 0
+    ? `%${search.replace(/[\\%_]/g, (m) => `\\${m}`)}%`
+    : null;
+
+  // ORDER BY clause map. Hard-coded to avoid SQL injection via the sort key.
+  const orderClause = {
+    newest:   sql`n.updated_at DESC`,
+    oldest:   sql`n.created_at ASC`,
+    longest:  sql`octet_length(n.body) DESC`,
+    edited:   sql`n.updated_at DESC, n.created_at ASC`,
+  }[sort];
+
+  const rows = await sql<{
+    id: string;
+    activityId: string;
+    body: string;
+    bodyLength: string;
+    createdAt: unknown;
+    updatedAt: unknown;
+    activityType: 'spread' | 'trade' | 'sale' | 'airdrop';
+    activityName: string;
+    activityStatus: string;
+    activitySatisfaction: boolean | null;
+    tags: string[] | null;
+    primarySymbol: string | null;
+    netPnlUsd: string | null;
+  }[]>`
+    SELECT
+      n.id,
+      n.activity_id,
+      n.body,
+      octet_length(n.body)::text             AS body_length,
+      n.created_at,
+      n.updated_at,
+      a.type                                 AS activity_type,
+      a.name                                 AS activity_name,
+      a.status                               AS activity_status,
+      asat.satisfaction                      AS activity_satisfaction,
+      (
+        SELECT array_agg(t.tag ORDER BY t.tag ASC)
+        FROM public.activity_tag t
+        WHERE t.activity_id = a.id
+      )                                      AS tags,
+      f.primary_symbol,
+      a.net_pnl_usd::text                    AS net_pnl_usd
+    FROM public.notes n
+    JOIN public.activity a            ON a.id  = n.activity_id
+    LEFT JOIN public.v_activity_feed f ON f.id = a.id
+    LEFT JOIN public.activity_satisfaction asat ON asat.activity_id = a.id
+    ${joinTag
+      ? sql`JOIN public.activity_tag tf ON tf.activity_id = a.id AND tf.tag = ${tag!}`
+      : sql``}
+    WHERE n.user_id = ${userId}::uuid
+      AND n.deleted_at IS NULL
+      AND a.deleted_at IS NULL
+      AND length(trim(n.body)) > 0
+      ${activityType && activityType.length > 0
+        ? sql`AND a.type::text = ANY(${activityType}::text[])`
+        : sql``}
+      ${searchPattern
+        ? sql`AND n.body ILIKE ${searchPattern} ESCAPE '\\'`
+        : sql``}
+    ORDER BY ${orderClause}
+    LIMIT ${clampedLimit}
+    OFFSET ${clampedOffset}
+  `;
+
+  return rows.map((r) => ({
+    id: r.id as NoteId,
+    activityId: r.activityId as ActivityId,
+    body: r.body,
+    bodyLength: Number(r.bodyLength ?? 0),
+    createdAt: (dateToIso(r.createdAt) ?? '') as Iso8601,
+    updatedAt: (dateToIso(r.updatedAt) ?? '') as Iso8601,
+    activityType: r.activityType,
+    activityName: r.activityName,
+    activityStatus: r.activityStatus,
+    activitySatisfaction: r.activitySatisfaction,
+    tags: r.tags ?? [],
+    primarySymbol: r.primarySymbol,
+    netPnlUsd: r.netPnlUsd,
+  }));
+}
+
+/**
+ * Count of notes matching the same filter shape — drives the headline
+ * "47 notes" amber moment on /notes. Returned separately so the page can
+ * paint the headline immediately while the body list streams.
+ */
+export async function countAllNotes(
+  userId: string,
+  filters: Omit<NoteListFilters, 'sort' | 'limit' | 'offset'> = {},
+): Promise<number> {
+  const { activityType, tag, search } = filters;
+  const joinTag = typeof tag === 'string' && tag.length > 0;
+  const searchPattern = typeof search === 'string' && search.length > 0
+    ? `%${search.replace(/[\\%_]/g, (m) => `\\${m}`)}%`
+    : null;
+
+  const [row] = await sql<{ count: string }[]>`
+    SELECT count(*)::text AS count
+    FROM public.notes n
+    JOIN public.activity a ON a.id = n.activity_id
+    ${joinTag
+      ? sql`JOIN public.activity_tag tf ON tf.activity_id = a.id AND tf.tag = ${tag!}`
+      : sql``}
+    WHERE n.user_id = ${userId}::uuid
+      AND n.deleted_at IS NULL
+      AND a.deleted_at IS NULL
+      AND length(trim(n.body)) > 0
+      ${activityType && activityType.length > 0
+        ? sql`AND a.type::text = ANY(${activityType}::text[])`
+        : sql``}
+      ${searchPattern
+        ? sql`AND n.body ILIKE ${searchPattern} ESCAPE '\\'`
+        : sql``}
+  `;
+  return Number(row?.count ?? 0);
+}

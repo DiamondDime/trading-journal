@@ -1,0 +1,95 @@
+/**
+ * /notes — second-brain feed: every postmortem the user has written across
+ *           every activity, searchable / filterable / sortable.
+ *
+ * Server component: server-side renders the initial filter + sort state from
+ * the URL search params, fetches the first page, and hands a client component
+ * the data + the full tag vocabulary for the chip rail. Pagination ("load
+ * more") happens client-side via the same endpoint shape — see notes-browser.
+ *
+ * v1 SQL implementation note: search is ILIKE on `notes.body` (trigram-indexed
+ * via `notes_body_trgm`). For scales beyond mid-five-figure note counts the
+ * obvious upgrade is a generated tsvector column + tsquery — the helper's
+ * call signature absorbs that change with no API breakage.
+ */
+import { Suspense } from "react";
+import { requireUser } from "@/lib/auth/server";
+import { listAllNotes, countAllNotes, type NoteListFilters } from "@/lib/db/notes";
+import { listAllTagsForUser } from "@/lib/db/satellite";
+import { NotesBrowser } from "@/components/notes/notes-browser";
+
+export const dynamic = "force-dynamic";
+
+interface NotesPageProps {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}
+
+const PAGE_SIZE = 20;
+
+function parseTypes(
+  raw: string | string[] | undefined,
+): NoteListFilters["activityType"] {
+  if (typeof raw !== "string") return undefined;
+  const valid = new Set(["spread", "trade", "sale", "airdrop"] as const);
+  const parts = raw
+    .split(",")
+    .map((s) => s.trim())
+    .filter((s): s is "spread" | "trade" | "sale" | "airdrop" =>
+      valid.has(s as "spread" | "trade" | "sale" | "airdrop"),
+    );
+  return parts.length > 0 ? parts : undefined;
+}
+
+function parseSort(raw: string | string[] | undefined): NoteListFilters["sort"] {
+  if (raw === "oldest" || raw === "longest" || raw === "edited" || raw === "newest") {
+    return raw;
+  }
+  return "newest";
+}
+
+function stringParam(raw: string | string[] | undefined): string | undefined {
+  if (typeof raw !== "string") return undefined;
+  const trimmed = raw.trim();
+  return trimmed.length > 0 ? trimmed : undefined;
+}
+
+export default async function NotesPage({ searchParams }: NotesPageProps) {
+  const { id: userId } = await requireUser();
+  const sp = await searchParams;
+
+  const filters: NoteListFilters = {
+    activityType: parseTypes(sp.type),
+    tag: stringParam(sp.tag),
+    search: stringParam(sp.q),
+    sort: parseSort(sp.sort),
+    limit: PAGE_SIZE,
+    offset: 0,
+  };
+
+  const [notes, totalCount, tagVocab] = await Promise.all([
+    listAllNotes(userId, filters),
+    countAllNotes(userId, {
+      activityType: filters.activityType,
+      tag: filters.tag,
+      search: filters.search,
+    }),
+    listAllTagsForUser(userId),
+  ]);
+
+  return (
+    <Suspense fallback={null}>
+      <NotesBrowser
+        initialNotes={notes}
+        totalCount={totalCount}
+        tagVocab={tagVocab}
+        pageSize={PAGE_SIZE}
+        initialFilters={{
+          type: filters.activityType ?? [],
+          tag: filters.tag ?? "",
+          search: filters.search ?? "",
+          sort: filters.sort ?? "newest",
+        }}
+      />
+    </Suspense>
+  );
+}

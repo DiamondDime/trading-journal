@@ -8,9 +8,21 @@ import {
 } from "@/components/ui/tooltip";
 
 /**
- * Dashboard heatmap of daily realized net P&L over the last 13 weeks (91 days).
+ * Dashboard heatmap of daily realized net P&L over the last 13 / 26 / 52 weeks.
  *
- * Visual encoding:
+ * Layout (Wave 13A):
+ *   The whole thing is a single CSS Grid with N+1 columns (1 day-of-week label
+ *   column + N week columns) and 8 rows (1 month-label row + 7 day rows).
+ *   Each cell uses `aspect-ratio: 1` so they stay square as the parent stretches
+ *   horizontally — this is what makes the heatmap "fill" the container rather
+ *   than collapsing to a 247px island when the parent card is much wider.
+ *
+ *   • 13w / 26w  → grid-template-columns: <label> repeat(N, minmax(0, 1fr))
+ *                  Cells become ~35-55px on a typical desktop card. No scroll.
+ *   • 52w        → fixed cell pitch (~14px) with horizontal overflow scroll.
+ *                  Cells would be ~5px at 1fr on most viewports — unreadable.
+ *
+ * Visual encoding (unchanged from 12A):
  *   • Positive day → shades of var(--up), intensity from |pnl| / maxAbs in
  *     the visible window. Negative day → shades of var(--down). Zero day with
  *     activity → very faint up/down (floor intensity). No-activity day →
@@ -20,10 +32,6 @@ import {
  *     when a single huge outlier would otherwise dominate a linear scale.
  *   • Today's cell gets a 1px solid border in the text color so the user can
  *     orient on "now".
- *
- * Implementation: color-mix(in srgb, var(--up) <pct>%, transparent) renders
- * the intensity tier cleanly. All modern Chromium / Firefox / Safari (since
- * 16.4) support it. No JS color math required.
  *
  * TZ note: dates here are expected to come from the server as YYYY-MM-DD strings
  * already bucketed in the server's local TZ (see getDailyPnl in activity.ts).
@@ -35,9 +43,20 @@ const DAY_LABELS = ["S", "M", "T", "W", "T", "F", "S"];
 // dashboard default because it fits cleanly in the side-by-side grid; 26w/52w
 // expand the column count for users that want a longer rear-view mirror.
 const DEFAULT_WEEKS = 13;
-const CELL_SIZE = 16; // px — Wave 12A: bumped from 12 for legibility
-const CELL_GAP = 3;   // px — Wave 12A: bumped from 2 to match new cell size
-const COL_PITCH = CELL_SIZE + CELL_GAP; // 19px
+
+/**
+ * Above this many weeks we abandon the responsive 1fr layout and fall back to
+ * a fixed-pitch grid with horizontal scroll. 1fr cells would be ~5-8px at 52w
+ * on a typical card — too small to read intensity from.
+ */
+const SCROLL_WEEKS_THRESHOLD = 27;
+
+/** Fixed-pitch values used only in scroll mode (52w). Tuned for legibility. */
+const SCROLL_CELL_SIZE = 14; // px
+const SCROLL_CELL_GAP = 2;   // px
+
+/** Gap (px) between cells in responsive (fill) mode. */
+const FILL_CELL_GAP = 3;
 
 /** Floor intensity so any non-zero day stays visible. */
 const MIN_INTENSITY = 0.18;
@@ -146,7 +165,7 @@ export function CalendarHeatmap({
 
   // Build the N-cell window ending on endDate, then back-fill to the Sunday
   // that starts the leftmost week. Cells are laid out column-major (week, day).
-  const { cells, weeks, monthMarkers } = React.useMemo(() => {
+  const { weeks, monthMarkers } = React.useMemo(() => {
     const end = parseLocalDate(endDate);
     // End-of-window: align to the END of the current week (Saturday) so the
     // bottom-right cell is the most-recent Saturday — keeps the grid stable
@@ -193,124 +212,250 @@ export function CalendarHeatmap({
       }
     }
 
-    return { cells: out, weeks: wks, monthMarkers: markers };
+    return { weeks: wks, monthMarkers: markers };
   }, [byDate, endDate, firstActivityDate, weeksCount, totalDays]);
 
   // maxAbs over the visible window — drives the intensity scale and the legend.
   const maxAbs = React.useMemo(() => {
     let m = 0;
-    for (const c of cells) {
-      const a = Math.abs(c.netPnl);
-      if (a > m) m = a;
+    for (const wk of weeks) {
+      for (const c of wk) {
+        const a = Math.abs(c.netPnl);
+        if (a > m) m = a;
+      }
     }
     return m;
-  }, [cells]);
+  }, [weeks]);
 
-  // Grid width — used by the inner wrapper so the row of columns has an
-  // intrinsic size and the parent's overflow-x-auto knows what to scroll past.
-  const gridWidth = weeksCount * COL_PITCH;
+  // Layout mode — 1fr fill below the threshold, fixed pitch + scroll at/above.
+  const isScrollMode = weeksCount >= SCROLL_WEEKS_THRESHOLD;
 
   return (
     <div className="flex flex-col gap-2">
-      {/* month labels + grid share a horizontal scroll container so wider
-          windows (26w/52w) pan together. Day-of-week column stays pinned. */}
-      <div className="flex gap-2">
-        {/* day-of-week labels (pinned column) */}
-        <div className="flex flex-col pt-4" style={{ gap: `${CELL_GAP}px` }}>
-          {DAY_LABELS.map((d, i) => (
-            <span
-              key={i}
-              className={cn(
-                "w-3 text-center font-mono text-[10px] text-text-tertiary",
-                i % 2 === 1 ? "opacity-100" : "opacity-0",
-              )}
-              style={{ height: `${CELL_SIZE}px`, lineHeight: `${CELL_SIZE}px` }}
-            >
-              {d}
-            </span>
-          ))}
-        </div>
+      {isScrollMode ? (
+        <ScrollGrid
+          weeks={weeks}
+          weeksCount={weeksCount}
+          monthMarkers={monthMarkers}
+          maxAbs={maxAbs}
+        />
+      ) : (
+        <FillGrid
+          weeks={weeks}
+          weeksCount={weeksCount}
+          monthMarkers={monthMarkers}
+          maxAbs={maxAbs}
+        />
+      )}
 
-        {/* scrollable region — month labels + cells share the pan */}
-        <div className="min-w-0 flex-1 overflow-x-auto">
-          <div style={{ width: `${gridWidth}px`, minWidth: `${gridWidth}px` }}>
-            {/* month labels row */}
-            <div className="relative h-4">
-              {monthMarkers.map((m) => (
-                <span
-                  key={`${m.label}-${m.weekIdx}`}
-                  className="absolute font-mono text-[10px] uppercase tracking-[0.14em] text-text-tertiary"
-                  style={{ left: `calc(${m.weekIdx} * ${COL_PITCH}px + 1px)` }}
-                >
-                  {m.label}
-                </span>
-              ))}
-            </div>
-
-            {/* grid */}
-            <div className="flex" style={{ gap: `${CELL_GAP}px` }}>
-              {weeks.map((week, w) => (
-                <div
-                  key={w}
-                  className="flex flex-col"
-                  style={{ gap: `${CELL_GAP}px` }}
-                >
-                  {week.map((c) => (
-                    <Tooltip key={c.ymd}>
-                      <TooltipTrigger asChild>
-                        <div
-                          role="img"
-                          aria-label={cellAriaLabel(c)}
-                          className={cn(
-                            "rounded-[2px] transition-transform hover:scale-125 hover:ring-1 hover:ring-text/40",
-                          )}
-                          style={{
-                            width: `${CELL_SIZE}px`,
-                            height: `${CELL_SIZE}px`,
-                            background: cellBackground(c, maxAbs),
-                            boxShadow: c.isToday
-                              ? "inset 0 0 0 1px var(--text-primary)"
-                              : undefined,
-                          }}
-                        />
-                      </TooltipTrigger>
-                      <TooltipContent side="top" className="font-mono text-[11px]">
-                        <div className="flex flex-col gap-0.5">
-                          <span className="text-text-tertiary">
-                            {fmtTooltipDate(c.date)}
-                          </span>
-                          <span
-                            className={
-                              c.netPnl > 0
-                                ? "text-up"
-                                : c.netPnl < 0
-                                  ? "text-down"
-                                  : "text-text-tertiary"
-                            }
-                          >
-                            {fmtAmount(c.netPnl)}
-                          </span>
-                          <span className="text-text-tertiary">
-                            {c.count === 0
-                              ? c.preHistory
-                                ? "before first activity"
-                                : "no activity"
-                              : `${c.count} ${c.count === 1 ? "activity" : "activities"}`}
-                          </span>
-                        </div>
-                      </TooltipContent>
-                    </Tooltip>
-                  ))}
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Legend strip — -$max → 0 → +$max in 6 tiers. */}
       <Legend maxAbs={maxAbs} />
     </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Fill mode — single CSS Grid with all rows + columns in one grid context so
+// labels align with cells automatically. Cells use aspect-ratio:1 to stay
+// square while their width tracks the container's free space.
+// ---------------------------------------------------------------------------
+
+interface GridProps {
+  weeks: BuiltCell[][];
+  weeksCount: number;
+  monthMarkers: { label: string; weekIdx: number }[];
+  maxAbs: number;
+}
+
+function FillGrid({ weeks, weeksCount, monthMarkers, maxAbs }: GridProps) {
+  // Grid: col 1 = day-of-week label column (auto), cols 2..N+1 = weeks (1fr each).
+  // Rows: row 1 = month-labels row (auto), rows 2..8 = day-of-week rows.
+  //
+  // Day-of-week labels sit in col 1, rows 2-8. Month labels span their column
+  // in row 1. Cells fill cols 2..N+1, rows 2..8. Because everything lives in
+  // the same grid, labels align with cell centers without manual offset math.
+  const gridTemplateColumns = `auto repeat(${weeksCount}, minmax(0, 1fr))`;
+
+  return (
+    <div
+      className="grid w-full"
+      style={{
+        gridTemplateColumns,
+        columnGap: `${FILL_CELL_GAP}px`,
+        rowGap: `${FILL_CELL_GAP}px`,
+      }}
+    >
+      {/* Month-labels row — one span per marker, anchored to the week column it
+          belongs to. Empty cells in row 1 simply collapse. */}
+      <span
+        aria-hidden
+        style={{ gridColumn: 1, gridRow: 1 }}
+        className="h-3"
+      />
+      {monthMarkers.map((m) => (
+        <span
+          key={`${m.label}-${m.weekIdx}`}
+          style={{ gridColumn: m.weekIdx + 2, gridRow: 1 }}
+          className="font-mono text-[10px] uppercase tracking-[0.14em] text-text-tertiary leading-none"
+        >
+          {m.label}
+        </span>
+      ))}
+
+      {/* Day-of-week labels — col 1, rows 2..8. Hide alternate rows so M/W/F
+          read cleanly without cluttering the column. */}
+      {DAY_LABELS.map((d, i) => (
+        <span
+          key={`dow-${i}`}
+          style={{ gridColumn: 1, gridRow: i + 2 }}
+          className={cn(
+            "flex items-center justify-end pr-1.5 font-mono text-[10px] text-text-tertiary",
+            i % 2 === 1 ? "opacity-100" : "opacity-0",
+          )}
+        >
+          {d}
+        </span>
+      ))}
+
+      {/* Cells — one tile per week-day pair. We render column-major so the
+          spread shape matches the existing data layout (weeks across, days down). */}
+      {weeks.map((week, w) =>
+        week.map((c, d) => (
+          <Tooltip key={c.ymd}>
+            <TooltipTrigger asChild>
+              <div
+                role="img"
+                aria-label={cellAriaLabel(c)}
+                style={{
+                  gridColumn: w + 2,
+                  gridRow: d + 2,
+                  aspectRatio: "1 / 1",
+                  background: cellBackground(c, maxAbs),
+                  boxShadow: c.isToday
+                    ? "inset 0 0 0 1px var(--text-primary)"
+                    : undefined,
+                }}
+                className="rounded-[2px] transition-transform hover:scale-110 hover:ring-1 hover:ring-text/40"
+              />
+            </TooltipTrigger>
+            <CellTooltip cell={c} />
+          </Tooltip>
+        )),
+      )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Scroll mode — used at 52w. Same grid concept but cell columns are fixed-px
+// rather than 1fr, and the whole thing lives inside an overflow-x-auto wrapper.
+// ---------------------------------------------------------------------------
+
+function ScrollGrid({ weeks, weeksCount, monthMarkers, maxAbs }: GridProps) {
+  const gridTemplateColumns = `auto repeat(${weeksCount}, ${SCROLL_CELL_SIZE}px)`;
+
+  return (
+    <div className="overflow-x-auto">
+      <div
+        className="grid"
+        style={{
+          gridTemplateColumns,
+          columnGap: `${SCROLL_CELL_GAP}px`,
+          rowGap: `${SCROLL_CELL_GAP}px`,
+        }}
+      >
+        <span
+          aria-hidden
+          style={{ gridColumn: 1, gridRow: 1 }}
+          className="h-3"
+        />
+        {monthMarkers.map((m) => (
+          <span
+            key={`${m.label}-${m.weekIdx}`}
+            style={{ gridColumn: m.weekIdx + 2, gridRow: 1 }}
+            className="font-mono text-[10px] uppercase tracking-[0.14em] text-text-tertiary leading-none"
+          >
+            {m.label}
+          </span>
+        ))}
+
+        {DAY_LABELS.map((d, i) => (
+          <span
+            key={`dow-${i}`}
+            style={{
+              gridColumn: 1,
+              gridRow: i + 2,
+              height: `${SCROLL_CELL_SIZE}px`,
+              lineHeight: `${SCROLL_CELL_SIZE}px`,
+            }}
+            className={cn(
+              "pr-1.5 text-right font-mono text-[10px] text-text-tertiary",
+              i % 2 === 1 ? "opacity-100" : "opacity-0",
+            )}
+          >
+            {d}
+          </span>
+        ))}
+
+        {weeks.map((week, w) =>
+          week.map((c, d) => (
+            <Tooltip key={c.ymd}>
+              <TooltipTrigger asChild>
+                <div
+                  role="img"
+                  aria-label={cellAriaLabel(c)}
+                  style={{
+                    gridColumn: w + 2,
+                    gridRow: d + 2,
+                    width: `${SCROLL_CELL_SIZE}px`,
+                    height: `${SCROLL_CELL_SIZE}px`,
+                    background: cellBackground(c, maxAbs),
+                    boxShadow: c.isToday
+                      ? "inset 0 0 0 1px var(--text-primary)"
+                      : undefined,
+                  }}
+                  className="rounded-[2px] transition-transform hover:scale-125 hover:ring-1 hover:ring-text/40"
+                />
+              </TooltipTrigger>
+              <CellTooltip cell={c} />
+            </Tooltip>
+          )),
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Tooltip content — extracted so the two grids share one body.
+// ---------------------------------------------------------------------------
+
+function CellTooltip({ cell: c }: { cell: BuiltCell }) {
+  return (
+    <TooltipContent side="top" className="font-mono text-[11px]">
+      <div className="flex flex-col gap-0.5">
+        <span className="text-text-tertiary">
+          {fmtTooltipDate(c.date)}
+        </span>
+        <span
+          className={
+            c.netPnl > 0
+              ? "text-up"
+              : c.netPnl < 0
+                ? "text-down"
+                : "text-text-tertiary"
+          }
+        >
+          {fmtAmount(c.netPnl)}
+        </span>
+        <span className="text-text-tertiary">
+          {c.count === 0
+            ? c.preHistory
+              ? "before first activity"
+              : "no activity"
+            : `${c.count} ${c.count === 1 ? "activity" : "activities"}`}
+        </span>
+      </div>
+    </TooltipContent>
   );
 }
 
@@ -361,10 +506,7 @@ interface LegendTier {
 }
 
 function buildLegendTiers(maxAbs: number): LegendTier[] {
-  // 6 tiers: -max, -2/3*max, -1/3*max, 0/neutral, +1/3*max, +2/3*max, +max.
-  // That's 7 — we'll show 7 cells but the user spec says ~6. Use 7 for symmetry:
-  // [-max, -mid, -low, 0, +low, +mid, +max]. It still reads "6 tiers" minus the
-  // zero. 7 is the perceptually-uniform count for diverging scales.
+  // 7 stops across [-max, 0, +max] for symmetric diverging legend.
   const tiers: LegendTier[] = [];
   const stops = [-1, -2 / 3, -1 / 3, 0, 1 / 3, 2 / 3, 1];
   for (const s of stops) {
@@ -386,23 +528,23 @@ function Legend({ maxAbs }: { maxAbs: number }) {
   const noData = maxAbs === 0;
 
   return (
-    <div className="mt-3 flex flex-col gap-1 pl-7">
+    <div className="mt-3 flex flex-col gap-1">
       <div className="flex items-center gap-[3px]">
         {tiers.map((t, i) => (
           <div
             key={i}
-            className="flex flex-col items-center"
-            style={{ width: `${CELL_SIZE * 2.6}px` }}
+            className="flex flex-col items-center gap-1"
+            style={{ minWidth: "42px" }}
           >
             <span
               className="rounded-[2px]"
               style={{
-                width: `${CELL_SIZE}px`,
-                height: `${CELL_SIZE}px`,
+                width: "14px",
+                height: "14px",
                 background: t.bg,
               }}
             />
-            <span className="mt-1 font-mono text-[9px] tabular-nums text-text-tertiary">
+            <span className="font-mono text-[9px] tabular-nums text-text-tertiary">
               {noData ? (i === 3 ? "$0" : "") : fmtLegendUsd(t.value)}
             </span>
           </div>

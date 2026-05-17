@@ -37,22 +37,22 @@ const sections: { label: string; items: NavItem[] }[] = [
     items: [
       { icon: BookOpen, label: "Overview", href: "/spreads" },
       { icon: Archive, label: "The archive", href: "/spreads/archive", count: 27 },
-      { icon: CalendarDays, label: "Calendar view", href: "#", disabled: true },
+      { icon: CalendarDays, label: "Calendar view", href: "/calendar" },
     ],
   },
   {
     label: "Analytics",
     items: [
-      { icon: TrendingUp, label: "Track record", href: "#", disabled: true },
-      { icon: PieChart, label: "Activity mix", href: "#", disabled: true },
-      { icon: Activity, label: "Regime distribution", href: "#", disabled: true },
+      { icon: TrendingUp, label: "Track record", href: "/analytics/track-record" },
+      { icon: PieChart, label: "Activity mix", href: "/analytics/activity-mix" },
+      { icon: Activity, label: "Regime distribution", href: "/analytics/regime" },
     ],
   },
   {
     label: "Workshop",
     items: [
-      { icon: FileText, label: "Notes & marginalia", href: "#", disabled: true, count: 47 },
-      { icon: Bookmark, label: "Saved views", href: "#", disabled: true, count: 11 },
+      { icon: FileText, label: "Notes & marginalia", href: "/notes" },
+      { icon: Bookmark, label: "Saved views", href: "/views" },
       {
         icon: Plug,
         label: "Exchanges",
