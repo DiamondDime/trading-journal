@@ -525,12 +525,12 @@ export default async function SpreadsPage() {
               <h3 className="font-serif text-[12px] font-semibold uppercase tracking-[0.16em] text-text">
                 Daily realized P&L · last 13 weeks
               </h3>
-              <Link
-                href="#"
-                className="flex items-center gap-1 font-mono text-[10px] uppercase tracking-[0.14em] text-text-tertiary hover:text-text"
+              <span
+                title="Full-year view coming soon"
+                className="flex items-center gap-1 font-mono text-[10px] uppercase tracking-[0.14em] text-text-tertiary/60 cursor-not-allowed"
               >
                 Full year <ArrowRight className="h-3 w-3" />
-              </Link>
+              </span>
             </div>
             <div className="px-6 py-6">
               <CalendarHeatmap

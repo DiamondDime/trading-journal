@@ -16,14 +16,14 @@ export function SiteHeader() {
         </Link>
 
         <nav className="hidden items-center gap-7 text-sm font-medium text-text-secondary md:flex">
-          <Link href="#" className="hover:text-text transition-colors">
-            Currently held
+          <Link href="/spreads" className="hover:text-text transition-colors">
+            Overview
           </Link>
-          <Link href="#" className="hover:text-text transition-colors">
+          <Link href="/spreads/archive" className="hover:text-text transition-colors">
             The archive
           </Link>
-          <Link href="#" className="hover:text-text transition-colors">
-            Track record
+          <Link href="/settings/exchanges" className="hover:text-text transition-colors">
+            Exchanges
           </Link>
         </nav>
 

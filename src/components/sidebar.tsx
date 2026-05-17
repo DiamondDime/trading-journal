@@ -26,6 +26,7 @@ type NavItem = {
   icon: React.ComponentType<{ className?: string }>;
   label: string;
   href: string;
+  disabled?: boolean;
   count?: number;
   badge?: { text: string; tone: "down" | "warn" | "brand" };
 };
@@ -36,22 +37,22 @@ const sections: { label: string; items: NavItem[] }[] = [
     items: [
       { icon: BookOpen, label: "Overview", href: "/spreads" },
       { icon: Archive, label: "The archive", href: "/spreads/archive", count: 27 },
-      { icon: CalendarDays, label: "Calendar view", href: "#" },
+      { icon: CalendarDays, label: "Calendar view", href: "#", disabled: true },
     ],
   },
   {
     label: "Analytics",
     items: [
-      { icon: TrendingUp, label: "Track record", href: "#" },
-      { icon: PieChart, label: "Activity mix", href: "#" },
-      { icon: Activity, label: "Regime distribution", href: "#" },
+      { icon: TrendingUp, label: "Track record", href: "#", disabled: true },
+      { icon: PieChart, label: "Activity mix", href: "#", disabled: true },
+      { icon: Activity, label: "Regime distribution", href: "#", disabled: true },
     ],
   },
   {
     label: "Workshop",
     items: [
-      { icon: FileText, label: "Notes & marginalia", href: "#", count: 47 },
-      { icon: Bookmark, label: "Saved views", href: "#", count: 11 },
+      { icon: FileText, label: "Notes & marginalia", href: "#", disabled: true, count: 47 },
+      { icon: Bookmark, label: "Saved views", href: "#", disabled: true, count: 11 },
       {
         icon: Plug,
         label: "Exchanges",
@@ -123,17 +124,8 @@ export function Sidebar() {
             {sec.items.map((item) => {
               const Icon = item.icon;
               const isActive = pathname === item.href;
-              return (
-                <Link
-                  key={item.label}
-                  href={item.href}
-                  className={cn(
-                    "flex items-center justify-between rounded-md px-2.5 py-1.5 text-[13px] transition-colors",
-                    isActive
-                      ? "bg-subtle text-text font-medium"
-                      : "text-text-secondary hover:bg-subtle hover:text-text"
-                  )}
-                >
+              const inner = (
+                <>
                   <span className="flex items-center gap-2.5">
                     <Icon className="h-3.5 w-3.5" />
                     {item.label}
@@ -156,7 +148,46 @@ export function Sidebar() {
                         {item.count}
                       </span>
                     )}
+                    {item.disabled && (
+                      <span
+                        title="Coming soon"
+                        className="font-mono text-[8px] uppercase tracking-wide text-text-tertiary/60"
+                      >
+                        soon
+                      </span>
+                    )}
                   </span>
+                </>
+              );
+
+              if (item.disabled) {
+                return (
+                  <span
+                    key={item.label}
+                    aria-disabled="true"
+                    title="Coming soon"
+                    className={cn(
+                      "flex items-center justify-between rounded-md px-2.5 py-1.5 text-[13px]",
+                      "text-text-tertiary/70 cursor-not-allowed select-none"
+                    )}
+                  >
+                    {inner}
+                  </span>
+                );
+              }
+
+              return (
+                <Link
+                  key={item.label}
+                  href={item.href}
+                  className={cn(
+                    "flex items-center justify-between rounded-md px-2.5 py-1.5 text-[13px] transition-colors",
+                    isActive
+                      ? "bg-subtle text-text font-medium"
+                      : "text-text-secondary hover:bg-subtle hover:text-text"
+                  )}
+                >
+                  {inner}
                 </Link>
               );
             })}
