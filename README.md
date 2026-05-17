@@ -107,6 +107,12 @@ pnpm worker:dev
 
 # Matcher only (no sync):
 pnpm worker:match
+
+# Backfill MAE/MFE excursions for closed trades & spreads
+# (reads public klines, no credentials required, idempotent):
+pnpm worker:backfill-excursions
+pnpm worker:backfill-excursions --activity-id <uuid>     # one activity
+pnpm worker:backfill-excursions --force                  # overwrite existing
 ```
 
 Environment: `DATABASE_URL`, `CREDENTIALS_MASTER_KEY` (required), optional

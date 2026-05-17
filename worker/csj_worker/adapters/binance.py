@@ -821,6 +821,120 @@ class BinanceAdapter(ExchangeAdapter):
     # Open positions
     # ------------------------------------------------------------------
 
+    # ------------------------------------------------------------------
+    # Klines (public OHLCV)
+    # ------------------------------------------------------------------
+
+    async def fetch_klines(
+        self,
+        symbol: str,
+        start_ms: int,
+        end_ms: int,
+        *,
+        interval: str = "1m",
+    ) -> list[dict[str, Any]]:
+        """Fetch public OHLCV klines for a symbol in [start_ms, end_ms].
+
+        Public endpoint — no authentication required. We try the USDM perp
+        sub-client first (most spread/perp activity lives there); if the symbol
+        isn't found we fall back to spot.
+
+        Pagination: Binance caps `fetch_ohlcv` at 1500 bars per call. We page
+        forward from `start_ms` until we cross `end_ms` or get an empty page.
+        """
+        # No credentials needed for public OHLCV — instantiate sub-clients
+        # with no API key. We need both for fallback (perp → spot).
+        usdm = ccxt_async.binanceusdm(
+            {"enableRateLimit": False, "options": {"defaultType": "future"}}
+        )
+        spot = ccxt_async.binance(
+            {"enableRateLimit": False, "options": {"defaultType": "spot"}}
+        )
+
+        try:
+            for client in (usdm, spot):
+                try:
+                    bars = await self._page_ohlcv(client, symbol, interval, start_ms, end_ms)
+                except (ccxt_async.BadSymbol, ccxt_async.BadRequest):
+                    # Try the next sub-client (symbol not on this market type)
+                    continue
+                except Exception as exc:
+                    mapped = _map_ccxt_error(exc)
+                    raise mapped from exc
+
+                if bars:
+                    return bars
+
+            # Symbol not found on any sub-client → return empty (caller logs + bails)
+            log.warning(
+                "binance.fetch_klines.symbol_not_found",
+                symbol=symbol,
+                interval=interval,
+            )
+            return []
+        finally:
+            for c in (usdm, spot):
+                try:
+                    await c.close()
+                except Exception:
+                    log.debug("binance.close_klines_client_error", exc_info=True)
+
+    @staticmethod
+    async def _page_ohlcv(
+        client: ccxt_async.Exchange,
+        symbol: str,
+        timeframe: str,
+        start_ms: int,
+        end_ms: int,
+    ) -> list[dict[str, Any]]:
+        """Page through ccxt fetch_ohlcv until we cover [start_ms, end_ms].
+
+        ccxt returns rows as ``[ts, open, high, low, close, volume]``. We
+        accumulate, dedupe by ts (paginated calls can overlap at the boundary
+        by one bar), and convert to our canonical dict shape.
+        """
+        out: dict[int, dict[str, Any]] = {}
+        cursor = start_ms
+        # Bar interval in ms for cursor advancement when the response is empty
+        # or stuck at the same timestamp.
+        tf_ms = client.parse_timeframe(timeframe) * 1000 if hasattr(client, "parse_timeframe") else 60_000
+
+        max_iterations = 200  # safety cap
+        iters = 0
+        while cursor <= end_ms and iters < max_iterations:
+            iters += 1
+            raw_bars: list[list[Any]] = await client.fetch_ohlcv(
+                symbol, timeframe=timeframe, since=cursor, limit=1500
+            )
+            if not raw_bars:
+                break
+
+            advanced = False
+            for ts, o, h, low, c, v in raw_bars:
+                if ts > end_ms:
+                    continue
+                if ts not in out:
+                    out[ts] = {
+                        "ts_ms": int(ts),
+                        "open": Decimal(str(o)),
+                        "high": Decimal(str(h)),
+                        "low": Decimal(str(low)),
+                        "close": Decimal(str(c)),
+                        "volume": Decimal(str(v)) if v is not None else Decimal("0"),
+                    }
+                    advanced = True
+
+            last_ts = int(raw_bars[-1][0])
+            if last_ts >= end_ms:
+                break
+            if not advanced:
+                # No new data — bump cursor by one bar to avoid an infinite loop
+                cursor = last_ts + tf_ms
+            else:
+                cursor = last_ts + tf_ms
+
+        return sorted(out.values(), key=lambda b: b["ts_ms"])
+
     async def fetch_open_positions(
         self,
         credentials: Credentials,

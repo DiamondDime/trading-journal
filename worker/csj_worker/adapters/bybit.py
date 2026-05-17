@@ -780,6 +780,106 @@ class BybitAdapter(ExchangeAdapter):
     # Open positions snapshot
     # ------------------------------------------------------------------
 
+    # ------------------------------------------------------------------
+    # Klines (public OHLCV)
+    # ------------------------------------------------------------------
+
+    async def fetch_klines(
+        self,
+        symbol: str,
+        start_ms: int,
+        end_ms: int,
+        *,
+        interval: str = "1m",
+    ) -> list[dict[str, Any]]:
+        """Fetch public OHLCV klines for a Bybit symbol in [start_ms, end_ms].
+
+        Public endpoint — no API key required. We default to the ``linear``
+        category (USDT perp) since spread/trade activity is dominated there;
+        if the symbol isn't recognised on linear we fall back to spot.
+
+        Pagination: Bybit ccxt caps OHLCV at 1000 bars per call. We page
+        forward, dedupe by timestamp, and stop when we cross ``end_ms`` or
+        receive an empty page.
+        """
+        # No credentials — ccxt accepts an empty config for public endpoints.
+        linear = ccxt.bybit({"enableRateLimit": False, "options": {"defaultType": "linear"}})
+        spot = ccxt.bybit({"enableRateLimit": False, "options": {"defaultType": "spot"}})
+
+        try:
+            for client in (linear, spot):
+                try:
+                    bars = await self._page_ohlcv(client, symbol, interval, start_ms, end_ms)
+                except (ccxt.BadSymbol, ccxt.BadRequest):
+                    continue
+                except Exception as exc:
+                    raise _ccxt_exception_to_adapter(exc, "fetch_klines") from exc
+
+                if bars:
+                    return bars
+
+            log.warning(
+                "bybit.fetch_klines.symbol_not_found",
+                symbol=symbol,
+                interval=interval,
+            )
+            return []
+        finally:
+            for c in (linear, spot):
+                try:
+                    await c.close()
+                except Exception:
+                    log.debug("bybit.close_klines_client_error", exc_info=True)
+
+    @staticmethod
+    async def _page_ohlcv(
+        client: ccxt.bybit,
+        symbol: str,
+        timeframe: str,
+        start_ms: int,
+        end_ms: int,
+    ) -> list[dict[str, Any]]:
+        """Page through ccxt fetch_ohlcv. Returns canonical dict bars."""
+        out: dict[int, dict[str, Any]] = {}
+        cursor = start_ms
+        tf_ms = (
+            client.parse_timeframe(timeframe) * 1000
+            if hasattr(client, "parse_timeframe")
+            else 60_000
+        )
+
+        max_iterations = 200
+        iters = 0
+        while cursor <= end_ms and iters < max_iterations:
+            iters += 1
+            raw_bars: list[list[Any]] = await client.fetch_ohlcv(
+                symbol, timeframe=timeframe, since=cursor, limit=1000
+            )
+            if not raw_bars:
+                break
+
+            advanced = False
+            for ts, o, h, low, c, v in raw_bars:
+                if ts > end_ms:
+                    continue
+                if ts not in out:
+                    out[ts] = {
+                        "ts_ms": int(ts),
+                        "open": Decimal(str(o)),
+                        "high": Decimal(str(h)),
+                        "low": Decimal(str(low)),
+                        "close": Decimal(str(c)),
+                        "volume": Decimal(str(v)) if v is not None else Decimal("0"),
+                    }
+                    advanced = True
+
+            last_ts = int(raw_bars[-1][0])
+            if last_ts >= end_ms:
+                break
+            cursor = (last_ts + tf_ms) if not advanced else (last_ts + tf_ms)
+
+        return sorted(out.values(), key=lambda b: b["ts_ms"])
+
     async def fetch_open_positions(
         self,
         credentials: Credentials,

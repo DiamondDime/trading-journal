@@ -33,6 +33,7 @@ from typing import NoReturn
 import psycopg
 
 from csj_worker import db as dbx
+from csj_worker import excursions as excx
 from csj_worker.adapters import ExchangeAdapter
 from csj_worker.adapters.base import (
     AdapterAuthError,
@@ -429,6 +430,128 @@ async def run_single_connection(
 
 
 # ---------------------------------------------------------------------------
+# Excursion backfill — Wave 10-1
+# ---------------------------------------------------------------------------
+
+
+# Rate-limit governance for backfill. Each invocation processes at most
+# BACKFILL_BATCH_CAP activities and sleeps BACKFILL_SLEEP_S between them.
+BACKFILL_BATCH_CAP = 200
+BACKFILL_SLEEP_S = 0.2
+
+
+async def run_backfill_excursions(
+    database_url: str,
+    *,
+    activity_id: str | None,
+    all_missing: bool,
+    force: bool,
+) -> int:
+    """Backfill MAE/MFE excursions for closed trades / spreads.
+
+    Modes:
+        --activity-id <uuid>: process exactly that activity.
+        --all-missing (default when no id given): scan up to
+            BACKFILL_BATCH_CAP activities lacking an excursion row.
+
+    Rate-limit posture:
+        * 200ms sleep between activities (BACKFILL_SLEEP_S).
+        * On AdapterRateLimitedError, sleep `retry_after` (or 60s fallback)
+          and skip the activity; the next batch will pick it up.
+
+    Returns the CLI exit code (0 on success, non-zero on fatal errors).
+    """
+    log = logging.getLogger("csj_worker.backfill")
+    conn = await dbx.open_async_conn(database_url)
+    try:
+        # Build the work list
+        if activity_id is not None:
+            ids: list[str] = [activity_id]
+        else:
+            if not all_missing:
+                # No id and no --all-missing → also default to scanning missing.
+                # Keeps the CLI ergonomic ("just run it") but logs the choice.
+                log.info("backfill.default_to_all_missing")
+            ids = await excx.list_activities_missing_excursion(
+                conn, limit=BACKFILL_BATCH_CAP
+            )
+
+        if not ids:
+            log.info("backfill.no_activities")
+            return 0
+
+        log.info(
+            "backfill.start",
+            extra={
+                "count": len(ids),
+                "force": force,
+                "batch_cap": BACKFILL_BATCH_CAP,
+                "sleep_s": BACKFILL_SLEEP_S,
+            },
+        )
+
+        written = 0
+        skipped_exists = 0
+        skipped_no_data = 0
+        skipped_unsupported = 0
+        skipped_missing = 0
+        errored = 0
+
+        for i, aid in enumerate(ids):
+            try:
+                result = await excx.backfill_excursion(conn, aid, force=force)
+            except AdapterRateLimitedError as exc:
+                # Exponential backoff on the first hit, then carry on.
+                backoff = exc.retry_after or 60.0
+                log.warning(
+                    "backfill.rate_limited",
+                    extra={"activity_id": aid, "backoff_s": backoff},
+                )
+                await asyncio.sleep(backoff)
+                continue
+            except Exception:
+                log.exception(
+                    "backfill.unexpected_error",
+                    extra={"activity_id": aid},
+                )
+                await conn.rollback()
+                errored += 1
+                continue
+
+            if result.status == "written":
+                await conn.commit()
+                written += 1
+            elif result.status == "skipped_exists":
+                skipped_exists += 1
+            elif result.status == "skipped_no_data":
+                skipped_no_data += 1
+            elif result.status == "skipped_unsupported":
+                skipped_unsupported += 1
+            elif result.status == "skipped_missing":
+                skipped_missing += 1
+
+            # Respect exchange rate limits: small sleep between activities.
+            if i + 1 < len(ids):
+                await asyncio.sleep(BACKFILL_SLEEP_S)
+
+        log.info(
+            "backfill.complete",
+            extra={
+                "scanned": len(ids),
+                "written": written,
+                "skipped_exists": skipped_exists,
+                "skipped_no_data": skipped_no_data,
+                "skipped_unsupported": skipped_unsupported,
+                "skipped_missing": skipped_missing,
+                "errored": errored,
+            },
+        )
+        return 0 if errored == 0 else 1
+    finally:
+        await conn.close()
+
+
+# ---------------------------------------------------------------------------
 # Matcher-only mode
 # ---------------------------------------------------------------------------
 
@@ -530,6 +653,27 @@ def _build_parser() -> argparse.ArgumentParser:
 
     sub.add_parser("match", help="Run the leg matcher only (no sync)")
 
+    # Wave 10-1: kline-driven MAE/MFE backfill for closed activities.
+    p_backfill = sub.add_parser(
+        "backfill-excursions",
+        help="Compute MAE/MFE from public klines for closed trades & spreads",
+    )
+    p_backfill.add_argument(
+        "--activity-id",
+        default=None,
+        help="UUID of a single activity to backfill (default: scan missing)",
+    )
+    p_backfill.add_argument(
+        "--all-missing",
+        action="store_true",
+        help="Scan up to 200 activities lacking an excursion row (the default behaviour)",
+    )
+    p_backfill.add_argument(
+        "--force",
+        action="store_true",
+        help="Re-fetch and overwrite even if a kline_backfill row exists",
+    )
+
     return p
 
 
@@ -571,6 +715,15 @@ def main(argv: list[str] | None = None) -> NoReturn:
             )
         elif args.cmd == "match":
             rc = asyncio.run(run_matcher_only(database_url))
+        elif args.cmd == "backfill-excursions":
+            rc = asyncio.run(
+                run_backfill_excursions(
+                    database_url,
+                    activity_id=args.activity_id,
+                    all_missing=args.all_missing,
+                    force=args.force,
+                )
+            )
         elif args.once:
             asyncio.run(run_once(database_url, args.lookback_days))
             rc = 0

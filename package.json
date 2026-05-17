@@ -25,6 +25,7 @@
     "worker:dev": "cd worker && uv run python -m csj_worker.main",
     "worker:once": "cd worker && uv run python -m csj_worker.main --once",
     "worker:match": "cd worker && uv run python -m csj_worker.main match",
+    "worker:backfill-excursions": "cd worker && uv run python -m csj_worker.main backfill-excursions",
     "worker:test": "cd worker && uv run pytest"
   },
   "dependencies": {
@@ -32,6 +33,7 @@
     "clsx": "^2.1.1",
     "decimal.js": "^10.4.3",
     "lucide-react": "^1.16.0",
+    "markerjs2": "^2.32.7",
     "next": "16.2.6",
     "next-themes": "^0.4.6",
     "postgres": "^3.4.9",

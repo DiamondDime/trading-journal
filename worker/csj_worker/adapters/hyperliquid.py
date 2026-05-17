@@ -549,6 +549,153 @@ class HyperliquidAdapter(ExchangeAdapter):
             yield events
 
     # ------------------------------------------------------------------
+    # Klines (public OHLCV)
+    # ------------------------------------------------------------------
+
+    async def fetch_klines(
+        self,
+        symbol: str,
+        start_ms: int,
+        end_ms: int,
+        *,
+        interval: str = "1m",
+    ) -> list[dict[str, Any]]:
+        """Fetch Hyperliquid candles for a coin in [start_ms, end_ms].
+
+        Hyperliquid's `/info` endpoint exposes klines via the ``candleSnapshot``
+        type. The ``coin`` is the bare base symbol (e.g. ``BTC``, ``ETH``) —
+        Hyperliquid is perp-only and uses USDC settlement so we don't pass a
+        market suffix.
+
+        Public endpoint — no auth needed.
+
+        Response shape per candle::
+
+            {"t": start_ms, "T": end_ms, "s": "BTC", "i": "1m",
+             "o": "68150.0", "h": "...", "l": "...", "c": "...", "v": "..."}
+
+        Hyperliquid caps each call to 5000 bars; we page forward in chunks
+        of (end - start) ms and dedupe by `t` (bar open time).
+        """
+        coin = self._symbol_to_coin(symbol)
+        # candleSnapshot accepts interval strings: "1m", "3m", "5m", "15m",
+        # "30m", "1h", "2h", "4h", "8h", "12h", "1d", "3d", "1w", "1M".
+        # We pass through directly — caller selects per duration.
+
+        out: dict[int, dict[str, Any]] = {}
+        # Hyperliquid returns at most ~5000 bars per call. To stay safely
+        # under that, we chunk the request window into ≤ 4000-bar slices.
+        interval_ms = self._interval_to_ms(interval)
+        chunk_ms = interval_ms * 4000
+
+        cursor = start_ms
+        max_iterations = 50  # safety cap (50 * 4000 bars = 200K bars per call)
+        iters = 0
+        while cursor <= end_ms and iters < max_iterations:
+            iters += 1
+            slice_end = min(cursor + chunk_ms, end_ms)
+            try:
+                raw = await self._post(
+                    {
+                        "type": "candleSnapshot",
+                        "req": {
+                            "coin": coin,
+                            "interval": interval,
+                            "startTime": cursor,
+                            "endTime": slice_end,
+                        },
+                    }
+                )
+            except AdapterNetworkError:
+                raise
+            except AdapterRateLimitedError:
+                raise
+
+            if not isinstance(raw, list):
+                raise AdapterInvalidDataError(
+                    f"candleSnapshot expected list, got {type(raw).__name__}"
+                )
+
+            if not raw:
+                # No more data in this slice — advance the cursor regardless
+                # so we don't loop forever on empty windows.
+                cursor = slice_end + interval_ms
+                if slice_end >= end_ms:
+                    break
+                continue
+
+            for bar in raw:
+                try:
+                    ts = int(bar["t"])
+                    if ts > end_ms:
+                        continue
+                    if ts in out:
+                        continue
+                    out[ts] = {
+                        "ts_ms": ts,
+                        "open": Decimal(str(bar["o"])),
+                        "high": Decimal(str(bar["h"])),
+                        "low": Decimal(str(bar["l"])),
+                        "close": Decimal(str(bar["c"])),
+                        "volume": Decimal(str(bar.get("v", "0"))),
+                    }
+                except KeyError as exc:
+                    raise AdapterInvalidDataError(
+                        f"Hyperliquid candle missing field {exc}: {bar!r}"
+                    ) from exc
+
+            last_ts = int(raw[-1]["t"])
+            if last_ts >= end_ms:
+                break
+            cursor = last_ts + interval_ms
+
+        return sorted(out.values(), key=lambda b: b["ts_ms"])
+
+    @staticmethod
+    def _symbol_to_coin(symbol: str) -> str:
+        """Strip quote / settlement suffix to get the bare coin symbol.
+
+        Accepts: "BTC", "BTC-PERP", "BTC/USDC", "BTC/USDC:USDC", "BTCUSDC".
+        Returns the base coin in uppercase.
+        """
+        s = symbol.upper().strip()
+        # ccxt perp form first (most specific)
+        if "/" in s:
+            s = s.split("/", 1)[0]
+        # Strip a dash suffix (Hyperliquid web uses "BTC-PERP")
+        if "-" in s:
+            s = s.split("-", 1)[0]
+        # Strip trailing USDC / USD / USDT (Bybit-style concat — defensive)
+        for tail in ("USDC", "USDT", "USD"):
+            if s.endswith(tail) and len(s) > len(tail):
+                return s[: -len(tail)]
+        return s
+
+    @staticmethod
+    def _interval_to_ms(interval: str) -> int:
+        """Convert a Hyperliquid interval string to milliseconds.
+
+        Supports the same set as candleSnapshot. Unknown intervals fall back to 1 minute.
+        """
+        units = {
+            "1m": 60_000,
+            "3m": 3 * 60_000,
+            "5m": 5 * 60_000,
+            "15m": 15 * 60_000,
+            "30m": 30 * 60_000,
+            "1h": 60 * 60_000,
+            "2h": 2 * 60 * 60_000,
+            "4h": 4 * 60 * 60_000,
+            "8h": 8 * 60 * 60_000,
+            "12h": 12 * 60 * 60_000,
+            "1d": 24 * 60 * 60_000,
+            "3d": 3 * 24 * 60 * 60_000,
+            "1w": 7 * 24 * 60 * 60_000,
+            "1M": 30 * 24 * 60 * 60_000,  # approximate (calendar month varies)
+        }
+        return units.get(interval, 60_000)
+
+    # ------------------------------------------------------------------
     # Open positions
     # ------------------------------------------------------------------
 

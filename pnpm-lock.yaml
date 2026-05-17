@@ -20,6 +20,9 @@ importers:
       lucide-react:
         specifier: ^1.16.0
         version: 1.16.0(react@19.2.4)
+      markerjs2:
+        specifier: ^2.32.7
+        version: 2.32.7
       next:
         specifier: 16.2.6
         version: 16.2.6(@babel/core@7.29.0)(@playwright/test@1.60.0)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
@@ -2779,6 +2782,9 @@ packages:
   make-dir@4.0.0:
     resolution: {integrity: sha512-hXdUTZYIVOt1Ex//jAQi+wTZZpUpwBj/0QsOzqegb3rGMMeJiSEu5xLHnYfBrRV4RH2+OCSOO95Is/7x1WJ4bw==}
     engines: {node: '>=10'}
+
+  markerjs2@2.32.7:
+    resolution: {integrity: sha512-HeFRZjmc43DOG3lSQp92z49cq2oCYpYn2pX++SkJAW1Dij4xJtRquVRf+cXeSZQWDX3ufns1Ry/bGk+zveP7rA==}
 
   math-intrinsics@1.1.0:
     resolution: {integrity: sha512-/IXtbwEk5HTPyEwyKX6hGkYXxM9nbj64B+ilVJnC/R6B0pH5G4V3b0pVbL7DBj4tkhBAppbQUlf6F6Xl9LHu1g==}
@@ -6211,6 +6217,8 @@ snapshots:
   make-dir@4.0.0:
     dependencies:
       semver: 7.8.0
+
+  markerjs2@2.32.7: {}
 
   math-intrinsics@1.1.0: {}
 

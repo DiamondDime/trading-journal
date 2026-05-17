@@ -177,3 +177,36 @@ class ExchangeAdapter(ABC):
         For wallet-based DEX adapters: queries venue indexer for the wallet's
         current open positions.
         """
+
+    # ----- Public market data (kline / OHLCV) -----
+
+    async def fetch_klines(
+        self,
+        symbol: str,
+        start_ms: int,
+        end_ms: int,
+        *,
+        interval: str = "1m",
+    ) -> list[dict]:
+        """Return klines (OHLCV bars) for ``symbol`` in [start_ms, end_ms].
+
+        Each returned dict has the canonical shape::
+
+            {"ts_ms": int, "open": Decimal, "high": Decimal,
+             "low": Decimal, "close": Decimal, "volume": Decimal}
+
+        ``interval`` is a ccxt-style timeframe string (``"1m"``, ``"5m"``,
+        ``"15m"``, ``"1h"``...). Adapters MAY map this to their venue-native
+        bucket strings internally.
+
+        Public market data: NO credentials are required. This is used by the
+        excursion-backfill worker to compute MAE/MFE over closed-trade windows
+        without ever touching authenticated endpoints.
+
+        Default impl raises ``AdapterUnsupportedError`` — adapters override
+        when they can provide klines. Raises on transient errors so the caller
+        can apply backoff (see ``AdapterRateLimitedError`` / ``AdapterNetworkError``).
+        """
+        raise AdapterUnsupportedError(
+            f"Adapter for {self.exchange.value} does not implement fetch_klines"
+        )
