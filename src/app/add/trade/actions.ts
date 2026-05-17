@@ -1,6 +1,7 @@
 "use server";
 
 import { redirect } from "next/navigation";
+import { revalidatePath } from "next/cache";
 import { requireUser } from "@/lib/auth/server";
 import { createTrade, updateTradeActivity } from "@/lib/db/activity";
 import { CreateTradeBody } from "@/lib/db/zod-schemas";
@@ -126,6 +127,11 @@ export async function logTrade(formData: FormData): Promise<void> {
   // Redirect must live outside try/catch: `redirect()` throws an internal
   // signal that Next intercepts; if it's caught it never actually navigates.
   if (activityId) {
+    // Invalidate the dashboard + archive's cached render so the new/edited
+    // activity shows up immediately on next navigation. revalidatePath must
+    // run BEFORE redirect() — redirect throws, so any call after it dies.
+    revalidatePath("/spreads");
+    revalidatePath("/spreads/archive");
     const qs = isEdit ? "from=wizard&action=edited" : "from=wizard";
     redirect(`/trades/${activityId}?${qs}`);
   } else {

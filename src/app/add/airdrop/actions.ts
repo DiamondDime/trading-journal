@@ -1,6 +1,7 @@
 "use server";
 
 import { redirect } from "next/navigation";
+import { revalidatePath } from "next/cache";
 import { requireUser } from "@/lib/auth/server";
 import { createAirdrop, updateAirdropActivity } from "@/lib/db/activity";
 import { CreateAirdropBody } from "@/lib/db/zod-schemas";
@@ -84,6 +85,10 @@ export async function logAirdrop(formData: FormData): Promise<void> {
   }
 
   if (activityId) {
+    // Invalidate dashboard + archive: see trade/actions.ts for the order rule
+    // (revalidatePath runs before redirect because redirect throws).
+    revalidatePath("/spreads");
+    revalidatePath("/spreads/archive");
     const qs = isEdit ? "from=wizard&action=edited" : "from=wizard";
     redirect(`/airdrops/${activityId}?${qs}`);
   } else {

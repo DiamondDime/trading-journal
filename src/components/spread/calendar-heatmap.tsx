@@ -31,11 +31,13 @@ import {
  */
 
 const DAY_LABELS = ["S", "M", "T", "W", "T", "F", "S"];
-const WEEKS = 13;
-const TOTAL_DAYS = WEEKS * 7;
-const CELL_SIZE = 12; // px
-const CELL_GAP = 2;   // px
-const COL_PITCH = CELL_SIZE + CELL_GAP; // 14px
+// Default window — the page can widen this via the `weeks` prop. 13w stays the
+// dashboard default because it fits cleanly in the side-by-side grid; 26w/52w
+// expand the column count for users that want a longer rear-view mirror.
+const DEFAULT_WEEKS = 13;
+const CELL_SIZE = 16; // px — Wave 12A: bumped from 12 for legibility
+const CELL_GAP = 3;   // px — Wave 12A: bumped from 2 to match new cell size
+const COL_PITCH = CELL_SIZE + CELL_GAP; // 19px
 
 /** Floor intensity so any non-zero day stays visible. */
 const MIN_INTENSITY = 0.18;
@@ -64,6 +66,9 @@ export interface CalendarHeatmapProps {
    * shaded extra-faint to signal "no journal yet" vs "no activity that day".
    */
   firstActivityDate?: string | null;
+  /** Number of weeks rendered. Defaults to 13. Page passes 26 / 52 for the
+   *  wider toggles. */
+  weeks?: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -121,7 +126,17 @@ interface BuiltCell {
   isToday: boolean;
 }
 
-export function CalendarHeatmap({ days, endDate, firstActivityDate }: CalendarHeatmapProps) {
+export function CalendarHeatmap({
+  days,
+  endDate,
+  firstActivityDate,
+  weeks: weeksProp = DEFAULT_WEEKS,
+}: CalendarHeatmapProps) {
+  // Clamp to a sane range — 52w is the longest the page exposes, but a caller
+  // could pass anything; very large windows would blow out the grid layout.
+  const weeksCount = Math.max(1, Math.min(104, Math.floor(weeksProp)));
+  const totalDays = weeksCount * 7;
+
   // Build a Map from YYYY-MM-DD → row for O(1) lookup.
   const byDate = React.useMemo(() => {
     const m = new Map<string, DailyCell>();
@@ -129,7 +144,7 @@ export function CalendarHeatmap({ days, endDate, firstActivityDate }: CalendarHe
     return m;
   }, [days]);
 
-  // Build the 91-cell window ending on endDate, then back-fill to the Sunday
+  // Build the N-cell window ending on endDate, then back-fill to the Sunday
   // that starts the leftmost week. Cells are laid out column-major (week, day).
   const { cells, weeks, monthMarkers } = React.useMemo(() => {
     const end = parseLocalDate(endDate);
@@ -139,12 +154,12 @@ export function CalendarHeatmap({ days, endDate, firstActivityDate }: CalendarHe
     // border within the grid wherever it falls.
     const endDow = end.getDay(); // 0 = Sun .. 6 = Sat
     const lastCell = addDays(end, 6 - endDow); // upcoming Saturday
-    const firstCell = addDays(lastCell, -(TOTAL_DAYS - 1));
+    const firstCell = addDays(lastCell, -(totalDays - 1));
     const firstActivity = firstActivityDate ? parseLocalDate(firstActivityDate) : null;
     const todayYmd = fmtLocalDate(new Date());
 
     const out: BuiltCell[] = [];
-    for (let i = 0; i < TOTAL_DAYS; i++) {
+    for (let i = 0; i < totalDays; i++) {
       const date = addDays(firstCell, i);
       const ymd = fmtLocalDate(date);
       const row = byDate.get(ymd);
@@ -160,14 +175,14 @@ export function CalendarHeatmap({ days, endDate, firstActivityDate }: CalendarHe
 
     // Reshape into [week][dayOfWeek]
     const wks: BuiltCell[][] = [];
-    for (let w = 0; w < WEEKS; w++) {
+    for (let w = 0; w < weeksCount; w++) {
       wks.push(out.slice(w * 7, w * 7 + 7));
     }
 
     // Month labels — first column of each new month within the visible range.
     const markers: { label: string; weekIdx: number }[] = [];
     let lastMonth = -1;
-    for (let w = 0; w < WEEKS; w++) {
+    for (let w = 0; w < weeksCount; w++) {
       const d = wks[w][0].date;
       if (d.getMonth() !== lastMonth) {
         markers.push({
@@ -179,7 +194,7 @@ export function CalendarHeatmap({ days, endDate, firstActivityDate }: CalendarHe
     }
 
     return { cells: out, weeks: wks, monthMarkers: markers };
-  }, [byDate, endDate, firstActivityDate]);
+  }, [byDate, endDate, firstActivityDate, weeksCount, totalDays]);
 
   // maxAbs over the visible window — drives the intensity scale and the legend.
   const maxAbs = React.useMemo(() => {
@@ -191,24 +206,17 @@ export function CalendarHeatmap({ days, endDate, firstActivityDate }: CalendarHe
     return m;
   }, [cells]);
 
+  // Grid width — used by the inner wrapper so the row of columns has an
+  // intrinsic size and the parent's overflow-x-auto knows what to scroll past.
+  const gridWidth = weeksCount * COL_PITCH;
+
   return (
     <div className="flex flex-col gap-2">
-      {/* month labels row */}
-      <div className="relative h-4 pl-7">
-        {monthMarkers.map((m) => (
-          <span
-            key={`${m.label}-${m.weekIdx}`}
-            className="absolute font-mono text-[10px] uppercase tracking-[0.14em] text-text-tertiary"
-            style={{ left: `calc(${m.weekIdx} * ${COL_PITCH}px + 1px)` }}
-          >
-            {m.label}
-          </span>
-        ))}
-      </div>
-
+      {/* month labels + grid share a horizontal scroll container so wider
+          windows (26w/52w) pan together. Day-of-week column stays pinned. */}
       <div className="flex gap-2">
-        {/* day-of-week labels */}
-        <div className="flex flex-col" style={{ gap: `${CELL_GAP}px` }}>
+        {/* day-of-week labels (pinned column) */}
+        <div className="flex flex-col pt-4" style={{ gap: `${CELL_GAP}px` }}>
           {DAY_LABELS.map((d, i) => (
             <span
               key={i}
@@ -223,58 +231,80 @@ export function CalendarHeatmap({ days, endDate, firstActivityDate }: CalendarHe
           ))}
         </div>
 
-        {/* grid */}
-        <div className="flex" style={{ gap: `${CELL_GAP}px` }}>
-          {weeks.map((week, w) => (
-            <div key={w} className="flex flex-col" style={{ gap: `${CELL_GAP}px` }}>
-              {week.map((c) => (
-                <Tooltip key={c.ymd}>
-                  <TooltipTrigger asChild>
-                    <div
-                      role="img"
-                      aria-label={cellAriaLabel(c)}
-                      className={cn(
-                        "rounded-[2px] transition-transform hover:scale-125 hover:ring-1 hover:ring-text/40",
-                      )}
-                      style={{
-                        width: `${CELL_SIZE}px`,
-                        height: `${CELL_SIZE}px`,
-                        background: cellBackground(c, maxAbs),
-                        boxShadow: c.isToday
-                          ? "inset 0 0 0 1px var(--text-primary)"
-                          : undefined,
-                      }}
-                    />
-                  </TooltipTrigger>
-                  <TooltipContent side="top" className="font-mono text-[11px]">
-                    <div className="flex flex-col gap-0.5">
-                      <span className="text-text-tertiary">
-                        {fmtTooltipDate(c.date)}
-                      </span>
-                      <span
-                        className={
-                          c.netPnl > 0
-                            ? "text-up"
-                            : c.netPnl < 0
-                              ? "text-down"
-                              : "text-text-tertiary"
-                        }
-                      >
-                        {fmtAmount(c.netPnl)}
-                      </span>
-                      <span className="text-text-tertiary">
-                        {c.count === 0
-                          ? c.preHistory
-                            ? "before first activity"
-                            : "no activity"
-                          : `${c.count} ${c.count === 1 ? "activity" : "activities"}`}
-                      </span>
-                    </div>
-                  </TooltipContent>
-                </Tooltip>
+        {/* scrollable region — month labels + cells share the pan */}
+        <div className="min-w-0 flex-1 overflow-x-auto">
+          <div style={{ width: `${gridWidth}px`, minWidth: `${gridWidth}px` }}>
+            {/* month labels row */}
+            <div className="relative h-4">
+              {monthMarkers.map((m) => (
+                <span
+                  key={`${m.label}-${m.weekIdx}`}
+                  className="absolute font-mono text-[10px] uppercase tracking-[0.14em] text-text-tertiary"
+                  style={{ left: `calc(${m.weekIdx} * ${COL_PITCH}px + 1px)` }}
+                >
+                  {m.label}
+                </span>
               ))}
             </div>
-          ))}
+
+            {/* grid */}
+            <div className="flex" style={{ gap: `${CELL_GAP}px` }}>
+              {weeks.map((week, w) => (
+                <div
+                  key={w}
+                  className="flex flex-col"
+                  style={{ gap: `${CELL_GAP}px` }}
+                >
+                  {week.map((c) => (
+                    <Tooltip key={c.ymd}>
+                      <TooltipTrigger asChild>
+                        <div
+                          role="img"
+                          aria-label={cellAriaLabel(c)}
+                          className={cn(
+                            "rounded-[2px] transition-transform hover:scale-125 hover:ring-1 hover:ring-text/40",
+                          )}
+                          style={{
+                            width: `${CELL_SIZE}px`,
+                            height: `${CELL_SIZE}px`,
+                            background: cellBackground(c, maxAbs),
+                            boxShadow: c.isToday
+                              ? "inset 0 0 0 1px var(--text-primary)"
+                              : undefined,
+                          }}
+                        />
+                      </TooltipTrigger>
+                      <TooltipContent side="top" className="font-mono text-[11px]">
+                        <div className="flex flex-col gap-0.5">
+                          <span className="text-text-tertiary">
+                            {fmtTooltipDate(c.date)}
+                          </span>
+                          <span
+                            className={
+                              c.netPnl > 0
+                                ? "text-up"
+                                : c.netPnl < 0
+                                  ? "text-down"
+                                  : "text-text-tertiary"
+                            }
+                          >
+                            {fmtAmount(c.netPnl)}
+                          </span>
+                          <span className="text-text-tertiary">
+                            {c.count === 0
+                              ? c.preHistory
+                                ? "before first activity"
+                                : "no activity"
+                              : `${c.count} ${c.count === 1 ? "activity" : "activities"}`}
+                          </span>
+                        </div>
+                      </TooltipContent>
+                    </Tooltip>
+                  ))}
+                </div>
+              ))}
+            </div>
+          </div>
         </div>
       </div>
 

@@ -1027,10 +1027,36 @@ export interface ActivityTotals {
 }
 
 /**
+ * Filter set applied uniformly across every dashboard aggregation. All fields
+ * optional: the page passes whatever the URL search-params decoded to.
+ *
+ * Why one shared shape:
+ *  - The /spreads/page.tsx render fans out to seven concurrent reads. If each
+ *    helper grew its own filter signature the wiring would drift fast.
+ *  - The /api/activities/export route uses the same shape so a filtered
+ *    dashboard view round-trips into a filtered export with no glue code.
+ */
+export interface DashboardFilters {
+  /** ISO-prefix YYYY-MM-DD or full ISO. Inclusive. */
+  closedAfter?: string;
+  /** ISO-prefix YYYY-MM-DD or full ISO. Inclusive. */
+  closedBefore?: string;
+  type?: ActivityType[];
+  /** Min capital_deployed_usd in USD (after coalesce(.,0)). Activities below
+   *  this are filtered out — useful for hiding zero-cost airdrops or
+   *  ignore-able test entries. */
+  minCapital?: number;
+}
+
+/**
  * Compute dashboard KPIs from v_activity_feed. Single SELECT per metric
  * keeps the page render under ~10ms even with 1000s of activities.
  */
-export async function getTotals(userId: string): Promise<ActivityTotals> {
+export async function getTotals(
+  userId: string,
+  filters: DashboardFilters = {},
+): Promise<ActivityTotals> {
+  const { closedAfter, closedBefore, type, minCapital } = filters;
   const [agg] = await sql<
     {
       count: string;
@@ -1056,6 +1082,12 @@ export async function getTotals(userId: string): Promise<ActivityTotals> {
       max(closed_at)::text                        AS last_close
     FROM public.v_activity_feed
     WHERE user_id = ${userId}::uuid
+      ${closedAfter  ? sql`AND closed_at >= ${closedAfter}::timestamptz`  : sql``}
+      ${closedBefore ? sql`AND closed_at <= ${closedBefore}::timestamptz` : sql``}
+      ${type && type.length > 0 ? sql`AND type::text = ANY(${type}::text[])` : sql``}
+      ${minCapital && minCapital > 0
+        ? sql`AND coalesce(capital_deployed_usd, 0) >= ${minCapital}`
+        : sql``}
   `;
 
   // Best / worst via two cheap top-1 selects rather than a window function.
@@ -1063,12 +1095,24 @@ export async function getTotals(userId: string): Promise<ActivityTotals> {
     sql<ActivityFeedRowDb[]>`
       SELECT * FROM public.v_activity_feed
       WHERE user_id = ${userId}::uuid
+        ${closedAfter  ? sql`AND closed_at >= ${closedAfter}::timestamptz`  : sql``}
+        ${closedBefore ? sql`AND closed_at <= ${closedBefore}::timestamptz` : sql``}
+        ${type && type.length > 0 ? sql`AND type::text = ANY(${type}::text[])` : sql``}
+        ${minCapital && minCapital > 0
+          ? sql`AND coalesce(capital_deployed_usd, 0) >= ${minCapital}`
+          : sql``}
       ORDER BY net_pnl_usd DESC NULLS LAST
       LIMIT 1
     `,
     sql<ActivityFeedRowDb[]>`
       SELECT * FROM public.v_activity_feed
       WHERE user_id = ${userId}::uuid
+        ${closedAfter  ? sql`AND closed_at >= ${closedAfter}::timestamptz`  : sql``}
+        ${closedBefore ? sql`AND closed_at <= ${closedBefore}::timestamptz` : sql``}
+        ${type && type.length > 0 ? sql`AND type::text = ANY(${type}::text[])` : sql``}
+        ${minCapital && minCapital > 0
+          ? sql`AND coalesce(capital_deployed_usd, 0) >= ${minCapital}`
+          : sql``}
       ORDER BY net_pnl_usd ASC NULLS LAST
       LIMIT 1
     `,
@@ -1097,15 +1141,44 @@ export async function getTotals(userId: string): Promise<ActivityTotals> {
   };
 }
 
+/**
+ * Count of real (non-sentinel) exchange connections for the dashboard's
+ * "N exchanges connected" badge. Excludes the soft-deleted rows and the
+ * '_manual_entry' sentinel that activity.ts maintains for manual journal
+ * entries (those don't represent a sync-capable connection).
+ */
+const MANUAL_CONN_LABEL_FOR_COUNT = '_manual_entry';
+
+export async function getConnectedExchangeCount(
+  userId: string,
+): Promise<number> {
+  const [row] = await sql<{ count: string }[]>`
+    SELECT count(*)::text AS count
+    FROM public.exchange_connections
+    WHERE user_id = ${userId}::uuid
+      AND deleted_at IS NULL
+      AND label != ${MANUAL_CONN_LABEL_FOR_COUNT}
+  `;
+  return Number(row?.count ?? 0);
+}
+
 export type ActivityTypeCounts = Record<ActivityType, number>;
 
 export async function getActivityTypeCounts(
   userId: string,
+  filters: DashboardFilters = {},
 ): Promise<ActivityTypeCounts> {
+  const { closedAfter, closedBefore, type, minCapital } = filters;
   const rows = await sql<{ type: ActivityType; count: string }[]>`
     SELECT type, count(*)::text AS count
     FROM public.v_activity_feed
     WHERE user_id = ${userId}::uuid
+      ${closedAfter  ? sql`AND closed_at >= ${closedAfter}::timestamptz`  : sql``}
+      ${closedBefore ? sql`AND closed_at <= ${closedBefore}::timestamptz` : sql``}
+      ${type && type.length > 0 ? sql`AND type::text = ANY(${type}::text[])` : sql``}
+      ${minCapital && minCapital > 0
+        ? sql`AND coalesce(capital_deployed_usd, 0) >= ${minCapital}`
+        : sql``}
     GROUP BY type
   `;
   const counts: ActivityTypeCounts = { spread: 0, trade: 0, sale: 0, airdrop: 0 };
@@ -1137,10 +1210,18 @@ export async function getActivityTypeNetPnl(
 export async function getRecentCloses(
   userId: string,
   limit: number,
+  filters: DashboardFilters = {},
 ): Promise<ActivityFeedRowDb[]> {
+  const { closedAfter, closedBefore, type, minCapital } = filters;
   return sql<ActivityFeedRowDb[]>`
     SELECT * FROM public.v_activity_feed
     WHERE user_id = ${userId}::uuid
+      ${closedAfter  ? sql`AND closed_at >= ${closedAfter}::timestamptz`  : sql``}
+      ${closedBefore ? sql`AND closed_at <= ${closedBefore}::timestamptz` : sql``}
+      ${type && type.length > 0 ? sql`AND type::text = ANY(${type}::text[])` : sql``}
+      ${minCapital && minCapital > 0
+        ? sql`AND coalesce(capital_deployed_usd, 0) >= ${minCapital}`
+        : sql``}
     ORDER BY coalesce(closed_at, opened_at) DESC NULLS LAST
     LIMIT ${limit}
   `;
@@ -1157,12 +1238,23 @@ export async function getRecentCloses(
  */
 export async function getAllClosedActivities(
   userId: string,
+  filters: DashboardFilters = {},
 ): Promise<ActivityFeedRowDb[]> {
+  // Map dashboard filters → listActivities filters. The supertype filter set
+  // is a superset of the dashboard one, so this is a straight projection.
+  // Note: listActivities filters on `opened_at` for date range; for the
+  // dashboard's "closed in range" semantics we'd want closed_at, but for the
+  // analytics block we don't actually need a closed_at filter — the equity
+  // walk / R-distribution naturally handles any chronological window we pass
+  // through. Using opened_at is a reasonable v1 approximation.
   return listActivities(userId, {
     status: ['closed', 'expired', 'claimed', 'vesting'] as ActivityStatus[],
     limit: 5000,
     sortField: 'closed_at',
     sortDir: 'asc',
+    ...(filters.type ? { type: filters.type } : {}),
+    ...(filters.closedAfter ? { openedAfter: filters.closedAfter } : {}),
+    ...(filters.closedBefore ? { openedBefore: filters.closedBefore } : {}),
   });
 }
 
@@ -1189,7 +1281,9 @@ export async function getDailyPnl(
   userId: string,
   startDate: string,
   endDate: string,
+  filters: Omit<DashboardFilters, 'closedAfter' | 'closedBefore'> = {},
 ): Promise<DailyPnlRow[]> {
+  const { type, minCapital } = filters;
   const rows = await sql<
     { date: string; netPnl: string | null; count: string }[]
   >`
@@ -1201,6 +1295,10 @@ export async function getDailyPnl(
     WHERE user_id = ${userId}::uuid
       AND closed_at IS NOT NULL
       AND closed_at::date BETWEEN ${startDate}::date AND ${endDate}::date
+      ${type && type.length > 0 ? sql`AND type::text = ANY(${type}::text[])` : sql``}
+      ${minCapital && minCapital > 0
+        ? sql`AND coalesce(capital_deployed_usd, 0) >= ${minCapital}`
+        : sql``}
     GROUP BY closed_at::date
     ORDER BY closed_at::date ASC
   `;

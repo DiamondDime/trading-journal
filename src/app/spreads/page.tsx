@@ -1,6 +1,6 @@
 import Link from "next/link";
-import { ArrowRight, Filter, Download, RefreshCw } from "lucide-react";
-import { KpiCard } from "@/components/spread/kpi-card";
+import { ArrowRight } from "lucide-react";
+import { KpiCard, defaultFontSize } from "@/components/spread/kpi-card";
 import { CalendarHeatmap } from "@/components/spread/calendar-heatmap";
 import {
   SpreadListCard,
@@ -32,6 +32,7 @@ import {
   listActivities,
   getDailyPnl,
   getAllClosedActivities,
+  getConnectedExchangeCount,
 } from "@/lib/db/activity";
 import { getTagAggregations } from "@/lib/db/satellite";
 import { TagPerformanceTable } from "@/components/spread/tag-performance-table";
@@ -44,6 +45,13 @@ import {
 } from "@/lib/analytics";
 import { fetchSubtypeMetaForIds } from "@/lib/data/db-queries";
 import { feedRowsToActivities } from "@/lib/data/db-adapter";
+import { DashboardActions } from "@/components/spread/dashboard-actions";
+import { HeatmapWindowToggle } from "@/components/spread/heatmap-window-toggle";
+import {
+  parseDashboardSearchParams,
+  buildDashboardFilters,
+  heatmapWeeks,
+} from "@/lib/dashboard/filters";
 
 // The dashboard reads the user's full feed once per render. With <1k
 // activities for a single-user app this is fast (<10ms total across the
@@ -201,15 +209,33 @@ function fmtR(n: number, signed = true): string {
   return `${sign}${Math.abs(n).toFixed(2)}R`;
 }
 
-export default async function SpreadsPage() {
+// Next.js 16 hands `searchParams` as a Promise. The page awaits it once and
+// then derives the canonical filter shape used by every DB call below.
+interface SpreadsPageProps {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}
+
+export default async function SpreadsPage({ searchParams }: SpreadsPageProps) {
   const { id: userId } = await requireUser();
 
-  // 13-week window ending today, in the server's local TZ. Day buckets are
+  const rawSearchParams = await searchParams;
+  const dashParams = parseDashboardSearchParams(rawSearchParams);
+  const filters = buildDashboardFilters(dashParams);
+
+  // Heatmap window — 13/26/52 weeks. Default 13. The DB query sweeps the
+  // wider window when the user has selected 26w/52w.
+  const heatmapWeekCount = heatmapWeeks(dashParams.heatmap);
+
+  // 13/26/52-week window ending today, in the server's local TZ. Day buckets are
   // YYYY-MM-DD strings — see getDailyPnl for the TZ caveat.
   const today = new Date();
   const heatmapEnd = ymdLocal(today);
   const heatmapStart = ymdLocal(
-    new Date(today.getFullYear(), today.getMonth(), today.getDate() - (13 * 7 - 1)),
+    new Date(
+      today.getFullYear(),
+      today.getMonth(),
+      today.getDate() - (heatmapWeekCount * 7 - 1),
+    ),
   );
 
   // Parallel reads — independent aggregations + recent-closes window + full
@@ -222,14 +248,29 @@ export default async function SpreadsPage() {
     closedRows,
     dailyPnl,
     tagAggs,
+    connectedExchangeCount,
   ] = await Promise.all([
-    getTotals(userId),
-    getActivityTypeCounts(userId),
-    getRecentCloses(userId, RECENT_COUNT),
-    listActivities(userId, { limit: 200, sortField: "closed_at", sortDir: "desc" }),
-    getAllClosedActivities(userId),
-    getDailyPnl(userId, heatmapStart, heatmapEnd),
+    getTotals(userId, filters),
+    getActivityTypeCounts(userId, filters),
+    getRecentCloses(userId, RECENT_COUNT, filters),
+    // listActivities is also used for the activity-mix card; we use the same
+    // filter signature, but mapping closedAfter/Before → openedAfter/Before
+    // because that's what listActivities exposes.
+    listActivities(userId, {
+      limit: 200,
+      sortField: "closed_at",
+      sortDir: "desc",
+      ...(filters.type ? { type: filters.type } : {}),
+      ...(filters.closedAfter ? { openedAfter: filters.closedAfter } : {}),
+      ...(filters.closedBefore ? { openedBefore: filters.closedBefore } : {}),
+    }),
+    getAllClosedActivities(userId, filters),
+    getDailyPnl(userId, heatmapStart, heatmapEnd, {
+      ...(filters.type ? { type: filters.type } : {}),
+      ...(filters.minCapital ? { minCapital: filters.minCapital } : {}),
+    }),
     getTagAggregations(userId),
+    getConnectedExchangeCount(userId),
   ]);
 
   const firstActivityYmd = totals.firstClose
@@ -374,26 +415,19 @@ export default async function SpreadsPage() {
           </p>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2">
-          <div className="font-mono text-[11px] uppercase tracking-[0.16em] text-text-tertiary">
-            <span className="text-up">●</span> 3 exchanges connected
-          </div>
-          <div className="h-4 w-px bg-border" />
-          <button className="flex items-center gap-1.5 rounded-md border border-border bg-surface px-3 py-1.5 font-mono text-[10px] uppercase tracking-[0.14em] text-text-secondary hover:bg-subtle">
-            <Filter className="h-3 w-3" /> Filter
-          </button>
-          <button className="flex items-center gap-1.5 rounded-md border border-border bg-surface px-3 py-1.5 font-mono text-[10px] uppercase tracking-[0.14em] text-text-secondary hover:bg-subtle">
-            <Download className="h-3 w-3" /> Export
-          </button>
-          <button className="flex items-center gap-1.5 rounded-md border border-border bg-surface px-3 py-1.5 font-mono text-[10px] uppercase tracking-[0.14em] text-text-secondary hover:bg-subtle">
-            <RefreshCw className="h-3 w-3" /> Sync
-          </button>
-        </div>
+        <DashboardActions
+          connectedExchangeCount={connectedExchangeCount}
+          current={dashParams}
+        />
       </header>
 
       <div className="px-8 py-8 lg:px-12">
-        {/* ── KPI row · 6 cross-activity cards (top, hero) ─────────────── */}
-        <section className="mb-3 grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-6">
+        {/* ── KPI row · cross-activity cards (top, hero spans 2 cols) ──────
+            Net P&L is the hero — gets 2 grid columns so long values like
+            "+$1,234,567.89" fit cleanly without the font collapsing into a
+            squint. 5 peer cards × 1 col = 5; 1 hero × 2 cols = 2; total 7
+            units; grid is lg:grid-cols-7 to match. */}
+        <section className="mb-3 grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-7">
           <KpiCard
             variant="hero"
             label="Net P&L · YTD"
@@ -523,20 +557,16 @@ export default async function SpreadsPage() {
           <div className="rounded-md border border-border bg-surface">
             <div className="flex items-center justify-between border-b border-border px-5 py-3">
               <h3 className="font-serif text-[12px] font-semibold uppercase tracking-[0.16em] text-text">
-                Daily realized P&L · last 13 weeks
+                Daily realized P&L · last {heatmapWeekCount} weeks
               </h3>
-              <span
-                title="Full-year view coming soon"
-                className="flex items-center gap-1 font-mono text-[10px] uppercase tracking-[0.14em] text-text-tertiary/60 cursor-not-allowed"
-              >
-                Full year <ArrowRight className="h-3 w-3" />
-              </span>
+              <HeatmapWindowToggle current={dashParams.heatmap} />
             </div>
             <div className="px-6 py-6">
               <CalendarHeatmap
                 days={dailyPnl}
                 endDate={heatmapEnd}
                 firstActivityDate={firstActivityYmd}
+                weeks={heatmapWeekCount}
               />
             </div>
           </div>
@@ -704,7 +734,10 @@ function KpiCardWithCaption({
       <p className="font-serif text-[11px] font-semibold uppercase tracking-[0.18em] text-text-tertiary">
         {label}
       </p>
-      <p className={`mt-2 font-mono text-[24px] font-medium leading-none tabular-nums ${toneClass}`}>
+      <p
+        className={`mt-2 font-mono font-medium leading-none tabular-nums ${toneClass}`}
+        style={{ fontSize: defaultFontSize(value) }}
+      >
         {value}
       </p>
       <p className="mt-2 font-serif text-[11px] italic leading-tight text-text-tertiary">

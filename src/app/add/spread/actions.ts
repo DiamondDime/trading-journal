@@ -1,6 +1,7 @@
 "use server";
 
 import { redirect } from "next/navigation";
+import { revalidatePath } from "next/cache";
 import { sql } from "@/lib/db/client";
 import { requireUser } from "@/lib/auth/server";
 import { updateSpreadActivity } from "@/lib/db/activity";
@@ -162,6 +163,10 @@ export async function logSpread(formData: FormData): Promise<void> {
   }
 
   if (activityId) {
+    // Invalidate dashboard + archive: see trade/actions.ts for the order rule
+    // (revalidatePath runs before redirect because redirect throws).
+    revalidatePath("/spreads");
+    revalidatePath("/spreads/archive");
     const qs = isEdit ? "from=wizard&action=edited" : "from=wizard";
     redirect(`/spreads/${activityId}?${qs}`);
   } else {
