@@ -1,11 +1,13 @@
 import { Sidebar } from "@/components/sidebar";
 import { SettingsSubnav } from "@/components/settings/settings-subnav";
+import { getT } from "@/lib/i18n/server";
 
-export default function SettingsLayout({
+export default async function SettingsLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
+  const t = await getT();
   return (
     <div className="flex h-screen w-full bg-app">
       <Sidebar />
@@ -14,13 +16,13 @@ export default function SettingsLayout({
           {/* Page chrome */}
           <header className="mb-8 flex flex-col gap-1.5">
             <p className="font-mono text-[10px] uppercase tracking-[0.22em] text-text-tertiary">
-              Configuration
+              {t("settings.eyebrow")}
             </p>
             <h1 className="font-serif text-[38px] font-medium leading-tight tracking-tight text-text">
-              Settings
+              {t("settings.title")}
             </h1>
             <p className="font-serif text-[14px] italic leading-snug text-text-secondary">
-              Configure your journal.
+              {t("settings.subtitle")}
             </p>
           </header>
 

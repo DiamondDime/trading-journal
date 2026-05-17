@@ -859,6 +859,8 @@ export const ru: MessageDict = {
   },
   settings: {
     title: 'Настройки',
+    eyebrow: 'Настройка',
+    subtitle: 'Подстрой журнал под себя.',
     sections: {
       exchanges: 'Биржи',
       profile: 'Профиль',

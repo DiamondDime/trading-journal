@@ -2,7 +2,7 @@ import Link from "next/link";
 import { ArrowUpRight, Heart } from "lucide-react";
 import { getT } from "@/lib/i18n/server";
 
-export const dynamic = "force-static";
+export const dynamic = "force-dynamic";
 
 const APP_VERSION = "0.1.0";
 const LICENSE = "AGPL-3.0";

@@ -849,6 +849,8 @@ export const en = {
   },
   settings: {
     title: 'Settings',
+    eyebrow: 'Configuration',
+    subtitle: 'Configure your journal.',
     sections: {
       exchanges: 'Exchanges',
       profile: 'Profile',
