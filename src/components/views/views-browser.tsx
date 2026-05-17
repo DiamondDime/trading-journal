@@ -135,15 +135,15 @@ export function ViewsBrowser({ initialViews, prefillFrom }: ViewsBrowserProps) {
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ applied: true }),
     });
-    // Navigate. If the stored URL is malformed Next.js will land on the
-    // archive root and the user sees no error here — graceful degrade.
+    // Navigate. If the stored URL is malformed we stay on /views and surface
+    // the error so the user can open Edit and fix it. Navigating away to the
+    // archive root would hide the error from view.
     try {
       const url = new URL(view.queryString, window.location.origin);
       if (url.origin !== window.location.origin) throw new Error("Bad origin");
       router.push(url.pathname + url.search);
     } catch {
       setFlashError(t("views.malformed", { name: view.name }));
-      router.push("/spreads/archive");
     }
   };
 
@@ -168,7 +168,7 @@ export function ViewsBrowser({ initialViews, prefillFrom }: ViewsBrowserProps) {
               {views.length.toLocaleString(locale === "ru" ? "ru-RU" : "en-US")}
             </p>
             <p className="mt-1 font-mono text-[10px] uppercase tracking-[0.18em] text-text-tertiary">
-              {views.length === 1 ? t("views.counter") : t("views.counterPlural")}
+              {t.plural("views.counterNoun", views.length)}
             </p>
           </div>
           <button
@@ -239,10 +239,18 @@ export function ViewsBrowser({ initialViews, prefillFrom }: ViewsBrowserProps) {
                   {prettyPath(view.queryString, t)}
                 </code>
 
-                <span className="text-right font-mono text-[12px] tabular-nums text-text">
-                  {view.activitiesCount}
+                <span
+                  className="text-right font-mono text-[12px] tabular-nums text-text"
+                  title={view.activitiesCountCapped ? t("views.countCappedTitle") : undefined}
+                  aria-label={
+                    view.activitiesCountCapped
+                      ? t("views.countCappedAria", { count: view.activitiesCount })
+                      : undefined
+                  }
+                >
+                  {view.activitiesCount.toLocaleString(locale === "ru" ? "ru-RU" : "en-US")}
                   {view.activitiesCountCapped && (
-                    <span className="text-text-tertiary">+</span>
+                    <span aria-hidden="true" className="text-text-tertiary">+</span>
                   )}
                 </span>
 

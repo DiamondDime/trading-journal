@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { ArrowUpRight } from "lucide-react";
+import { ExchangeVenuesChips } from "@/components/settings/exchange-logo";
 
 type Status = "open" | "winding_down" | "orphaned" | "closed" | "expired" | "claimed" | "vested";
 
@@ -16,6 +17,11 @@ export type SpreadListItem = {
   summary: string;
   href: string;
   activityType?: ActivityType;   // when set, renders a tiny mono badge on the card
+  /** Optional free-form venue string ("Binance + Coinbase", "Bybit / OKX",
+   *  or a single "Binance"). When present, the card renders a small logo
+   *  row beside the type label. Surfaces that don't have venue context
+   *  (sales, airdrops) leave this undefined. */
+  venues?: string;
 };
 
 const STATUS_STYLES: Record<Status, { dot: string; label: string }> = {
@@ -65,7 +71,12 @@ export function SpreadListCard({ item }: { item: SpreadListItem }) {
         <h3 className="font-serif text-[17px] font-medium leading-tight text-text">
           {item.name}
         </h3>
-        <p className="text-[12px] text-text-tertiary">{item.typeLabel}</p>
+        <p className="flex items-center gap-1.5 text-[12px] text-text-tertiary">
+          {item.venues && (
+            <ExchangeVenuesChips venues={item.venues} size="sm" />
+          )}
+          <span className="truncate">{item.typeLabel}</span>
+        </p>
         <p className="mt-1 font-mono text-[12px] text-text-secondary truncate">
           {item.summary}
         </p>

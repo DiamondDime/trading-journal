@@ -14,10 +14,7 @@ import {
   getImportedFillById,
   type ImportedTradeFill,
 } from "@/lib/data/exchange-fills-mock";
-import {
-  SPREAD_TYPE_LABELS,
-  type MatcherSpreadType,
-} from "@/lib/matcher/spread-matcher";
+import type { MatcherSpreadType } from "@/lib/matcher/spread-matcher";
 import { cn } from "@/lib/utils";
 import { logSpread } from "../actions";
 import { WizardErrorBanner } from "@/components/wizard/wizard-error-banner";
@@ -192,7 +189,8 @@ export default async function SpreadReviewPage(props: { searchParams: Search }) 
   const isEditing = getStr(sp, "edit") !== "";
 
   const headlineTone = netPnl >= 0 ? "up" : "down";
-  const headlineSign = headlineValue >= 0 ? "+" : "−";
+  // Sign is "+" only for positive, "−" only for negative — zero gets no sign.
+  const headlineSign = headlineValue > 0 ? "+" : headlineValue < 0 ? "−" : "";
   const headlineLabel = v.headlineValue
     ? `${headlineSign}${Math.abs(headlineValue).toFixed(1)}${v.headlineUnit === "APR" ? "%" : ""}`
     : "—";
@@ -271,7 +269,7 @@ export default async function SpreadReviewPage(props: { searchParams: Search }) 
             label={t("wizard.spread.review.rows.type")}
             value={
               isSpreadType(v.spreadType)
-                ? SPREAD_TYPE_LABELS[v.spreadType]
+                ? t(`wizard.shell.spreadTypeLabels.${v.spreadType}` as const)
                 : "—"
             }
             editHref={editAllHref}

@@ -12,6 +12,7 @@ import {
   ResponsiveContainer,
 } from "recharts";
 import { useT } from "@/lib/i18n/client";
+import type { MessageKey } from "@/lib/i18n/resolve";
 
 /**
  * Horizontal bar chart for ranked dollar values (e.g. P&L by asset, P&L by
@@ -51,6 +52,7 @@ function fmtUsdShort(v: number): string {
 
 export function BarRank({ rows, rowHeight = 26, showValueLabels = true }: Props) {
   const t = useT();
+  const intlLocale = t.locale === "ru" ? "ru-RU" : "en-US";
   if (rows.length === 0) {
     return (
       <div className="flex h-[160px] w-full items-center justify-center rounded-md border border-dashed border-border bg-inset">
@@ -68,7 +70,12 @@ export function BarRank({ rows, rowHeight = 26, showValueLabels = true }: Props)
   const domain = maxAbs > 0 ? [-maxAbs * 1.1, maxAbs * 1.1] : [-1, 1];
 
   return (
-    <div className="w-full" style={{ height }}>
+    <div
+      className="w-full"
+      style={{ height }}
+      role="img"
+      aria-label={t("analytics.charts.ariaBarRank" as MessageKey)}
+    >
       <ResponsiveContainer width="100%" height="100%">
         <BarChart
           layout="vertical"
@@ -115,8 +122,9 @@ export function BarRank({ rows, rowHeight = 26, showValueLabels = true }: Props)
             formatter={(value, _name, item) => {
               const p = item?.payload as BarRankPoint | undefined;
               const v = Number(value);
-              const tone = v >= 0 ? "" : "−";
-              const usd = `${tone || (v >= 0 ? "+" : "")}$${Math.abs(v).toLocaleString("en-US", {
+              if (!Number.isFinite(v)) return ["—", ""];
+              const sign = v < 0 ? "−" : v > 0 ? "+" : "";
+              const usd = `${sign}$${Math.abs(v).toLocaleString(intlLocale, {
                 maximumFractionDigits: 0,
               })}`;
               const meta = p?.meta ? ` · ${p.meta}` : "";

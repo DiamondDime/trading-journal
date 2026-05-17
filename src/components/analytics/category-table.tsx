@@ -7,7 +7,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { fmtUsd } from "@/lib/data/archive-data";
-import { getT } from "@/lib/i18n/server";
+import { getT, getLocale } from "@/lib/i18n/server";
 import type { MessageKey } from "@/lib/i18n/resolve";
 
 /**
@@ -47,6 +47,8 @@ interface Props {
 
 export async function CategoryTable({ rows, showCapital, showWinRate }: Props) {
   const t = await getT();
+  const locale = await getLocale();
+  const intlLocale = locale === "ru" ? "ru-RU" : "en-US";
   const hasCapital =
     showCapital ?? rows.some((r) => r.capital != null);
   const hasWinRate =
@@ -129,7 +131,7 @@ export async function CategoryTable({ rows, showCapital, showWinRate }: Props) {
                 {hasCapital && (
                   <TableCell className="text-right font-mono text-[11px] tabular-nums text-text-secondary">
                     {r.capital != null && r.capital > 0
-                      ? `$${r.capital.toLocaleString("en-US", { maximumFractionDigits: 0 })}`
+                      ? `$${r.capital.toLocaleString(intlLocale, { maximumFractionDigits: 0 })}`
                       : "—"}
                   </TableCell>
                 )}

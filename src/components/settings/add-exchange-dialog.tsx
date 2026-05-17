@@ -84,9 +84,23 @@ export function AddExchangeDialog({ catalog, variant = "default" }: Props) {
   const passphraseFieldId = React.useId();
   const errorId = React.useId();
 
+  // Trim helper used at submit. Copy-paste from an exchange dashboard
+  // frequently appends a trailing newline or invisible NBSP that breaks HMAC
+  // signing later. Strip those at the boundary; canonical form is what we
+  // should store.
+  const sanitize = (s: string) => s.replace(/[\s ]+/g, "");
+
   async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     if (!exchangeCode || !selectedExchange) return;
+    // Wallet-address venues (Hyperliquid) need a different submit shape. The
+    // backend would reject mode=api_key for them with 422 CREDENTIAL_MISMATCH,
+    // but the UI shouldn't reach submit — we render a notice in the body and
+    // the submit button is disabled. Defensive bail-out:
+    if (selectedExchange.authMode === "wallet_address") {
+      setError(t("settings.exchanges.dialog.errors.walletNotSupported"));
+      return;
+    }
     setError(null);
     setSubmitting(true);
 
@@ -106,8 +120,11 @@ export function AddExchangeDialog({ catalog, variant = "default" }: Props) {
           label: creds.label.trim(),
           credentials: {
             mode: "api_key",
-            api_key: creds.apiKey,
-            api_secret: creds.apiSecret,
+            // Strip whitespace from key + secret. Trailing newlines from
+            // copy-paste are the most common silent failure mode — server-side
+            // signing chokes and the user just sees "auth_failed" later.
+            api_key: sanitize(creds.apiKey),
+            api_secret: sanitize(creds.apiSecret),
             ...(needsPassphrase && trimmedPass.length > 0
               ? { passphrase: trimmedPass }
               : {}),
@@ -235,43 +252,47 @@ function ExchangePickStep({
     <>
       <DialogBody>
         {/* The picker scrolls within the dialog body once the grid overflows
-            — keeps the footer (Cancel) always reachable even at 20+ venues. */}
-        <div
-          role="radiogroup"
+            — keeps the footer (Cancel) always reachable even at 20+ venues.
+            We use <ul role="list"> instead of role="radiogroup" because picking
+            a tile *navigates* (jumps to step 2) rather than selecting in-place;
+            a radiogroup would require arrow-key navigation + aria-checked
+            state changes that this UI doesn't model. Each tile is a plain
+            <button> — screen readers announce it as a button and the keyboard
+            order is the normal tab sequence. */}
+        <ul
           aria-label={t("fields.exchange")}
           className="grid max-h-[420px] grid-cols-2 gap-2 overflow-y-auto pr-1"
         >
           {catalog.map((c) => (
-            <button
-              key={c.code}
-              type="button"
-              role="radio"
-              aria-checked={false}
-              onClick={() => onPick(c.code)}
-              className={cn(
-                "group flex items-center gap-3 rounded-md border border-border bg-surface px-3 py-2.5 text-left transition-all",
-                "hover:border-border-strong hover:bg-subtle",
-                "focus:outline-none focus-visible:ring-1 focus-visible:ring-text focus-visible:ring-offset-1 focus-visible:ring-offset-surface",
-              )}
-              data-testid={`pick-exchange-${c.code}`}
-            >
-              <ExchangeLogo
-                code={c.code}
-                displayName={c.displayName}
-                logoUrl={c.logoUrl}
-                size="sm"
-              />
-              <div className="min-w-0 flex-1 leading-tight">
-                <div className="truncate font-serif text-[14px] font-medium text-text">
-                  {c.displayName}
+            <li key={c.code}>
+              <button
+                type="button"
+                onClick={() => onPick(c.code)}
+                className={cn(
+                  "group flex w-full items-center gap-3 rounded-md border border-border bg-surface px-3 py-2.5 text-left transition-all",
+                  "hover:border-border-strong hover:bg-subtle",
+                  "focus:outline-none focus-visible:ring-1 focus-visible:ring-text focus-visible:ring-offset-1 focus-visible:ring-offset-surface",
+                )}
+                data-testid={`pick-exchange-${c.code}`}
+              >
+                <ExchangeLogo
+                  code={c.code}
+                  displayName={c.displayName}
+                  logoUrl={c.logoUrl}
+                  size="sm"
+                />
+                <div className="min-w-0 flex-1 leading-tight">
+                  <div className="truncate font-serif text-[14px] font-medium text-text">
+                    {c.displayName}
+                  </div>
+                  <div className="mt-0.5 truncate font-mono text-[9px] uppercase tracking-[0.16em] text-text-tertiary">
+                    {capabilityCaption(c)}
+                  </div>
                 </div>
-                <div className="mt-0.5 truncate font-mono text-[9px] uppercase tracking-[0.16em] text-text-tertiary">
-                  {capabilityCaption(c)}
-                </div>
-              </div>
-            </button>
+              </button>
+            </li>
           ))}
-        </div>
+        </ul>
       </DialogBody>
 
       <DialogFooter>
@@ -334,21 +355,25 @@ function CredentialsStep({
   onSubmit,
 }: CredentialsStepProps) {
   const t = useT();
-  // Focus the first field when step 2 mounts. We query by id rather than ref
-  // because the underlying WizardInput types itself with HTMLAttributes
-  // (which doesn't expose `ref`).
+  const isWallet = exchange?.authMode === "wallet_address";
+  // Focus the first field when step 2 mounts. Skipped for wallet-address
+  // venues since the form is gated behind a "not yet supported" notice.
   React.useEffect(() => {
+    if (isWallet) return;
     const el = document.getElementById(labelFieldId);
     if (el instanceof HTMLInputElement) el.focus();
-  }, [labelFieldId]);
+  }, [labelFieldId, isWallet]);
 
   const needsPassphrase = exchange?.requiresPassphrase ?? false;
 
   const canSubmit =
+    !isWallet &&
     creds.label.trim().length > 0 &&
-    creds.apiKey.length >= 8 &&
-    creds.apiSecret.length >= 8 &&
-    (!needsPassphrase || creds.passphrase.length >= 1) &&
+    // .trim() the key/secret for the minLength gate — pasting "  X  " is
+    // technically 5 chars but only 1 of real signal.
+    creds.apiKey.trim().length >= 8 &&
+    creds.apiSecret.trim().length >= 8 &&
+    (!needsPassphrase || creds.passphrase.trim().length >= 1) &&
     !submitting;
 
   return (
@@ -359,108 +384,119 @@ function CredentialsStep({
       autoComplete="off"
     >
       <DialogBody className="space-y-5">
-        <WizardField
-          label={t("settings.exchanges.dialog.fields.label")}
-          htmlFor={labelFieldId}
-          helper={t("settings.exchanges.dialog.fields.labelHelper")}
-          required
-        >
-          <WizardInput
-            id={labelFieldId}
-            value={creds.label}
-            onChange={(e) =>
-              setCreds((p) => ({ ...p, label: e.target.value }))
-            }
-            placeholder={
-              exchange
-                ? t("settings.exchanges.dialog.fields.labelPlaceholderNamed", {
-                    exchange: exchange.displayName,
-                  })
-                : t("settings.exchanges.dialog.fields.labelPlaceholder")
-            }
-            maxLength={40}
-            required
-            autoComplete="off"
-            disabled={submitting}
-          />
-        </WizardField>
-
-        <WizardField
-          label={t("fields.apiKey")}
-          htmlFor={apiKeyFieldId}
-          helper={t("settings.exchanges.dialog.fields.apiKeyHelper")}
-          required
-        >
-          <WizardInput
-            id={apiKeyFieldId}
-            type="text"
-            value={creds.apiKey}
-            onChange={(e) =>
-              setCreds((p) => ({ ...p, apiKey: e.target.value }))
-            }
-            minLength={8}
-            required
-            autoComplete="off"
-            spellCheck={false}
-            disabled={submitting}
-            inputMode="text"
-          />
-        </WizardField>
-
-        <WizardField
-          label={t("fields.apiSecret")}
-          htmlFor={apiSecretFieldId}
-          helper={t("settings.exchanges.dialog.fields.apiSecretHelper")}
-          required
-        >
-          <WizardInput
-            id={apiSecretFieldId}
-            type="password"
-            value={creds.apiSecret}
-            onChange={(e) =>
-              setCreds((p) => ({ ...p, apiSecret: e.target.value }))
-            }
-            minLength={8}
-            required
-            autoComplete="new-password"
-            spellCheck={false}
-            disabled={submitting}
-          />
-        </WizardField>
-
-        {needsPassphrase && (
-          <WizardField
-            label={t("fields.passphrase")}
-            htmlFor={passphraseFieldId}
-            helper={t("settings.exchanges.dialog.fields.passphraseHelper", {
-              exchange: exchange?.displayName ?? t("settings.exchanges.dialog.fields.thisExchangeFallback"),
-            })}
-            required
+        {isWallet ? (
+          <div
+            role="alert"
+            className="rounded-md border border-warn bg-warn-bg px-3 py-3 font-serif text-[13px] leading-snug text-warn"
           >
-            <WizardInput
-              id={passphraseFieldId}
-              type="password"
-              value={creds.passphrase}
-              onChange={(e) =>
-                setCreds((p) => ({ ...p, passphrase: e.target.value }))
-              }
+            {t("settings.exchanges.dialog.errors.walletNotSupported")}
+          </div>
+        ) : (
+          <>
+            <WizardField
+              label={t("settings.exchanges.dialog.fields.label")}
+              htmlFor={labelFieldId}
+              helper={t("settings.exchanges.dialog.fields.labelHelper")}
               required
-              autoComplete="new-password"
-              spellCheck={false}
-              disabled={submitting}
-              data-testid="passphrase-field"
-            />
-          </WizardField>
-        )}
+            >
+              <WizardInput
+                id={labelFieldId}
+                value={creds.label}
+                onChange={(e) =>
+                  setCreds((p) => ({ ...p, label: e.target.value }))
+                }
+                placeholder={
+                  exchange
+                    ? t("settings.exchanges.dialog.fields.labelPlaceholderNamed", {
+                        exchange: exchange.displayName,
+                      })
+                    : t("settings.exchanges.dialog.fields.labelPlaceholder")
+                }
+                maxLength={40}
+                required
+                autoComplete="off"
+                disabled={submitting}
+              />
+            </WizardField>
 
-        <div className="rounded-md border border-border-subtle bg-inset p-3">
-          <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-text-tertiary">
-            {t("settings.exchanges.dialog.securityTitle")}
-          </p>
-          <p className="mt-1.5 font-serif text-[12px] italic leading-snug text-text-secondary">
-            {t("settings.exchanges.dialog.securityBody")}
-          </p>
-        </div>
+            <WizardField
+              label={t("fields.apiKey")}
+              htmlFor={apiKeyFieldId}
+              helper={t("settings.exchanges.dialog.fields.apiKeyHelper")}
+              required
+            >
+              <WizardInput
+                id={apiKeyFieldId}
+                type="text"
+                value={creds.apiKey}
+                onChange={(e) =>
+                  setCreds((p) => ({ ...p, apiKey: e.target.value }))
+                }
+                minLength={8}
+                required
+                autoComplete="off"
+                spellCheck={false}
+                disabled={submitting}
+                inputMode="text"
+              />
+            </WizardField>
+
+            <WizardField
+              label={t("fields.apiSecret")}
+              htmlFor={apiSecretFieldId}
+              helper={t("settings.exchanges.dialog.fields.apiSecretHelper")}
+              required
+            >
+              <WizardInput
+                id={apiSecretFieldId}
+                type="password"
+                value={creds.apiSecret}
+                onChange={(e) =>
+                  setCreds((p) => ({ ...p, apiSecret: e.target.value }))
+                }
+                minLength={8}
+                required
+                autoComplete="new-password"
+                spellCheck={false}
+                disabled={submitting}
+              />
+            </WizardField>
+
+            {needsPassphrase && (
+              <WizardField
+                label={t("fields.passphrase")}
+                htmlFor={passphraseFieldId}
+                helper={t("settings.exchanges.dialog.fields.passphraseHelper", {
+                  exchange: exchange?.displayName ?? t("settings.exchanges.dialog.fields.thisExchangeFallback"),
+                })}
+                required
+              >
+                <WizardInput
+                  id={passphraseFieldId}
+                  type="password"
+                  value={creds.passphrase}
+                  onChange={(e) =>
+                    setCreds((p) => ({ ...p, passphrase: e.target.value }))
+                  }
+                  required
+                  autoComplete="new-password"
+                  spellCheck={false}
+                  disabled={submitting}
+                  data-testid="passphrase-field"
+                />
+              </WizardField>
+            )}
+
+            <div className="rounded-md border border-border-subtle bg-inset p-3">
+              <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-text-tertiary">
+                {t("settings.exchanges.dialog.securityTitle")}
+              </p>
+              <p className="mt-1.5 font-serif text-[12px] italic leading-snug text-text-secondary">
+                {t("settings.exchanges.dialog.securityBody")}
+              </p>
+            </div>
+          </>
+        )}
 
         {error && (
           <p

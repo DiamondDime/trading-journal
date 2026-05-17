@@ -16,7 +16,7 @@ import {
   X,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { useT } from "@/lib/i18n/client";
+import { useT, useLocale } from "@/lib/i18n/client";
 import {
   Table,
   TableBody,
@@ -26,6 +26,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { SpreadListCard, type SpreadListItem } from "./spread-list-card";
+import { ExchangeVenuesChips } from "@/components/settings/exchange-logo";
 import {
   type Activity,
   type ActivityType,
@@ -69,7 +70,7 @@ const ASSET_ORDER: Asset[] = [
 
 const STATUS_ORDER: ActivityStatus[] = ["closed", "expired", "claimed", "vested"];
 
-function describeActivity(a: Activity): string {
+function describeActivity(a: Activity, retroDropLabel: string): string {
   switch (a.type) {
     case "spread":
       return `${SPREAD_TYPE_LABELS[a.spreadType]} · ${a.venues}`;
@@ -78,15 +79,25 @@ function describeActivity(a: Activity): string {
     case "sale":
       return `${a.saleKind.toUpperCase()} · ${a.venue}`;
     case "airdrop":
-      return `${a.protocol} · retro drop`;
+      return `${a.protocol} · ${retroDropLabel}`;
   }
 }
 
-function rowToListItem(r: Activity): SpreadListItem {
+// Pull a venue string per row so the card can render exchange logos
+// beside the type label. Spreads carry "venues" already; trades give us
+// their single exchange. Sale/airdrop venues aren't tradable exchanges
+// (launchpad, OTC desk, protocol) so they get no chip.
+function venueOf(r: Activity): string | undefined {
+  if (r.type === "spread") return r.venues;
+  if (r.type === "trade") return r.exchange;
+  return undefined;
+}
+
+function rowToListItem(r: Activity, retroDropLabel: string): SpreadListItem {
   return {
     serial: r.serial,
     name: r.name,
-    typeLabel: describeActivity(r),
+    typeLabel: describeActivity(r, retroDropLabel),
     status: r.status,
     headline: r.headlineLabel,
     headlineUnit: r.headlineKind,
@@ -97,6 +108,7 @@ function rowToListItem(r: Activity): SpreadListItem {
         : `${fmtCapital(r.capital)} · ${r.daysLabel} · ${r.note}`,
     href: r.href,
     activityType: r.type,
+    venues: venueOf(r),
   };
 }
 
@@ -192,8 +204,8 @@ function rowAsset(a: Activity): Asset | null {
   return null;
 }
 
-function rowSearchHaystack(a: Activity): string {
-  const parts: string[] = [a.name, a.serial, describeActivity(a), a.note];
+function rowSearchHaystack(a: Activity, retroDropLabel: string): string {
+  const parts: string[] = [a.name, a.serial, describeActivity(a, retroDropLabel), a.note];
   if (a.type === "spread") parts.push(a.variant, a.venues);
   if (a.type === "trade") parts.push(a.symbol, a.exchange);
   if (a.type === "sale") parts.push(a.venue, a.saleKind);
@@ -205,6 +217,30 @@ export function ArchiveBrowser({ data }: { data: Activity[] }) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const t = useT();
+  const locale = useLocale();
+  const retroDropLabel = t("spreadsList.retroDrop");
+
+  // Earliest closed activity → "since" date for the footer. Empty dataset
+  // falls back to the localized "today" label so we never render a hardcoded
+  // date placeholder in the chrome.
+  const sinceLabel = React.useMemo(() => {
+    if (data.length === 0) return t("spreadsList.sinceToday");
+    let earliest: string | null = null;
+    for (const r of data) {
+      if (!r.closedAt) continue;
+      if (earliest === null || r.closedAt < earliest) earliest = r.closedAt;
+    }
+    if (!earliest) return t("spreadsList.sinceToday");
+    // closedAt is a YYYY-MM-DD string in archive-data display rows.
+    const d = new Date(`${earliest.slice(0, 10)}T00:00:00`);
+    if (!Number.isFinite(d.getTime())) return t("spreadsList.sinceToday");
+    const intlLocale = locale === "ru" ? "ru-RU" : "en-US";
+    return d.toLocaleDateString(intlLocale, {
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+    });
+  }, [data, locale, t]);
 
   // Initial state is decoded from URL search params on mount only. Once
   // mounted, chip toggles drive `router.replace` (see effect below) — we
@@ -303,7 +339,7 @@ export function ArchiveBrowser({ data }: { data: Activity[] }) {
     if (outcome === "losers") rows = rows.filter((r) => r.netPnl < 0);
     const q = search.trim().toLowerCase();
     if (q) {
-      rows = rows.filter((r) => rowSearchHaystack(r).includes(q));
+      rows = rows.filter((r) => rowSearchHaystack(r, retroDropLabel).includes(q));
     }
     return rows;
   }, [data, activityFilters, spreadTypeFilters, spreadSubtypeApplicable, assetFilters, statusFilters, outcome, search]);
@@ -605,11 +641,16 @@ export function ArchiveBrowser({ data }: { data: Activity[] }) {
         {sorted.length === 0 ? (
           <EmptyState onClear={clearAll} />
         ) : view === "table" ? (
-          <ArchiveTable rows={sorted} sort={sort} onSort={handleSort} />
+          <ArchiveTable
+            rows={sorted}
+            sort={sort}
+            onSort={handleSort}
+            retroDropLabel={retroDropLabel}
+          />
         ) : (
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
             {sorted.map((r) => (
-              <SpreadListCard key={r.id} item={rowToListItem(r)} />
+              <SpreadListCard key={r.id} item={rowToListItem(r, retroDropLabel)} />
             ))}
           </div>
         )}
@@ -624,7 +665,7 @@ export function ArchiveBrowser({ data }: { data: Activity[] }) {
           <Link href="/spreads" className="hover:text-text">
             {t("archive.backToBook", { name: t("dashboard.title") })}
           </Link>
-          <span>{t("archive.footer", { since: "Jan 12, 2026" })}</span>
+          <span>{t("archive.footer", { since: sinceLabel })}</span>
         </footer>
       </section>
     </div>
@@ -757,10 +798,12 @@ function ArchiveTable({
   rows,
   sort,
   onSort,
+  retroDropLabel,
 }: {
   rows: Activity[];
   sort: { key: SortKey; dir: "asc" | "desc" };
   onSort: (key: SortKey) => void;
+  retroDropLabel: string;
 }) {
   const t = useT();
   return (
@@ -801,7 +844,11 @@ function ArchiveTable({
         </TableHeader>
         <TableBody>
           {rows.map((r) => (
-            <ArchiveTableRow key={r.id} row={r} />
+            <ArchiveTableRow
+              key={r.id}
+              row={r}
+              retroDropLabel={retroDropLabel}
+            />
           ))}
         </TableBody>
       </Table>
@@ -858,11 +905,18 @@ function SortableHeader({
   );
 }
 
-function ArchiveTableRow({ row }: { row: Activity }) {
+function ArchiveTableRow({
+  row,
+  retroDropLabel,
+}: {
+  row: Activity;
+  retroDropLabel: string;
+}) {
   const router = useRouter();
   const status = STATUS_STYLES[row.status];
   const toneClass = row.tone === "up" ? "text-up" : "text-down";
-  const subtitle = describeActivity(row);
+  const subtitle = describeActivity(row, retroDropLabel);
+  const venues = venueOf(row);
 
   return (
     <TableRow
@@ -889,8 +943,10 @@ function ArchiveTableRow({ row }: { row: Activity }) {
           >
             {row.name}
           </Link>
-          <span className="font-mono text-[10px] text-text-tertiary">
-            <span className="mr-1.5 text-text-tertiary/70">{row.type.toUpperCase()}</span>· {subtitle}
+          <span className="flex items-center gap-1.5 font-mono text-[10px] text-text-tertiary">
+            <span className="mr-0.5 text-text-tertiary/70">{row.type.toUpperCase()}</span>
+            {venues && <ExchangeVenuesChips venues={venues} size="sm" />}
+            <span>· {subtitle}</span>
           </span>
         </div>
       </TableCell>
@@ -942,6 +998,8 @@ function ArchiveTableRow({ row }: { row: Activity }) {
  * "open in new tab" behaviour for free.
  */
 function SaveThisViewLink({ queryString }: { queryString: string }) {
+  const t = useT();
+  const label = t("archive.saveView");
   const href = queryString
     ? `/views?prefillFrom=${encodeURIComponent(`/spreads/archive?${queryString}`)}`
     : `/views?prefillFrom=${encodeURIComponent("/spreads/archive")}`;
@@ -949,10 +1007,10 @@ function SaveThisViewLink({ queryString }: { queryString: string }) {
     <Link
       href={href}
       className="ml-2 flex items-center gap-1 font-mono text-[10px] uppercase tracking-[0.14em] text-text-tertiary hover:text-text"
-      aria-label="Save this view"
+      aria-label={label}
     >
       <Bookmark className="h-3 w-3" />
-      Save this view
+      {label}
     </Link>
   );
 }

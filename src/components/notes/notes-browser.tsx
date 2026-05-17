@@ -88,8 +88,8 @@ function fmtAbsolute(iso: string, locale: "en" | "ru"): string {
   });
 }
 
-function describeActivity(n: AllNoteRow, typeLabels: Record<ActivityType, string>): string {
-  const parts = [typeLabels[n.activityType].slice(0, -1)];
+function describeActivity(n: AllNoteRow, singularLabels: Record<ActivityType, string>): string {
+  const parts = [singularLabels[n.activityType]];
   if (n.primarySymbol) parts.push(n.primarySymbol);
   return parts.join(" · ").toLowerCase();
 }
@@ -132,6 +132,15 @@ export function NotesBrowser({
     trade: t("notes.filter.trades"),
     sale: t("notes.filter.sales"),
     airdrop: t("notes.filter.airdrops"),
+  };
+
+  // Singular forms — used in per-card describe text + the small type chip.
+  // Locale-correct (no `slice(-1)` heuristic which mangles RU "Сделки" → "Сделк").
+  const ACTIVITY_TYPE_SINGULAR: Record<ActivityType, string> = {
+    spread: t("activity.spread"),
+    trade: t("activity.trade"),
+    sale: t("activity.sale"),
+    airdrop: t("activity.airdrop"),
   };
 
   const SORT_LABELS: Record<SortKey, string> = {
@@ -184,7 +193,7 @@ export function NotesBrowser({
       })
       .catch((err) => {
         if (cancelled) return;
-        setErrorMessage(err instanceof Error ? err.message : "Failed to load notes");
+        setErrorMessage(err instanceof Error ? err.message : t("notes.fetchError"));
       })
       .finally(() => {
         if (!cancelled) setRefreshing(false);
@@ -204,7 +213,7 @@ export function NotesBrowser({
       // total stays the same — server reports it on each call.
       setTotalCount(res.total);
     } catch (err) {
-      setErrorMessage(err instanceof Error ? err.message : "Failed to load more");
+      setErrorMessage(err instanceof Error ? err.message : t("notes.fetchError"));
     } finally {
       setLoadingMore(false);
     }
@@ -243,7 +252,7 @@ export function NotesBrowser({
             {totalCount.toLocaleString(locale === "ru" ? "ru-RU" : "en-US")}
           </p>
           <p className="mt-1 font-mono text-[10px] uppercase tracking-[0.18em] text-text-tertiary">
-            {totalCount === 1 ? t("notes.counterSuffix") : t("notes.counterSuffixPlural")}
+            {t.plural("notes.counterNoun", totalCount)}
             {filtersActive && ` · ${t("notes.filtered")}`}
           </p>
         </div>
@@ -386,7 +395,12 @@ export function NotesBrowser({
           <>
             <ul className="flex flex-col gap-4">
               {notes.map((n) => (
-                <NoteCard key={n.id} note={n} typeLabels={ACTIVITY_TYPE_LABELS} locale={locale} />
+                <NoteCard
+                  key={n.id}
+                  note={n}
+                  singularLabels={ACTIVITY_TYPE_SINGULAR}
+                  locale={locale}
+                />
               ))}
             </ul>
 
@@ -471,7 +485,15 @@ function FilterChip({
 const COLLAPSED_LINES = 5;
 const COLLAPSED_CHAR_LIMIT = 480;
 
-function NoteCard({ note, typeLabels, locale }: { note: AllNoteRow; typeLabels: Record<ActivityType, string>; locale: "en" | "ru" }) {
+function NoteCard({
+  note,
+  singularLabels,
+  locale,
+}: {
+  note: AllNoteRow;
+  singularLabels: Record<ActivityType, string>;
+  locale: "en" | "ru";
+}) {
   const t = useT();
   const longBody = note.body.length > COLLAPSED_CHAR_LIMIT;
   const [expanded, setExpanded] = React.useState(false);
@@ -491,7 +513,7 @@ function NoteCard({ note, typeLabels, locale }: { note: AllNoteRow; typeLabels: 
             </span>
             <span className="font-mono text-[10px] text-text-tertiary">·</span>
             <span className="font-mono text-[9px] uppercase tracking-[0.16em] text-signature">
-              {typeLabels[note.activityType].slice(0, -1)}
+              {singularLabels[note.activityType]}
             </span>
             <span className="font-mono text-[10px] text-text-tertiary">·</span>
             <Link
@@ -502,7 +524,7 @@ function NoteCard({ note, typeLabels, locale }: { note: AllNoteRow; typeLabels: 
               {note.activityName}
             </Link>
             <span className="font-mono text-[10px] text-text-tertiary">
-              · {describeActivity(note, typeLabels)}
+              · {describeActivity(note, singularLabels)}
             </span>
           </div>
 
@@ -514,7 +536,10 @@ function NoteCard({ note, typeLabels, locale }: { note: AllNoteRow; typeLabels: 
           </span>
         </header>
 
-        {/* Body */}
+        {/* Body. CSS line-clamp handles the visual cutoff (and ellipsis). The
+            char-limit slice avoids handing the layout engine 10kB of text
+            when only 5 lines render — the slice is generous enough that the
+            CSS clamp does the visible trimming. */}
         <div className="px-5 py-4">
           <p
             className={cn(
@@ -528,11 +553,6 @@ function NoteCard({ note, typeLabels, locale }: { note: AllNoteRow; typeLabels: 
             }
           >
             {visibleBody}
-            {!expanded && longBody && (
-              <span aria-hidden="true" className="text-text-tertiary">
-                …
-              </span>
-            )}
           </p>
 
           {longBody && (

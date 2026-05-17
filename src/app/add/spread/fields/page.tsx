@@ -18,7 +18,7 @@ import {
   getImportedFillById,
   type ImportedTradeFill,
 } from "@/lib/data/exchange-fills-mock";
-import { SPREAD_TYPE_LABELS, type MatcherSpreadType } from "@/lib/matcher/spread-matcher";
+import type { MatcherSpreadType } from "@/lib/matcher/spread-matcher";
 import { cn } from "@/lib/utils";
 import { requireUser } from "@/lib/auth/server";
 import { getActivity } from "@/lib/db/activity";
@@ -128,11 +128,20 @@ function suggestName(
   if (legs.length === 0) return "";
   const asset = legs[0]?.asset ?? "";
   const venues = [...new Set(legs.map((l) => l.exchange))].join(" + ");
-  const typeLabel =
-    isSpreadType(spreadType)
-      ? SPREAD_TYPE_LABELS[spreadType]
-      : t("wizard.spread.fields.nameSuggestFallback");
+  const typeLabel = isSpreadType(spreadType)
+    ? localizedSpreadTypeLabel(spreadType, t)
+    : t("wizard.spread.fields.nameSuggestFallback");
   return `${asset} ${typeLabel.toLowerCase()} · ${venues}`;
+}
+
+/** Localised label for a matcher spread type. Wizard-only — the matcher
+ *  module's `SPREAD_TYPE_LABELS` const stays as the English default for
+ *  non-wizard callers (archive, mix charts). */
+function localizedSpreadTypeLabel(
+  spreadType: MatcherSpreadType,
+  t: Awaited<ReturnType<typeof getT>>,
+): string {
+  return t(`wizard.shell.spreadTypeLabels.${spreadType}` as const);
 }
 
 function suggestSubtitle(
@@ -415,7 +424,7 @@ export default async function SpreadFieldsPage(props: { searchParams: Search }) 
           {t("wizard.spread.fields.spreadTypeLabel")}{" "}
           <span className="not-italic font-medium text-text">
             {isSpreadType(spreadType)
-              ? SPREAD_TYPE_LABELS[spreadType]
+              ? localizedSpreadTypeLabel(spreadType, t)
               : t("wizard.spread.fields.spreadTypeNotPicked")}
           </span>
           {matcher === "auto" && (

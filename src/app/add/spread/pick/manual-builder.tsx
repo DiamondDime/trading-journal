@@ -15,6 +15,7 @@ import {
 import type { ImportedTradeFill } from "@/lib/data/exchange-fills-mock";
 import { cn } from "@/lib/utils";
 import { useT } from "@/lib/i18n/client";
+import { ExchangeChip } from "@/components/settings/exchange-logo";
 
 interface ManualBuilderProps {
   fills: ImportedTradeFill[];
@@ -210,14 +211,21 @@ export function ManualBuilder({ fills }: ManualBuilderProps) {
                   <TableCell className="py-2">
                     <label
                       htmlFor={rowId}
-                      className="flex cursor-pointer flex-col gap-0.5"
+                      className="flex cursor-pointer items-center gap-2"
                     >
-                      <span className="font-serif text-[13px] font-medium text-text">
-                        {f.symbol}
-                      </span>
-                      <span className="font-mono text-[9px] uppercase tracking-[0.12em] text-text-tertiary">
-                        {f.exchange} · {f.instrument}
-                        {f.expiry ? ` · ${f.expiry}` : ""}
+                      <ExchangeChip
+                        venue={f.exchange}
+                        size="sm"
+                        className="shrink-0"
+                      />
+                      <span className="flex flex-col gap-0.5">
+                        <span className="font-serif text-[13px] font-medium text-text">
+                          {f.symbol}
+                        </span>
+                        <span className="font-mono text-[9px] uppercase tracking-[0.12em] text-text-tertiary">
+                          {f.exchange} · {f.instrument}
+                          {f.expiry ? ` · ${f.expiry}` : ""}
+                        </span>
                       </span>
                     </label>
                   </TableCell>

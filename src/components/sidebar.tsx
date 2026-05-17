@@ -34,6 +34,23 @@ type NavItem = {
   badge?: { text: string; tone: "down" | "warn" | "brand" };
 };
 
+/**
+ * Decide whether a nav `href` should look "active" given the current
+ * pathname. Exact match for `/`-only pages, prefix match (with `/` boundary)
+ * for everything else so e.g. `/spreads/123` still highlights `/spreads`.
+ * `/spreads` and `/spreads/archive` are siblings, so we special-case the
+ * archive to only match itself.
+ */
+function isNavActive(pathname: string, href: string): boolean {
+  if (pathname === href) return true;
+  if (href === "/") return false;
+  // `/spreads` should match `/spreads/123` but NOT `/spreads/archive`
+  // (archive is a sibling, not a child). Both `/spreads` and the archive
+  // sit in the nav and need to be mutually exclusive when on archive.
+  if (href === "/spreads") return pathname.startsWith("/spreads/") && !pathname.startsWith("/spreads/archive");
+  return pathname.startsWith(`${href}/`);
+}
+
 export function Sidebar() {
   const pathname = usePathname();
   const t = useT();
@@ -125,7 +142,7 @@ export function Sidebar() {
             </p>
             {sec.items.map((item) => {
               const Icon = item.icon;
-              const isActive = pathname === item.href;
+              const isActive = isNavActive(pathname, item.href);
               const inner = (
                 <>
                   <span className="flex items-center gap-2.5">
@@ -173,6 +190,7 @@ export function Sidebar() {
                 <Link
                   key={item.label}
                   href={item.href}
+                  aria-current={isActive ? "page" : undefined}
                   className={cn(
                     "flex items-center justify-between rounded-md px-2.5 py-1.5 text-[13px] transition-colors",
                     isActive
@@ -199,20 +217,16 @@ export function Sidebar() {
               className="flex items-center justify-between rounded-md px-2.5 py-1 text-[12px] text-text-secondary hover:bg-subtle hover:text-text transition-colors"
             >
               <span className="flex items-center gap-2">
-                <span className="text-text-tertiary">·</span>
+                <span
+                  className={cn(
+                    "text-text-tertiary",
+                    v.tone === "down" && "text-down",
+                    v.tone === "up" && "text-up",
+                  )}
+                >
+                  ·
+                </span>
                 {v.label}
-              </span>
-              <span
-                className={cn(
-                  "font-mono text-[10px]",
-                  v.tone === "down"
-                    ? "text-down"
-                    : v.tone === "up"
-                    ? "text-up"
-                    : "text-text-tertiary"
-                )}
-              >
-                {v.count}
               </span>
             </Link>
           ))}

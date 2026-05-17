@@ -1,16 +1,18 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import { X } from "lucide-react";
 import { getT } from "@/lib/i18n/server";
-
-export const metadata = {
-  title: "New activity · Crypto Journal",
-};
 
 /**
  * Wizard chrome. Narrow centered column, top bar with brand on the left and
  * Cancel link on the right (always returns to /spreads, the dashboard).
  * Each step page lays out its own breadcrumb + stepper via WizardShell.
  */
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getT();
+  return { title: t("wizard.shell.pageTitle") };
+}
+
 export default async function AddLayout({
   children,
 }: {

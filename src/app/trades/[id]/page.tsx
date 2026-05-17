@@ -13,7 +13,7 @@ import {
 import { fmtCapital, fmtUsd } from "@/lib/data/archive-data";
 import { WizardPreviewBanner } from "@/components/wizard/wizard-preview-banner";
 import { requireUser } from "@/lib/auth/server";
-import { getT } from "@/lib/i18n/server";
+import { getT, getLocale } from "@/lib/i18n/server";
 import { getActivity, getAllClosedActivities } from "@/lib/db/activity";
 import { getNoteForActivity } from "@/lib/db/notes";
 import {
@@ -31,6 +31,7 @@ import { TagEditor } from "@/components/activity/tag-editor";
 import { SatisfactionToggle } from "@/components/activity/satisfaction-toggle";
 import { ExcursionMetricStrip } from "@/components/activity/excursion-metric-strip";
 import { OhlcChart } from "@/components/activity/ohlc-chart";
+import { ExchangeChip } from "@/components/settings/exchange-logo";
 
 export const dynamic = "force-dynamic";
 
@@ -45,11 +46,11 @@ function fmtSidePill(side: "long" | "short", label: string) {
   );
 }
 
-function fmtPrice(n: number) {
+function fmtPrice(n: number, intlLocale: string) {
   if (n < 1) {
-    return n.toLocaleString("en-US", { maximumSignificantDigits: 4 });
+    return n.toLocaleString(intlLocale, { maximumSignificantDigits: 4 });
   }
-  return n.toLocaleString("en-US", {
+  return n.toLocaleString(intlLocale, {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   });
@@ -92,6 +93,7 @@ export default async function TradeDetailPage({
   const sp = await searchParams;
 
   const t = await getT();
+  const intlLocale = (await getLocale()) === "ru" ? "ru-RU" : "en-US";
   const { id: userId } = await requireUser();
   // Fetch everything needed for the page in parallel — supertype + note +
   // screenshots + satellite tables + the closed-feed needed for the R-unit
@@ -130,7 +132,9 @@ export default async function TradeDetailPage({
   const capital = Number(activity.capitalDeployedUsd ?? 0);
   const qty = Number(trade.qty);
   const entry = Number(trade.avgEntryPrice);
-  const exit = trade.avgExitPrice !== null ? Number(trade.avgExitPrice) : entry;
+  // exit is null for open trades. Keep it as null so we can render "—" in
+  // the decomposition rather than misleadingly mirroring the entry price.
+  const exit = trade.avgExitPrice !== null ? Number(trade.avgExitPrice) : null;
   const fees = Number(activity.feesUsd);
   const gross = netPnl + fees;
   const daysLabel = fmtDaysLabel(activity.openedAt, activity.closedAt, {
@@ -139,14 +143,12 @@ export default async function TradeDetailPage({
     day: t("tradeDetail.units.day"),
   });
   const closedLabel = activity.closedAt
-    ? new Date(activity.closedAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
+    ? new Date(activity.closedAt).toLocaleDateString(intlLocale, { month: "short", day: "numeric", year: "numeric" })
     : "—";
-  const statusLabel =
-    activity.status === "open"
-      ? t("status.open")
-      : activity.status === "closed"
-        ? t("status.closed")
-        : t("status.pending");
+  // Status uses the top-level status.* dict which covers all 9 ActivityStatus
+  // values. Trades can legitimately end as `liquidated`, which was previously
+  // collapsed to "pending" by the narrow ternary below.
+  const statusLabel = t(`status.${activity.status}`);
   const sideLabel =
     trade.side === "long" ? t("side.long") : t("side.short");
   const serial = `T#${activity.id.slice(0, 4).toUpperCase()}`;
@@ -185,8 +187,9 @@ export default async function TradeDetailPage({
                 <Pencil className="h-3.5 w-3.5" />
               </Link>
             </div>
-            <p className="mt-3 text-base text-text-secondary">
-              {trade.exchange} · {trade.symbol} · {trade.instrumentKind} · {sideLabel}
+            <p className="mt-3 flex flex-wrap items-center gap-2 text-base text-text-secondary">
+              <ExchangeChip venue={trade.exchange} size="sm" />
+              <span>{trade.exchange} · {trade.symbol} · {trade.instrumentKind} · {sideLabel}</span>
             </p>
             <p className="mt-1 font-mono text-sm text-text-tertiary">
               {t("tradeDetail.heldSuffix", { days: daysLabel })}
@@ -285,11 +288,15 @@ export default async function TradeDetailPage({
                   <ExecRow label={t("fields.side")} value={fmtSidePill(trade.side, sideLabel)} />
                   <ExecRow
                     label={t("fields.quantity")}
-                    value={qty.toLocaleString("en-US", { maximumSignificantDigits: 6 })}
+                    value={qty.toLocaleString(intlLocale, { maximumSignificantDigits: 6 })}
                     mono
                   />
-                  <ExecRow label={t("tradeDetail.rows.entryPrice")} value={`$${fmtPrice(entry)}`} mono />
-                  <ExecRow label={t("tradeDetail.rows.exitPrice")} value={`$${fmtPrice(exit)}`} mono />
+                  <ExecRow label={t("tradeDetail.rows.entryPrice")} value={`$${fmtPrice(entry, intlLocale)}`} mono />
+                  <ExecRow
+                    label={t("tradeDetail.rows.exitPrice")}
+                    value={exit !== null ? `$${fmtPrice(exit, intlLocale)}` : "—"}
+                    mono
+                  />
                   <ExecRow
                     label={t("tradeDetail.rows.grossPnl")}
                     value={

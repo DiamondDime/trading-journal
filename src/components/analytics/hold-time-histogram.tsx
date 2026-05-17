@@ -31,6 +31,18 @@ interface Props {
   rows: HoldTimeBucketRow[];
 }
 
+// Bucket-key → i18n leaf. The DB returns the canonical machine token (`0-1d`,
+// `1-7d`, ...); the chart renders human-readable axis ticks pulled from the
+// active locale dictionary so RU users see localized labels instead of raw
+// English bucket tokens.
+const BUCKET_LABEL_KEY: Record<HoldTimeBucketRow["bucket"], MessageKey> = {
+  "0-1d": "analytics.activityMix.holdBuckets.intraday",
+  "1-7d": "analytics.activityMix.holdBuckets.shortSwing",
+  "1-4w": "analytics.activityMix.holdBuckets.swing",
+  "1-3m": "analytics.activityMix.holdBuckets.position",
+  "3m+": "analytics.activityMix.holdBuckets.longHold",
+};
+
 function fmtUsdShort(v: number): string {
   if (!Number.isFinite(v)) return "—";
   const sign = v < 0 ? "−" : v > 0 ? "+" : "";
@@ -55,13 +67,26 @@ export function HoldTimeHistogram({ rows }: Props) {
     );
   }
 
+  // Project the rows into chart-ready shape with a localized `bucketLabel`
+  // for the X-axis. We keep the raw `bucket` token in case any future Cell
+  // styling needs it. Order is preserved so the Cell index alignment below
+  // continues to track the corresponding row.
+  const data = rows.map((r) => ({
+    ...r,
+    bucketLabel: t(BUCKET_LABEL_KEY[r.bucket]),
+  }));
+
   return (
-    <div className="h-[260px] w-full">
+    <div
+      className="h-[260px] w-full"
+      role="img"
+      aria-label={t("analytics.charts.ariaHoldTime" as MessageKey)}
+    >
       <ResponsiveContainer width="100%" height="100%">
-        <ComposedChart data={rows} margin={{ top: 16, right: 48, left: 12, bottom: 4 }}>
+        <ComposedChart data={data} margin={{ top: 16, right: 48, left: 12, bottom: 4 }}>
           <CartesianGrid stroke="var(--border-subtle)" strokeDasharray="0" vertical={false} />
           <XAxis
-            dataKey="bucket"
+            dataKey="bucketLabel"
             tickLine={false}
             axisLine={false}
             tick={{ fontSize: 11, fill: "var(--text-tertiary)", fontFamily: "var(--font-jetbrains)" }}

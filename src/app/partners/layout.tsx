@@ -1,11 +1,14 @@
 import type { Metadata } from "next";
 import { Sidebar } from "@/components/sidebar";
+import { getT } from "@/lib/i18n/server";
 
-export const metadata: Metadata = {
-  title: "Partners · Spread Journal",
-  description:
-    "The exchanges we trust. Signing up through these links keeps the journal free and earns you fee rebates.",
-};
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getT();
+  return {
+    title: `${t("partners.title")} · ${t("app.name")}`,
+    description: t("partners.subtitle"),
+  };
+}
 
 export default function PartnersLayout({
   children,

@@ -9,6 +9,7 @@ import {
   ResponsiveContainer,
 } from "recharts";
 import { useT } from "@/lib/i18n/client";
+import type { MessageKey } from "@/lib/i18n/resolve";
 
 /**
  * Donut chart of categorical USD distribution (e.g. P&L by activity type or
@@ -98,7 +99,11 @@ export function PnlDonut({
   }));
 
   return (
-    <div className="relative h-[280px] w-full">
+    <div
+      className="relative h-[280px] w-full"
+      role="img"
+      aria-label={`${t("analytics.charts.ariaPnlDonut" as MessageKey)} · ${centerLabel}`}
+    >
       <ResponsiveContainer width="100%" height="100%">
         <PieChart>
           <Pie

@@ -33,6 +33,8 @@
 
 import { useEffect, useRef, useState } from "react";
 
+import { useT } from "@/lib/i18n/client";
+
 // Type-only imports keep the bundle SSR-safe (the runtime import is dynamic
 // inside the effect). The types are tree-shaken away in production builds.
 import type {
@@ -72,13 +74,8 @@ interface OhlcChartProps {
   activityId: string;
 }
 
-/**
- * Tone used for the empty-state copy. Static here so the parent doesn't have
- * to plumb it through.
- */
-const EMPTY_MESSAGE = "Price history not available for this symbol on this venue.";
-
 export function OhlcChart({ activityId }: OhlcChartProps) {
+  const t = useT();
   const containerRef = useRef<HTMLDivElement | null>(null);
   const chartRef = useRef<IChartApi | null>(null);
   const seriesRef = useRef<ISeriesApi<"Candlestick"> | null>(null);
@@ -111,14 +108,19 @@ export function OhlcChart({ activityId }: OhlcChartProps) {
         }
         if (!res.ok) {
           if (!ac.signal.aborted) {
-            setState({ kind: "error", message: `Server returned HTTP ${res.status}` });
+            setState({
+              kind: "error",
+              message: t("activity.ohlc.reasons.serverHttp", { status: res.status }),
+            });
           }
           return;
         }
         const json = (await res.json()) as { data?: KlinePayload };
         const payload = json.data;
         if (!payload) {
-          if (!ac.signal.aborted) setState({ kind: "error", message: "Malformed response" });
+          if (!ac.signal.aborted) {
+            setState({ kind: "error", message: t("activity.ohlc.reasons.malformed") });
+          }
           return;
         }
         if (payload.bars.length === 0) {
@@ -130,13 +132,13 @@ export function OhlcChart({ activityId }: OhlcChartProps) {
         if (ac.signal.aborted) return;
         setState({
           kind: "error",
-          message: err instanceof Error ? err.message : "Network error",
+          message: err instanceof Error ? err.message : t("activity.ohlc.reasons.network"),
         });
       }
     })();
 
     return () => ac.abort();
-  }, [activityId]);
+  }, [activityId, t]);
 
   // ── Chart mount / unmount + theme reactivity ─────────────────────────
   useEffect(() => {
@@ -167,7 +169,12 @@ export function OhlcChart({ activityId }: OhlcChartProps) {
       series.setData(bars);
 
       // ── Markers (entry / exit / MAE / MFE) ────────────────────────────
-      const markers = buildMarkers(state.payload);
+      const markers = buildMarkers(state.payload, {
+        entry: t("activity.ohlc.markers.entry"),
+        exit: t("activity.ohlc.markers.exit"),
+        mfe: t("activity.ohlc.markers.mfe"),
+        mae: t("activity.ohlc.markers.mae"),
+      });
       if (markers.length > 0) {
         lwc.createSeriesMarkers(series, markers);
       }
@@ -180,7 +187,7 @@ export function OhlcChart({ activityId }: OhlcChartProps) {
           lineWidth: 1,
           lineStyle: lwc.LineStyle.Dashed,
           axisLabelVisible: true,
-          title: "entry",
+          title: t("activity.ohlc.priceLines.entry"),
         });
       }
       if (state.payload.exit !== null) {
@@ -190,7 +197,7 @@ export function OhlcChart({ activityId }: OhlcChartProps) {
           lineWidth: 1,
           lineStyle: lwc.LineStyle.Dotted,
           axisLabelVisible: true,
-          title: "exit",
+          title: t("activity.ohlc.priceLines.exit"),
         });
       }
 
@@ -236,8 +243,9 @@ export function OhlcChart({ activityId }: OhlcChartProps) {
     // We intentionally rebuild the chart when the payload changes —
     // lightweight-charts mutates the canvas, so React reconciliation alone
     // doesn't apply data updates. JSON-stringify keeps the dep cheap to
-    // compare across renders.
-  }, [state]);
+    // compare across renders. `t` is included so a locale switch re-builds
+    // the chart with localized marker/price-line labels.
+  }, [state, t]);
 
   // ── Render ───────────────────────────────────────────────────────────
   if (state.kind === "loading") {
@@ -252,7 +260,7 @@ export function OhlcChart({ activityId }: OhlcChartProps) {
   if (state.kind === "empty") {
     return (
       <div className="flex h-[160px] w-full items-center justify-center rounded-md border border-dashed border-border bg-surface">
-        <p className="font-serif text-sm italic text-text-tertiary">{EMPTY_MESSAGE}</p>
+        <p className="font-serif text-sm italic text-text-tertiary">{t("activity.ohlc.empty")}</p>
       </div>
     );
   }
@@ -261,7 +269,7 @@ export function OhlcChart({ activityId }: OhlcChartProps) {
     return (
       <div className="flex h-[160px] w-full items-center justify-center rounded-md border border-dashed border-border bg-surface px-6 text-center">
         <p className="font-serif text-sm italic text-text-tertiary">
-          Couldn&apos;t load price history — {state.message}.
+          {t("activity.ohlc.error", { message: state.message })}
         </p>
       </div>
     );
@@ -275,7 +283,11 @@ export function OhlcChart({ activityId }: OhlcChartProps) {
         // role/aria-label so a screen reader still announces what this is
         // even though the canvas content itself is opaque to AT.
         role="img"
-        aria-label={`Price candles ${state.payload.symbol} on ${state.payload.exchange}, ${state.payload.interval} interval`}
+        aria-label={t("activity.ohlc.aria", {
+          symbol: state.payload.symbol,
+          exchange: state.payload.exchange,
+          interval: state.payload.interval,
+        })}
       />
     </div>
   );
@@ -285,7 +297,17 @@ export function OhlcChart({ activityId }: OhlcChartProps) {
 // Helpers
 // ---------------------------------------------------------------------------
 
-function buildMarkers(payload: KlinePayload): SeriesMarker<UTCTimestamp>[] {
+interface MarkerLabels {
+  entry: string;
+  exit: string;
+  mfe: string;
+  mae: string;
+}
+
+function buildMarkers(
+  payload: KlinePayload,
+  labels: MarkerLabels,
+): SeriesMarker<UTCTimestamp>[] {
   const markers: SeriesMarker<UTCTimestamp>[] = [];
 
   if (payload.entry !== null) {
@@ -294,7 +316,7 @@ function buildMarkers(payload: KlinePayload): SeriesMarker<UTCTimestamp>[] {
       position: "belowBar",
       color: cssVar("--accent-up", "#16a34a"),
       shape: "circle",
-      text: "Entry",
+      text: labels.entry,
       size: 1,
     });
   }
@@ -304,7 +326,7 @@ function buildMarkers(payload: KlinePayload): SeriesMarker<UTCTimestamp>[] {
       position: "aboveBar",
       color: cssVar("--text-tertiary", "#6b7280"),
       shape: "circle",
-      text: "Exit",
+      text: labels.exit,
       size: 1,
     });
   }
@@ -318,7 +340,7 @@ function buildMarkers(payload: KlinePayload): SeriesMarker<UTCTimestamp>[] {
       position: "aboveBar",
       color: cssVar("--accent-up", "#16a34a"),
       shape: "arrowDown",
-      text: "MFE",
+      text: labels.mfe,
       size: 1,
     });
   }
@@ -328,7 +350,7 @@ function buildMarkers(payload: KlinePayload): SeriesMarker<UTCTimestamp>[] {
       position: "belowBar",
       color: cssVar("--accent-down", "#dc2626"),
       shape: "arrowUp",
-      text: "MAE",
+      text: labels.mae,
       size: 1,
     });
   }

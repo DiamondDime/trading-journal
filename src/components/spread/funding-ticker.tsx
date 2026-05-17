@@ -1,5 +1,6 @@
 import { ArrowUp, ArrowDown, Minus } from "lucide-react";
 import { unstable_cache } from "next/cache";
+import { ExchangeChip } from "@/components/settings/exchange-logo";
 
 /**
  * Funding rates ticker — real data from Binance USD-M perp futures.
@@ -150,6 +151,7 @@ export async function FundingTicker() {
       <div className="h-full rounded-md border border-border bg-surface">
         <div className="flex items-center justify-between border-b border-border px-4 py-3">
           <div className="flex items-center gap-2">
+            <ExchangeChip venue="Binance" size="sm" />
             <span className="relative flex h-2 w-2">
               <span className="relative inline-flex h-2 w-2 rounded-full bg-text-tertiary" />
             </span>
@@ -173,6 +175,7 @@ export async function FundingTicker() {
     <div className="h-full rounded-md border border-border bg-surface">
       <div className="flex items-center justify-between border-b border-border px-4 py-3">
         <div className="flex items-center gap-2">
+          <ExchangeChip venue="Binance" size="sm" />
           <span className="relative flex h-2 w-2">
             <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-up opacity-60" />
             <span className="relative inline-flex h-2 w-2 rounded-full bg-up" />

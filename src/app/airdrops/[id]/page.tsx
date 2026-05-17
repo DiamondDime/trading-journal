@@ -26,20 +26,20 @@ import { ScreenshotsSection } from "@/components/activity/screenshots-section";
 import { toScreenshotItems } from "@/components/activity/screenshots-data";
 import { TagEditor } from "@/components/activity/tag-editor";
 import { SatisfactionToggle } from "@/components/activity/satisfaction-toggle";
-import { getT } from "@/lib/i18n/server";
+import { getT, getLocale } from "@/lib/i18n/server";
 
 export const dynamic = "force-dynamic";
 
-function fmtPrice(n: number) {
-  if (n < 1) return n.toLocaleString("en-US", { maximumSignificantDigits: 4 });
-  return n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+function fmtPrice(n: number, intlLocale: string) {
+  if (n < 1) return n.toLocaleString(intlLocale, { maximumSignificantDigits: 4 });
+  return n.toLocaleString(intlLocale, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
-function fmtTokens(n: number) {
-  return n.toLocaleString("en-US", { maximumFractionDigits: 0 });
+function fmtTokens(n: number, intlLocale: string) {
+  return n.toLocaleString(intlLocale, { maximumFractionDigits: 0 });
 }
-function fmtDate(iso: string | null) {
+function fmtDate(iso: string | null, intlLocale: string) {
   if (!iso) return "—";
-  return new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+  return new Date(iso).toLocaleDateString(intlLocale, { month: "short", day: "numeric", year: "numeric" });
 }
 function fmtMultiplier(m: number) {
   if (!Number.isFinite(m) || m === 0) return "—";
@@ -57,6 +57,7 @@ export default async function AirdropDetailPage({
   const sp = await searchParams;
   const { id: userId } = await requireUser();
   const t = await getT();
+  const intlLocale = (await getLocale()) === "ru" ? "ru-RU" : "en-US";
   const [
     activity,
     note,
@@ -80,12 +81,19 @@ export default async function AirdropDetailPage({
   const currentPrice = Number(a.currentPriceUsd ?? 0);
   const currentValue = tokens * currentPrice;
   const valueAtClaim = Number(a.valueAtReceiptUsd ?? 0);
-  const multiplier = valueAtClaim > 0 ? currentValue / valueAtClaim : 1.0;
+  // Multiplier when valueAtClaim is 0 (free airdrop with no recorded
+  // cost-basis). Show "—" rather than a misleading "1.00×" since the trade
+  // has no denominator. fmtMultiplier maps 0 / non-finite to "—" already.
+  const multiplier = valueAtClaim > 0 ? currentValue / valueAtClaim : 0;
   const netPnl = Number(activity.netPnlUsd ?? 0);
   const headlineTone = multiplier >= 1 ? "text-up" : "text-down";
-  const statusLabel = t(`airdropDetail.status.${activity.status}` as never);
+  // Status uses the top-level status.* dict (all 9 ActivityStatus values).
+  // The local airdropDetail.status only had 3 keys (pending|claimed|closed)
+  // which produced a broken raw-key fallback for non-canonical airdrop
+  // statuses (e.g. expired retroactive drops).
+  const statusLabel = t(`status.${activity.status}`);
   const serial = `A#${activity.id.slice(0, 4).toUpperCase()}`;
-  const claimLabel = fmtDate(a.claimDate ?? activity.openedAt);
+  const claimLabel = fmtDate(a.claimDate ?? activity.openedAt, intlLocale);
   const daysSinceClaim = a.claimDate
     ? Math.max(0, Math.round((Date.now() - new Date(a.claimDate).getTime()) / 86_400_000))
     : 0;
@@ -126,7 +134,9 @@ export default async function AirdropDetailPage({
               {a.protocol} · {a.tokenSymbol}
             </p>
             <p className="mt-1 font-mono text-sm text-text-tertiary">
-              {t("airdropDetail.daysSinceClaim", { days: daysSinceClaim })}
+              {a.claimDate
+                ? t("airdropDetail.daysSinceClaim", { days: daysSinceClaim })
+                : t("airdropDetail.notClaimedYet")}
             </p>
             <div className="mt-5">
               <SatisfactionToggle
@@ -191,14 +201,14 @@ export default async function AirdropDetailPage({
                   <ExecRow label={t("airdropDetail.table.protocol")} value={a.protocol} mono />
                   <ExecRow
                     label={t("airdropDetail.table.tokensClaimed")}
-                    value={`${fmtTokens(tokens)} ${a.tokenSymbol}`}
+                    value={`${fmtTokens(tokens, intlLocale)} ${a.tokenSymbol}`}
                     mono
                   />
-                  <ExecRow label={t("airdropDetail.table.claimDate")} value={fmtDate(a.claimDate)} mono />
+                  <ExecRow label={t("airdropDetail.table.claimDate")} value={fmtDate(a.claimDate, intlLocale)} mono />
                   <ExecRow label={t("airdropDetail.table.valueAtClaim")} value={fmtUsd(valueAtClaim)} mono />
                   <ExecRow
                     label={t("airdropDetail.table.currentPrice")}
-                    value={currentPrice > 0 ? `$${fmtPrice(currentPrice)}` : "—"}
+                    value={currentPrice > 0 ? `$${fmtPrice(currentPrice, intlLocale)}` : "—"}
                     mono
                   />
                   <ExecRow

@@ -75,9 +75,9 @@ function fmtCellAmount(v: number): string {
   return `${sign}$${abs.toFixed(0)}`;
 }
 
-function fmtTooltipAmount(v: number): string {
+function fmtTooltipAmount(v: number, intlLocale: string): string {
   const sign = v < 0 ? "−" : v > 0 ? "+" : "";
-  return `${sign}$${Math.abs(v).toLocaleString("en-US", {
+  return `${sign}$${Math.abs(v).toLocaleString(intlLocale, {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   })}`;
@@ -109,6 +109,7 @@ function cellTextColor(v: number | null): string {
 
 export function MonthlyReturnsGrid({ rows }: Props) {
   const t = useT();
+  const intlLocale = t.locale === "ru" ? "ru-RU" : "en-US";
   const MONTH_LABELS = MONTH_KEYS.map((k) => t(k as MessageKey));
   // Pivot into years × months. Skip rows that don't parse (defensive).
   const { years, maxAbs } = React.useMemo(() => {
@@ -203,7 +204,7 @@ export function MonthlyReturnsGrid({ rows }: Props) {
                               ? t("analytics.charts.monthlyAriaCell" as MessageKey, {
                                   month: cellLabel,
                                   year: y.year,
-                                  amount: fmtTooltipAmount(m.netPnl),
+                                  amount: fmtTooltipAmount(m.netPnl, intlLocale),
                                   activities: t.plural("plurals.activities", m.count),
                                 })
                               : t("analytics.charts.monthlyAriaEmpty" as MessageKey, {
@@ -241,7 +242,7 @@ export function MonthlyReturnsGrid({ rows }: Props) {
                                     : "text-text-tertiary"
                                 }
                               >
-                                {fmtTooltipAmount(m.netPnl)}
+                                {fmtTooltipAmount(m.netPnl, intlLocale)}
                               </span>
                               <span className="text-text-tertiary">
                                 {t.plural("plurals.activities", m.count)}

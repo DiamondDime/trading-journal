@@ -5,13 +5,14 @@ import { WizardNav } from "@/components/wizard/wizard-nav";
 import { IMPORTED_FILLS } from "@/lib/data/exchange-fills-mock";
 import {
   matchSpreads,
-  SPREAD_TYPE_LABELS,
+  type MatcherSpreadType,
   type MatcherSuggestion,
 } from "@/lib/matcher/spread-matcher";
 import { cn } from "@/lib/utils";
 import { getT } from "@/lib/i18n/server";
 import type { TFunction } from "@/lib/i18n/resolve";
 import { ManualBuilder } from "./manual-builder";
+import { ExchangeChip } from "@/components/settings/exchange-logo";
 
 // Max suggestions to surface on the page. Keeps the panel scannable; the
 // production matcher will rank with calibrated confidence and we'll widen this
@@ -161,7 +162,7 @@ function SuggestionCard({
       <article className="group rounded-md border border-border bg-surface p-4 transition-colors hover:border-border-strong">
         <header className="flex items-center justify-between">
           <span className="inline-flex items-center gap-1.5 rounded-full bg-subtle px-2.5 py-0.5 font-mono text-[10px] uppercase tracking-[0.14em] text-text-secondary">
-            {SPREAD_TYPE_LABELS[suggestion.spreadType]}
+            {localizedSpreadTypeLabel(suggestion.spreadType, t)}
           </span>
           <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-text-tertiary">
             {t("wizard.spread.pick.score")}{" "}
@@ -175,14 +176,21 @@ function SuggestionCard({
               key={leg.id}
               className="flex items-center justify-between gap-3 py-2"
             >
-              <div className="flex flex-col leading-tight">
-                <span className="font-serif text-[13px] font-medium text-text">
-                  {leg.symbol}
-                </span>
-                <span className="font-mono text-[9px] uppercase tracking-[0.12em] text-text-tertiary">
-                  {leg.exchange} · {leg.instrument}
-                  {leg.expiry ? ` · ${leg.expiry}` : ""}
-                </span>
+              <div className="flex items-center gap-2 leading-tight">
+                <ExchangeChip
+                  venue={leg.exchange}
+                  size="sm"
+                  className="shrink-0"
+                />
+                <div className="flex flex-col">
+                  <span className="font-serif text-[13px] font-medium text-text">
+                    {leg.symbol}
+                  </span>
+                  <span className="font-mono text-[9px] uppercase tracking-[0.12em] text-text-tertiary">
+                    {leg.exchange} · {leg.instrument}
+                    {leg.expiry ? ` · ${leg.expiry}` : ""}
+                  </span>
+                </div>
               </div>
               <div className="flex items-baseline gap-3">
                 <span
@@ -226,6 +234,14 @@ function SuggestionCard({
       </article>
     </li>
   );
+}
+
+/** Localised label for a matcher spread type. Mirrors the helper in /fields. */
+function localizedSpreadTypeLabel(
+  spreadType: MatcherSpreadType,
+  t: TFunction,
+): string {
+  return t(`wizard.shell.spreadTypeLabels.${spreadType}` as const);
 }
 
 function EmptyState({ t }: { t: TFunction }) {

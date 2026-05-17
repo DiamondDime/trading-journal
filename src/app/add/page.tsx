@@ -2,7 +2,10 @@ import { WizardShell } from "@/components/wizard/wizard-shell";
 import { WizardRadioCardLink } from "@/components/wizard/wizard-radio-card";
 import { getT } from "@/lib/i18n/server";
 
-export const dynamic = "force-static";
+// getT() reads the `csj-locale` cookie which is per-request, so this page
+// can't render statically. The other wizard step pages already use
+// `force-dynamic` for the same reason.
+export const dynamic = "force-dynamic";
 
 export default async function AddIndexPage() {
   const t = await getT();

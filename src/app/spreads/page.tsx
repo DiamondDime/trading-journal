@@ -416,6 +416,16 @@ export default async function SpreadsPage({ searchParams }: SpreadsPageProps) {
 
   const recentNetSum = recentRows.reduce((s, r) => s + Number(r.netPnlUsd ?? 0), 0);
 
+  // Pull a venue string per row so the card can render exchange logos
+  // beside the type label. Spreads carry "venues" already; trades give us
+  // their single exchange; sale/airdrop have no venue logo (the venue is
+  // a launchpad / OTC desk / protocol, not a tradable exchange).
+  function venueOf(r: Activity): string | undefined {
+    if (r.type === "spread") return r.venues;
+    if (r.type === "trade") return r.exchange;
+    return undefined;
+  }
+
   const recentCloses: SpreadListItem[] = recentDisplays.map((r) => ({
     serial: r.serial,
     name: r.name,
@@ -430,6 +440,7 @@ export default async function SpreadsPage({ searchParams }: SpreadsPageProps) {
         : `${fmtCapital(r.capital)} · ${r.daysLabel} · ${r.note || "—"}`,
     href: r.href,
     activityType: r.type,
+    venues: venueOf(r),
   }));
 
   // Friendly "since" date — use first close from totals if available.

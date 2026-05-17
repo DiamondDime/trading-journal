@@ -29,8 +29,14 @@ function isoOfClosedAt(v: unknown): string | null {
   return null;
 }
 
-function fmtLabel(ymd: string): string {
-  return new Date(`${ymd}T00:00:00`).toLocaleDateString('en-US', {
+/**
+ * Format a YYYY-MM-DD date string as a short month/day label suitable for a
+ * chart axis. Locale-aware so RU users see localized month names instead of
+ * English. Callers pass a BCP-47 tag (`en-US`, `ru-RU`); the default keeps
+ * test fixtures and legacy callers deterministic.
+ */
+function fmtLabel(ymd: string, intlLocale: string = 'en-US'): string {
+  return new Date(`${ymd}T00:00:00`).toLocaleDateString(intlLocale, {
     month: 'short',
     day: 'numeric',
   });
@@ -50,6 +56,7 @@ function fmtLabel(ymd: string): string {
  */
 export function buildEquityPoints(
   rows: ActivityFeedRowDb[],
+  intlLocale: string = 'en-US',
 ): EquityPoint[] {
   const dayMap = new Map<string, number>();
   for (const r of rows) {
@@ -72,7 +79,7 @@ export function buildEquityPoints(
     if (equity > peak) peak = equity;
     points.push({
       date: ymd,
-      label: fmtLabel(ymd),
+      label: fmtLabel(ymd, intlLocale),
       equity,
       peak,
       drawdownUsd: equity - peak,
@@ -98,8 +105,9 @@ export function buildEquityPoints(
  */
 export function buildUnderwaterPoints(
   rows: ActivityFeedRowDb[],
+  intlLocale: string = 'en-US',
 ): UnderwaterPoint[] {
-  const equity = buildEquityPoints(rows);
+  const equity = buildEquityPoints(rows, intlLocale);
   return equity.map((p) => {
     const ddPct = p.peak > 0 ? (p.equity - p.peak) / p.peak : 0;
     return {
@@ -133,6 +141,7 @@ export function buildUnderwaterPoints(
 export function buildRollingWinRate(
   rows: ActivityFeedRowDb[],
   window: number,
+  intlLocale: string = 'en-US',
 ): RollingWinRatePoint[] {
   // Normalise to chronological order, drop rows without enough signal.
   type Norm = { closedAt: string; netPnl: number };
@@ -158,7 +167,7 @@ export function buildRollingWinRate(
     const winRate = windowSize > 0 ? winners / windowSize : 0;
     out.push({
       index: i + 1,
-      label: fmtLabel(list[i].closedAt.slice(0, 10)),
+      label: fmtLabel(list[i].closedAt.slice(0, 10), intlLocale),
       winRate,
       windowSize,
       winners,
@@ -200,10 +209,17 @@ export function pickTopBestWorst(
 
   const valid = rUnit > 0 && Number.isFinite(rUnit);
 
-  const sortedDesc = [...scoring].sort(
+  // "Best" = the largest winners. "Worst" = the largest losers. Splitting by
+  // sign (rather than just sorting the full scoring array) avoids the trap
+  // where an all-winners journal would surface its SMALLEST wins under the
+  // "Top 10 worst" header — visually misleading with the down-tone styling.
+  const winnersOnly = scoring.filter((r) => Number(r.netPnlUsd) > 0);
+  const losersOnly = scoring.filter((r) => Number(r.netPnlUsd) < 0);
+
+  const sortedDesc = winnersOnly.sort(
     (a, b) => Number(b.netPnlUsd) - Number(a.netPnlUsd),
   );
-  const sortedAsc = [...scoring].sort(
+  const sortedAsc = losersOnly.sort(
     (a, b) => Number(a.netPnlUsd) - Number(b.netPnlUsd),
   );
 

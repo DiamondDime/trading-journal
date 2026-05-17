@@ -63,7 +63,11 @@ export function RollingWinRateChart({ points = [], window }: Props) {
   }
 
   return (
-    <div className="h-[220px] w-full">
+    <div
+      className="h-[220px] w-full"
+      role="img"
+      aria-label={t("analytics.charts.ariaRolling" as MessageKey, { window })}
+    >
       <ResponsiveContainer width="100%" height="100%">
         <LineChart data={points} margin={{ top: 12, right: 24, left: 12, bottom: 4 }}>
           <CartesianGrid stroke="var(--border-subtle)" strokeDasharray="0" vertical={false} />

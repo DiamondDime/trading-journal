@@ -103,3 +103,143 @@ function pickInitial(name: string): string {
   if (cp == null) return "·";
   return String.fromCodePoint(cp).toUpperCase();
 }
+
+/**
+ * Map of well-known exchange display names / codes → catalog code (the
+ * key used in `/public/exchanges/{code}.svg`). Used by `<ExchangeChip>` when
+ * the surrounding surface only has a free-form venue string and can't easily
+ * thread the full catalog row through props.
+ *
+ * Keys are lower-cased on lookup. We accept both the catalog code
+ * ("binance") and the wizard's title-cased label ("Binance"). Venues that
+ * aren't in the catalog ("Coinbase", "Bitmex", "Manual") resolve to `null`
+ * and the chip falls back to the serif-initial box — same as
+ * <ExchangeLogo logoUrl={null} />.
+ *
+ * Keep this map in sync with the OVERLAY in `src/lib/db/exchanges.ts` and
+ * the SVG files in `/public/exchanges/`.
+ */
+const NAME_TO_CODE: Record<string, string> = {
+  binance: "binance",
+  bybit: "bybit",
+  okx: "okx",
+  okx_dex: "okx",
+  bitget: "bitget",
+  kucoin: "kucoin",
+  phemex: "phemex",
+  bingx: "bingx",
+  mexc: "mexc",
+  gate: "gate",
+  "gate.io": "gate",
+  htx: "htx",
+  huobi: "htx",
+  kraken: "kraken",
+  deribit: "deribit",
+  hyperliquid: "hyperliquid",
+  aster: "aster",
+};
+
+/**
+ * Resolve a free-form venue string into a known catalog code, or null if
+ * we don't have a logo for it. Lower-cases + strips whitespace before
+ * lookup so "Binance", "BINANCE", " binance " all match.
+ */
+export function resolveExchangeCode(venue: string | null | undefined): string | null {
+  if (!venue) return null;
+  const key = venue.trim().toLowerCase();
+  if (!key) return null;
+  return NAME_TO_CODE[key] ?? null;
+}
+
+interface ChipProps {
+  /** Free-form venue string — exchange display name ("Binance") or catalog
+   *  code ("binance"). Anything not in the catalog falls back to the
+   *  serif-initial box. */
+  venue: string;
+  /** Optional explicit override. When set, takes precedence over the
+   *  venue-string resolver — use this when you have a full catalog row in
+   *  scope and want to skip the string match. */
+  code?: string;
+  /** Display label override (defaults to `venue`). */
+  displayName?: string;
+  size?: "sm" | "md";
+  className?: string;
+}
+
+/**
+ * Inline logo + name chip for surfaces that show a venue but don't have
+ * direct access to the catalog row (most leaf components — they receive a
+ * pre-formatted `exchange: string` or `venues: string` field from the
+ * Activity adapter). Resolves the catalog code via the lookup map above and
+ * delegates to <ExchangeLogo> for the actual render.
+ *
+ * Usage:
+ *   <ExchangeChip venue="Binance" size="sm" />
+ *   <ExchangeChip venue={trade.exchange} />
+ *
+ * The chip renders just the logo (or initial fallback) — the surrounding
+ * markup keeps its own typography. This is deliberately a leaf so it can
+ * slot into table cells, subtitles, and inline runs without disturbing the
+ * existing copy.
+ */
+export function ExchangeChip({
+  venue,
+  code,
+  displayName,
+  size = "sm",
+  className,
+}: ChipProps) {
+  const resolved = code ?? resolveExchangeCode(venue) ?? "";
+  const logoUrl = resolved ? `/exchanges/${resolved}.svg` : null;
+  return (
+    <ExchangeLogo
+      code={resolved || venue}
+      displayName={displayName ?? venue}
+      logoUrl={logoUrl}
+      size={size}
+      className={className}
+    />
+  );
+}
+
+/**
+ * Helper for multi-venue strings like "Binance + Coinbase" or
+ * "Bybit / OKX". Splits on `+` / `/` / `,` / `·` separators, resolves each
+ * piece, and renders the logos as a tiny stack-row beside the original
+ * text. Falls back to a single chip when only one venue is present, and
+ * renders nothing when the input string has no recognisable venues
+ * (callers should keep the textual label in their own markup either way).
+ */
+export function ExchangeVenuesChips({
+  venues,
+  size = "sm",
+  className,
+}: {
+  venues: string;
+  size?: "sm" | "md";
+  className?: string;
+}) {
+  const parts = venues
+    .split(/\s*[+/,·]\s*/)
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0);
+  if (parts.length === 0) return null;
+  return (
+    <span
+      className={cn(
+        "inline-flex items-center -space-x-1",
+        className,
+      )}
+      aria-hidden
+    >
+      {parts.map((p, i) => (
+        <ExchangeChip
+          key={`${p}-${i}`}
+          venue={p}
+          size={size}
+          className="ring-1 ring-surface"
+        />
+      ))}
+    </span>
+  );
+}

@@ -63,15 +63,23 @@ function daysBetween(openIso: string, closeIso: string): number {
   return (c - o) / (1000 * 60 * 60 * 24);
 }
 
-function fmtDays(d: number): string {
+function fmtDays(
+  d: number,
+  t: Awaited<ReturnType<typeof getT>>,
+): string {
   if (d === 0) return "—";
   if (d < 1) {
     const hours = d * 24;
-    if (hours < 1) return `${Math.round(hours * 60)} min`;
-    return `${hours.toFixed(1)}h`;
+    if (hours < 1)
+      return t("wizard.trade.review.duration.minutes", {
+        value: Math.round(hours * 60),
+      });
+    return t("wizard.trade.review.duration.hours", {
+      value: hours.toFixed(1),
+    });
   }
-  if (d < 30) return `${d.toFixed(1)}d`;
-  return `${d.toFixed(0)}d`;
+  if (d < 30) return t("wizard.trade.review.duration.days", { value: d.toFixed(1) });
+  return t("wizard.trade.review.duration.days", { value: d.toFixed(0) });
 }
 
 function fmtDate(iso: string): string {
@@ -168,10 +176,11 @@ export default async function TradeReviewPage(props: { searchParams: Search }) {
   const isEditing = getStr(sp, "edit") !== "";
 
   const headlineTone = net >= 0 ? "up" : "down";
+  // Sign is "+" only for positive, "−" only for negative — zero gets no sign.
   const aprLabel =
     aprPct === null
       ? "—"
-      : `${aprPct >= 0 ? "+" : "−"}${Math.abs(aprPct).toFixed(1)}%`;
+      : `${aprPct > 0 ? "+" : aprPct < 0 ? "−" : ""}${Math.abs(aprPct).toFixed(1)}%`;
 
   return (
     <WizardShell
@@ -201,7 +210,7 @@ export default async function TradeReviewPage(props: { searchParams: Search }) {
               {aprLabel}
             </span>
             <span className="font-serif text-xl font-normal text-text-tertiary">
-              APR
+              {t("wizard.trade.review.heroUnit")}
             </span>
           </div>
           <p className="mt-2 font-mono text-[13px] text-text-secondary">
@@ -219,7 +228,7 @@ export default async function TradeReviewPage(props: { searchParams: Search }) {
             {days > 0 && (
               <>
                 {" · "}
-                {t("wizard.trade.review.heldSuffix", { days: fmtDays(days) })}
+                {t("wizard.trade.review.heldSuffix", { days: fmtDays(days, t) })}
               </>
             )}
           </p>
@@ -312,7 +321,7 @@ export default async function TradeReviewPage(props: { searchParams: Search }) {
           />
           <WizardSummaryRow
             label={t("wizard.trade.review.labels.daysHeld")}
-            value={days > 0 ? fmtDays(days) : "—"}
+            value={days > 0 ? fmtDays(days, t) : "—"}
           />
         </div>
 

@@ -312,9 +312,10 @@ export default async function ActivityMixPage() {
               centerLabel={t("analytics.activityMix.donut.totalCapital")}
               centerValue={
                 totalCapital > 0
-                  ? `$${(totalCapital >= 10_000
-                      ? (totalCapital / 1000).toFixed(0) + "k"
-                      : totalCapital.toFixed(0))}`
+                  // Reuse the same compact USD formatter as the rest of the
+                  // page; capital is always positive so we strip the leading
+                  // "+" that `fmtUsdCompact` emits for non-zero values.
+                  ? fmtUsdCompact(totalCapital).replace(/^\+/, "")
                   : "—"
               }
               centerCaption={t("analytics.activityMix.donut.acrossTypes", {

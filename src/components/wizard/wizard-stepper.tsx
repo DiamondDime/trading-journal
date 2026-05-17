@@ -1,4 +1,7 @@
+"use client";
+
 import { cn } from "@/lib/utils";
+import { useT } from "@/lib/i18n/client";
 
 export interface WizardStepperProps {
   /** 1-indexed current step. */
@@ -15,10 +18,11 @@ export interface WizardStepperProps {
  * Renders `aria-current="step"` on the active dot for AT consumers.
  */
 export function WizardStepper({ current, total, labels }: WizardStepperProps) {
+  const t = useT();
   return (
     <ol
       className="flex items-center gap-3 font-mono text-[10px] uppercase tracking-[0.16em] text-text-tertiary"
-      aria-label="Wizard progress"
+      aria-label={t("wizard.shell.progressAria")}
     >
       {labels.slice(0, total).map((label, idx) => {
         const stepNum = idx + 1;

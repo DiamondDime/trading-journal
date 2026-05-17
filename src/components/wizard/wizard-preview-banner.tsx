@@ -1,3 +1,7 @@
+"use client";
+
+import { useT } from "@/lib/i18n/client";
+
 // Renders the small "Just saved" / "Updated" banner on a detail page when
 // the user has just landed there from a wizard submit. The actions append
 // `?from=wizard` (and optionally `&action=edited`) to the redirect so we can
@@ -20,6 +24,7 @@ export function WizardPreviewBanner({
   from?: string;
   action?: string;
 }) {
+  const t = useT();
   if (from !== "wizard") return null;
   const edited = action === "edited";
   return (
@@ -28,13 +33,15 @@ export function WizardPreviewBanner({
       role="status"
     >
       <span className="font-semibold uppercase tracking-[0.14em] text-[10px]">
-        {edited ? "Updated" : "Just saved"}
+        {edited
+          ? t("wizard.shell.previewBanner.updatedLabel")
+          : t("wizard.shell.previewBanner.savedLabel")}
       </span>
       {" — "}
       <span className="font-serif italic">
         {edited
-          ? "your changes are saved."
-          : "this is your new record. Edit or add notes from here."}
+          ? t("wizard.shell.previewBanner.updatedBody")
+          : t("wizard.shell.previewBanner.savedBody")}
       </span>
     </aside>
   );

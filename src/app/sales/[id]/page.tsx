@@ -26,30 +26,27 @@ import { ScreenshotsSection } from "@/components/activity/screenshots-section";
 import { toScreenshotItems } from "@/components/activity/screenshots-data";
 import { TagEditor } from "@/components/activity/tag-editor";
 import { SatisfactionToggle } from "@/components/activity/satisfaction-toggle";
-import { getT } from "@/lib/i18n/server";
+import { getT, getLocale } from "@/lib/i18n/server";
 
 export const dynamic = "force-dynamic";
 
-function fmtPrice(n: number) {
-  // NOTE: number formatter, intentionally en-US — flagged for v2 locale-aware formatting
+function fmtPrice(n: number, intlLocale: string) {
   if (n < 1) {
-    return n.toLocaleString("en-US", { maximumSignificantDigits: 4 });
+    return n.toLocaleString(intlLocale, { maximumSignificantDigits: 4 });
   }
-  return n.toLocaleString("en-US", {
+  return n.toLocaleString(intlLocale, {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   });
 }
 
-function fmtTokens(n: number) {
-  // NOTE: number formatter, intentionally en-US — flagged for v2 locale-aware formatting
-  return n.toLocaleString("en-US", { maximumFractionDigits: 0 });
+function fmtTokens(n: number, intlLocale: string) {
+  return n.toLocaleString(intlLocale, { maximumFractionDigits: 0 });
 }
 
-function fmtDate(iso: string | null) {
-  // NOTE: date formatter, intentionally en-US — flagged for v2 locale-aware formatting
+function fmtDate(iso: string | null, intlLocale: string) {
   if (!iso) return "—";
-  return new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+  return new Date(iso).toLocaleDateString(intlLocale, { month: "short", day: "numeric", year: "numeric" });
 }
 
 function fmtMultiplier(m: number) {
@@ -88,6 +85,7 @@ export default async function SaleDetailPage({
   searchParams: Promise<{ from?: string; action?: string }>;
 }) {
   const t = await getT();
+  const intlLocale = (await getLocale()) === "ru" ? "ru-RU" : "en-US";
   const { id } = await params;
   const sp = await searchParams;
   const { id: userId } = await requireUser();
@@ -117,20 +115,34 @@ export default async function SaleDetailPage({
   const multiplier = usdPaid > 0 ? currentValue / usdPaid : 0;
   const netPnl = Number(activity.netPnlUsd ?? 0);
   const headlineTone = multiplier >= 1 ? "text-up" : "text-down";
-  const saleKindLabel = t(`saleDetail.kind.${s.saleKind}` as never);
+  // Sale kind: dict has ido|launchpad|premarket|otc. Fall back to the raw
+  // value if the DB ever exposes a kind we don't have a label for, rather
+  // than the broken "saleDetail.kind.X" debug-key.
+  const SALE_KINDS = ["ido", "launchpad", "premarket", "otc"] as const;
+  const saleKindLabel = (SALE_KINDS as readonly string[]).includes(s.saleKind)
+    ? t(`saleDetail.kind.${s.saleKind as (typeof SALE_KINDS)[number]}`)
+    : s.saleKind;
   const { tgePct, cliffMonths, durationMonths } = vestingDescription(s.vestingSchedule);
-  const statusLabel = t(`saleDetail.status.${activity.status}` as never);
+  // Status uses the top-level status.* dict (covers all 9 ActivityStatus
+  // enum values: open, closed, pending, vesting, claimed, winding_down,
+  // orphaned, liquidated, expired). The local saleDetail.status only had
+  // 4 keys which produced a broken raw-key fallback for sales surfaced as
+  // e.g. expired or winding_down.
+  const statusLabel = t(`status.${activity.status}`);
   const serial = `S#${activity.id.slice(0, 4).toUpperCase()}`;
-  const daysHeldMs =
+  // Clamp negative durations — TGE / vesting can sit in the future, in which
+  // case the elapsed-since-open value is negative. Show "0h" rather than a
+  // confusing "-3d".
+  const rawHeldMs =
     activity.openedAt && activity.closedAt
       ? new Date(activity.closedAt).getTime() - new Date(activity.openedAt).getTime()
       : Date.now() - new Date(activity.openedAt ?? activity.createdAt).getTime();
-  // NOTE: duration formatter, intentionally en-US abbreviations — flagged for v2 locale-aware formatting
+  const daysHeldMs = Math.max(0, rawHeldMs);
   const daysLabel =
     daysHeldMs < 86_400_000
-      ? `${Math.round(daysHeldMs / 3_600_000)}h`
-      : `${Math.round(daysHeldMs / 86_400_000)}d`;
-  const closedLabel = activity.closedAt ? fmtDate(activity.closedAt) : "—";
+      ? `${Math.round(daysHeldMs / 3_600_000)}${t("tradeDetail.units.hour")}`
+      : `${Math.round(daysHeldMs / 86_400_000)}${t("tradeDetail.units.day")}`;
+  const closedLabel = activity.closedAt ? fmtDate(activity.closedAt, intlLocale) : "—";
 
   return (
     <div className="flex h-screen w-full bg-app">
@@ -224,10 +236,10 @@ export default async function SaleDetailPage({
                   <ExecRow label={t("saleDetail.row.usdPaid")} value={fmtUsd(usdPaid)} mono />
                   <ExecRow
                     label={t("saleDetail.row.tokensAllocated")}
-                    value={`${fmtTokens(tokens)} ${s.tokenSymbol}`}
+                    value={`${fmtTokens(tokens, intlLocale)} ${s.tokenSymbol}`}
                     mono
                   />
-                  <ExecRow label={t("saleDetail.row.tgeDate")} value={fmtDate(s.saleDate)} mono />
+                  <ExecRow label={t("saleDetail.row.tgeDate")} value={fmtDate(s.saleDate, intlLocale)} mono />
                   <ExecRow label={t("saleDetail.row.tgeUnlockPct")} value={`${tgePct}%`} mono />
                   <ExecRow
                     label={t("saleDetail.row.vestingCliff")}
@@ -241,7 +253,7 @@ export default async function SaleDetailPage({
                   />
                   <ExecRow
                     label={t("saleDetail.row.currentPrice")}
-                    value={currentPrice > 0 ? `$${fmtPrice(currentPrice)}` : "—"}
+                    value={currentPrice > 0 ? `$${fmtPrice(currentPrice, intlLocale)}` : "—"}
                     mono
                   />
                   <ExecRow

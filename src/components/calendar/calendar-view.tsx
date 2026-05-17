@@ -107,7 +107,6 @@ export function CalendarView({
       <header className="flex flex-col gap-4 border-b border-border px-8 py-7 md:flex-row md:items-end md:justify-between lg:px-12">
         <CalendarPageHeader
           year={grid.year}
-          month={grid.month}
           monthName={monthName(grid.month)}
         />
 
@@ -236,15 +235,12 @@ export function CalendarView({
 
 function CalendarPageHeader({
   year,
-  month,
   monthName,
 }: {
   year: number;
-  month: number;
   monthName: string;
 }) {
   const t = useT();
-  void month;
   return (
     <div>
       <h1 className="font-serif text-[40px] font-medium leading-none tracking-tight text-text">
@@ -318,17 +314,14 @@ function MonthYearPicker({
   return (
     <div className="flex flex-col gap-3">
       <div className="flex items-center justify-between gap-2">
-        <Link
-          href="#"
-          onClick={(e) => {
-            e.preventDefault();
-            setPickedYear(pickedYear - 1);
-          }}
+        <button
+          type="button"
+          onClick={() => setPickedYear(pickedYear - 1)}
           aria-label={labels.prevYear}
           className="rounded-md border border-border bg-surface px-2 py-1 font-mono text-[10px] uppercase tracking-[0.14em] text-text-secondary hover:bg-subtle hover:text-text"
         >
           <ChevronLeft className="inline h-3 w-3" />
-        </Link>
+        </button>
         <select
           value={pickedYear}
           onChange={(e) => setPickedYear(Number(e.target.value))}
@@ -339,17 +332,14 @@ function MonthYearPicker({
             <option key={y} value={y}>{y}</option>
           ))}
         </select>
-        <Link
-          href="#"
-          onClick={(e) => {
-            e.preventDefault();
-            setPickedYear(pickedYear + 1);
-          }}
+        <button
+          type="button"
+          onClick={() => setPickedYear(pickedYear + 1)}
           aria-label={labels.nextYear}
           className="rounded-md border border-border bg-surface px-2 py-1 font-mono text-[10px] uppercase tracking-[0.14em] text-text-secondary hover:bg-subtle hover:text-text"
         >
           <ChevronRight className="inline h-3 w-3" />
-        </Link>
+        </button>
       </div>
 
       <div className="grid grid-cols-3 gap-1.5">
@@ -464,13 +454,12 @@ function CalendarCell({ cell, chips, total, locale }: CalendarCellProps) {
   // Wrap in tooltip only when there's something to show — empty cells get
   // a lighter affordance, no tooltip noise.
   if (hasActivity) {
-    const ariaKey = chips.length === 1 ? "calendar.ariaCellWithActivity" : "calendar.ariaCellWithActivities";
     return (
       <Tooltip>
         <TooltipTrigger asChild>
           <Link
             href={href}
-            aria-label={t(ariaKey as Parameters<typeof t>[0], { date: fmtTooltipDate(cell.ymd, locale), count: chips.length })}
+            aria-label={`${fmtTooltipDate(cell.ymd, locale)} · ${t.plural("plurals.activities", chips.length)}`}
             className="block focus:outline-none focus-visible:ring-2 focus-visible:ring-text rounded-md"
           >
             {inner}

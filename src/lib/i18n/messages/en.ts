@@ -296,6 +296,26 @@ export const en = {
         caption: 'What you actually banked',
       },
     },
+    ohlc: {
+      empty: 'Price history not available for this symbol on this venue.',
+      error: "Couldn't load price history — {message}.",
+      aria: 'Price candles {symbol} on {exchange}, {interval} interval',
+      reasons: {
+        serverHttp: 'server returned HTTP {status}',
+        malformed: 'malformed response',
+        network: 'network error',
+      },
+      markers: {
+        entry: 'Entry',
+        exit: 'Exit',
+        mfe: 'MFE',
+        mae: 'MAE',
+      },
+      priceLines: {
+        entry: 'entry',
+        exit: 'exit',
+      },
+    },
   },
   dashboard: {
     title: 'The book',
@@ -709,6 +729,15 @@ export const en = {
       noActivity: 'no activity',
       monthlyAriaCell: '{month} {year}: {amount} across {activities}',
       monthlyAriaEmpty: '{month} {year}: no activity',
+      // Chart-level aria labels — applied as `role="img"` descriptions on
+      // each visualisation wrapper so screen readers don't have to walk
+      // the SVG. Per-point context lives in tooltips and cell aria attrs.
+      ariaEquity: 'Equity curve area chart',
+      ariaUnderwater: 'Underwater drawdown area chart',
+      ariaRolling: 'Rolling win-rate line chart, window of {window}',
+      ariaHoldTime: 'Hold-time histogram with average P&L overlay',
+      ariaBarRank: 'Diverging horizontal bar rank',
+      ariaPnlDonut: 'Distribution donut chart',
       months: {
         jan: 'Jan', feb: 'Feb', mar: 'Mar', apr: 'Apr', may: 'May', jun: 'Jun',
         jul: 'Jul', aug: 'Aug', sep: 'Sep', oct: 'Oct', nov: 'Nov', dec: 'Dec',
@@ -751,8 +780,10 @@ export const en = {
     empty: 'No notes yet — start writing on any activity detail page.',
     emptyFiltered: 'No notes match these filters.',
     emptyReset: 'Reset filters',
-    counterSuffix: 'note',
-    counterSuffixPlural: 'notes',
+    counterNoun: {
+      one: 'note',
+      other: 'notes',
+    } as PluralLeaf,
     filtered: 'filtered',
     loadMore: 'Load {count} more',
     loading: 'Loading…',
@@ -771,8 +802,10 @@ export const en = {
   views: {
     title: 'Saved views',
     subtitle: 'Your filtered archive bookmarks.',
-    counter: 'view',
-    counterPlural: 'views',
+    counterNoun: {
+      one: 'view',
+      other: 'views',
+    } as PluralLeaf,
     newView: 'New saved view',
     cancel: 'Cancel',
     save: 'Save',
@@ -827,6 +860,8 @@ export const en = {
     allActivity: 'all activity',
     never: 'Never',
     deleting: 'Deleting…',
+    countCappedTitle: '200 or more activities match this view — exact count not computed.',
+    countCappedAria: 'at least {count}',
     errors: {
       refreshFailed: 'Failed to refresh views',
       noUrl: '"{name}" has no URL stored — open Edit to set one.',
@@ -839,8 +874,10 @@ export const en = {
   partners: {
     title: 'Partners',
     subtitle: 'The exchanges we trust. Signing up through these links keeps the journal free — and gets you fee rebates.',
-    counter: '{count} exchanges with fee rebates',
-    counterOne: '1 exchange with fee rebates',
+    counterPlural: {
+      one: '{count} exchange with fee rebates',
+      other: '{count} exchanges with fee rebates',
+    } as PluralLeaf,
     honestyTitle: 'Why these links?',
     honestyBody: 'The journal is free and open-source. When you sign up via the links below we get a small kickback from the exchange — at no cost to you. That kickback is what pays for hosting and ongoing development. Use any exchange you want; these are the ones we have referral arrangements with.',
     upTo: 'Up to {pct}% fee rebate',
@@ -912,7 +949,7 @@ export const en = {
         eyebrow: 'No connections',
         heading: 'No exchanges connected yet.',
         body: 'Connect your first to auto-import fills. We support Binance, Bybit, and Hyperliquid out of the gate.',
-        disclaimer: 'Read-only keys only · withdraw scope rejected at connect',
+        disclaimer: 'Read-only keys only · withdraw scope rejected on first sync',
         primaryCta: 'Connect your first exchange',
       },
       catalog: 'Choose an exchange',
@@ -958,6 +995,7 @@ export const en = {
           rejected: 'Credentials were rejected. Use a read-only key (no withdraw scope).',
           failed: 'Failed to add connection (status {status}).',
           network: 'Network error. Check the dev server and try again.',
+          walletNotSupported: 'This exchange connects via a wallet address, not an API key. Wallet-based connections are not yet supported in the UI — try again in a later release.',
         },
       },
       row: {
@@ -980,6 +1018,35 @@ export const en = {
           deleteFailed: 'Delete failed (status {status}).',
           network: 'Network error',
         },
+      },
+      table: {
+        columns: {
+          exchange: 'Exchange',
+          label: 'Label',
+          status: 'Status',
+          fills: 'Fills imported',
+          lastSync: 'Last sync',
+          actions: 'Actions',
+        },
+        connectionType: {
+          apiKey: 'api key',
+          wallet: 'wallet',
+          dash: '—',
+        },
+      },
+      statusBadge: {
+        pending: 'Pending',
+        active: 'Active',
+        syncing: 'Syncing',
+        auth_failed: 'Auth failed',
+        rate_limited: 'Rate limited',
+        error: 'Error',
+        disabled: 'Disabled',
+      },
+      relative: {
+        never: 'Never',
+        justNow: 'just now',
+        invalid: '—',
       },
       referralSection: {
         title: 'Recommended exchanges',
@@ -1023,11 +1090,29 @@ export const en = {
       stepCounter: 'Step {step} of {total}',
       back: 'Back',
       continue: 'Continue',
+      pageTitle: 'New activity · Crypto Journal',
+      progressAria: 'Wizard progress',
+      errorBanner: {
+        label: "Couldn't save",
+      },
+      previewBanner: {
+        savedLabel: 'Just saved',
+        savedBody: 'this is your new record. Edit or add notes from here.',
+        updatedLabel: 'Updated',
+        updatedBody: 'your changes are saved.',
+      },
       types: {
         spread: 'Spread',
         trade: 'Trade',
         sale: 'Sale',
         airdrop: 'Airdrop',
+      },
+      spreadTypeLabels: {
+        cash_carry: 'Cash-and-carry',
+        cross_exchange: 'Cross-exchange',
+        funding: 'Funding capture',
+        calendar: 'Calendar',
+        dex_cex: 'DEX-CEX',
       },
     },
     add: {
@@ -1411,9 +1496,15 @@ export const en = {
         subtitleCreate: 'One last pass before this hits your journal. Edit any row to bounce back to the form.',
         subtitleEdit: 'Saving these changes to the same record. Edit any row to bounce back to the form.',
         heroCaption: 'Realized APR · preview',
+        heroUnit: 'APR',
         netPrefix: 'Net',
         onCapital: 'on {capital} capital',
         heldSuffix: '{days} held',
+        duration: {
+          minutes: '{value} min',
+          hours: '{value}h',
+          days: '{value}d',
+        },
         back: 'Back',
         logTrade: 'Log trade',
         saveChanges: 'Save changes',
@@ -1804,6 +1895,7 @@ export const en = {
   airdropDetail: {
     editAria: 'Edit airdrop',
     daysSinceClaim: '{days}d since claim',
+    notClaimedYet: 'not yet claimed',
     markToMarket: 'Mark-to-market',
     mtmAbbrev: 'MTM',
     netPrefix: 'Net',

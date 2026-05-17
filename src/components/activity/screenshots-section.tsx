@@ -133,10 +133,12 @@ export function ScreenshotsSection({ activityId, initialScreenshots }: Props) {
                 aria-label={
                   item.caption
                     ? t("activity.screenshots.openAriaCaptioned", {
-                        side: item.side,
+                        side: t(`activity.screenshots.sides.${item.side}.label`),
                         caption: item.caption,
                       })
-                    : t("activity.screenshots.openAria", { side: item.side })
+                    : t("activity.screenshots.openAria", {
+                        side: t(`activity.screenshots.sides.${item.side}.label`),
+                      })
                 }
               >
                 <ThumbnailImage item={item} />
@@ -177,7 +179,10 @@ function ThumbnailImage({ item }: { item: ScreenshotItem }) {
       <img
         src={`/api/screenshots/${item.id}/file`}
         alt={
-          item.caption ?? t("activity.screenshots.altText", { side: item.side })
+          item.caption ??
+          t("activity.screenshots.altText", {
+            side: t(`activity.screenshots.sides.${item.side}.label`),
+          })
         }
         loading="lazy"
         className="h-full w-full object-cover"
@@ -204,6 +209,7 @@ function SideBadge({
   side: ScreenshotItem["side"];
   className?: string;
 }) {
+  const t = useT();
   return (
     <span
       className={cn(
@@ -213,7 +219,7 @@ function SideBadge({
         className,
       )}
     >
-      {side}
+      {t(`activity.screenshots.sides.${side}.label`)}
     </span>
   );
 }
@@ -627,7 +633,10 @@ function ScreenshotViewer({
           <DialogTitle>
             {item.caption ??
               t("activity.screenshots.viewerDefaultTitle", {
-                side: `${item.side[0].toUpperCase()}${item.side.slice(1)}`,
+                // Use the localized side label rather than the raw English
+                // token. With Russian locale, "Entry/Exit/Context" leaked
+                // into the dialog title.
+                side: t(`activity.screenshots.sides.${item.side}.label`),
               })}
           </DialogTitle>
           <DialogDescription>
@@ -648,7 +657,9 @@ function ScreenshotViewer({
               src={`/api/screenshots/${item.id}/file`}
               alt={
                 item.caption ??
-                t("activity.screenshots.altText", { side: item.side })
+                t("activity.screenshots.altText", {
+                  side: t(`activity.screenshots.sides.${item.side}.label`),
+                })
               }
             />
           ) : (
@@ -657,7 +668,9 @@ function ScreenshotViewer({
               src={`/api/screenshots/${item.id}/file`}
               alt={
                 item.caption ??
-                t("activity.screenshots.altText", { side: item.side })
+                t("activity.screenshots.altText", {
+                  side: t(`activity.screenshots.sides.${item.side}.label`),
+                })
               }
               initialState={item.annotationState}
               onSaved={async (state) => {

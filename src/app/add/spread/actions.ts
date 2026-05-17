@@ -179,9 +179,14 @@ export async function logSpread(formData: FormData): Promise<void> {
   }
 }
 
+// Money / qty fields are kept as strings end-to-end (see CLAUDE.md
+// "Decimals as strings"). Validate the shape via regex; only return null on a
+// missing or syntactically invalid value. Coercing through Number() would
+// drop precision on large numerics (e.g. token qty in scientific range).
+const DECIMAL_RE = /^-?\d+(\.\d+)?$/;
 function parseDecOrNull(s: string | undefined): string | null {
   if (!s) return null;
-  const n = Number(s);
-  if (!Number.isFinite(n)) return null;
-  return n.toString();
+  const trimmed = s.trim();
+  if (!DECIMAL_RE.test(trimmed)) return null;
+  return trimmed;
 }

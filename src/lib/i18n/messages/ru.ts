@@ -304,6 +304,26 @@ export const ru: MessageDict = {
         caption: 'Что в итоге зафиксировал',
       },
     },
+    ohlc: {
+      empty: 'Истории цены по этому символу на этой бирже нет.',
+      error: 'Не удалось подтянуть историю цены — {message}.',
+      aria: 'Свечи {symbol} на {exchange}, интервал {interval}',
+      reasons: {
+        serverHttp: 'сервер ответил HTTP {status}',
+        malformed: 'битый ответ',
+        network: 'сетевая ошибка',
+      },
+      markers: {
+        entry: 'Вход',
+        exit: 'Выход',
+        mfe: 'MFE',
+        mae: 'MAE',
+      },
+      priceLines: {
+        entry: 'вход',
+        exit: 'выход',
+      },
+    },
   },
   dashboard: {
     title: 'Журнал',
@@ -719,6 +739,14 @@ export const ru: MessageDict = {
       noActivity: 'нет активности',
       monthlyAriaCell: '{month} {year}: {amount} по {activities}',
       monthlyAriaEmpty: '{month} {year}: нет активности',
+      // Короткие описания графиков для скринридеров — `role="img"` обёртка
+      // получает эти строки, чтобы доступная вёрстка не зависела от SVG.
+      ariaEquity: 'График кривой эквити (область)',
+      ariaUnderwater: 'График просадки (underwater)',
+      ariaRolling: 'Линейный график скользящего винрейта, окно {window}',
+      ariaHoldTime: 'Гистограмма времени удержания со средним PnL',
+      ariaBarRank: 'Горизонтальная диаграмма с расхождением от нуля',
+      ariaPnlDonut: 'Пончиковая диаграмма распределения',
       months: {
         jan: 'Янв', feb: 'Фев', mar: 'Мар', apr: 'Апр', may: 'Май', jun: 'Июн',
         jul: 'Июл', aug: 'Авг', sep: 'Сен', oct: 'Окт', nov: 'Ноя', dec: 'Дек',
@@ -761,8 +789,12 @@ export const ru: MessageDict = {
     empty: 'Пока нет заметок — начните писать на странице любой активности.',
     emptyFiltered: 'Под этот поиск ничего не нашлось.',
     emptyReset: 'Сбросить фильтры',
-    counterSuffix: 'заметка',
-    counterSuffixPlural: 'заметок',
+    counterNoun: {
+      one: 'заметка',
+      few: 'заметки',
+      many: 'заметок',
+      other: 'заметок',
+    } as PluralLeaf,
     filtered: 'отфильтровано',
     loadMore: 'Загрузить ещё {count}',
     loading: 'Загрузка…',
@@ -781,8 +813,12 @@ export const ru: MessageDict = {
   views: {
     title: 'Сохранённые виды',
     subtitle: 'Твои закладки на отфильтрованный архив.',
-    counter: 'вид',
-    counterPlural: 'видов',
+    counterNoun: {
+      one: 'вид',
+      few: 'вида',
+      many: 'видов',
+      other: 'видов',
+    } as PluralLeaf,
     newView: 'Новый вид',
     cancel: 'Отмена',
     save: 'Сохранить',
@@ -837,6 +873,8 @@ export const ru: MessageDict = {
     allActivity: 'вся активность',
     never: 'никогда',
     deleting: 'Удаляется…',
+    countCappedTitle: 'Под этот вид подходит 200 и более активностей — точное число не считаем.',
+    countCappedAria: 'не меньше {count}',
     errors: {
       refreshFailed: 'Не удалось обновить список видов',
       noUrl: 'У «{name}» нет сохранённого URL — открой «Изменить» и задай его.',
@@ -849,8 +887,12 @@ export const ru: MessageDict = {
   partners: {
     title: 'Партнёры',
     subtitle: 'Биржи, которым мы доверяем. Регистрация по этим ссылкам делает журнал бесплатным — а вам даёт возврат комиссии.',
-    counter: 'бирж с возвратом комиссии: {count}',
-    counterOne: '1 биржа с возвратом комиссии',
+    counterPlural: {
+      one: '{count} биржа с возвратом комиссии',
+      few: '{count} биржи с возвратом комиссии',
+      many: '{count} бирж с возвратом комиссии',
+      other: '{count} бирж с возвратом комиссии',
+    } as PluralLeaf,
     honestyTitle: 'Зачем эти ссылки?',
     honestyBody: 'Журнал — бесплатный и с открытым кодом. Когда вы регистрируетесь по ссылкам ниже, мы получаем небольшую комиссию от биржи — на вас это никак не отражается. Эта комиссия покрывает хостинг и развитие. Вы можете пользоваться любой биржей; здесь — те, с кем у нас есть партнёрское соглашение.',
     upTo: 'Возврат комиссии до {pct}%',
@@ -922,7 +964,7 @@ export const ru: MessageDict = {
         eyebrow: 'Подключений нет',
         heading: 'Пока ни одной биржи.',
         body: 'Подключи первую — сделки начнут импортироваться сами. Из коробки поддерживаем Binance, Bybit и Hyperliquid.',
-        disclaimer: 'Только ключи на чтение · с правом вывода отклоним при подключении',
+        disclaimer: 'Только ключи на чтение · с правом вывода отклоним при первой синхронизации',
         primaryCta: 'Подключить первую биржу',
       },
       catalog: 'Выбери биржу',
@@ -968,6 +1010,7 @@ export const ru: MessageDict = {
           rejected: 'Ключи отклонены. Используй ключ только для чтения (без права вывода).',
           failed: 'Не удалось добавить подключение (статус {status}).',
           network: 'Сетевая ошибка. Проверь dev-сервер и попробуй снова.',
+          walletNotSupported: 'Эта биржа подключается через адрес кошелька, не через API-ключ. Подключения по кошельку пока не реализованы в интерфейсе — жди в следующем релизе.',
         },
       },
       row: {
@@ -990,6 +1033,35 @@ export const ru: MessageDict = {
           deleteFailed: 'Не удалось удалить (статус {status}).',
           network: 'Сетевая ошибка',
         },
+      },
+      table: {
+        columns: {
+          exchange: 'Биржа',
+          label: 'Метка',
+          status: 'Статус',
+          fills: 'Импортировано сделок',
+          lastSync: 'Последняя синхр.',
+          actions: 'Действия',
+        },
+        connectionType: {
+          apiKey: 'API-ключ',
+          wallet: 'кошелёк',
+          dash: '—',
+        },
+      },
+      statusBadge: {
+        pending: 'В ожидании',
+        active: 'Активно',
+        syncing: 'Синхр.',
+        auth_failed: 'Ошибка авториз.',
+        rate_limited: 'Лимит запросов',
+        error: 'Ошибка',
+        disabled: 'Отключено',
+      },
+      relative: {
+        never: 'Никогда',
+        justNow: 'только что',
+        invalid: '—',
       },
       referralSection: {
         title: 'Рекомендуемые биржи',
@@ -1035,11 +1107,29 @@ export const ru: MessageDict = {
       stepCounter: 'Шаг {step} из {total}',
       back: 'Назад',
       continue: 'Дальше',
+      pageTitle: 'Новая активность · Crypto Journal',
+      progressAria: 'Шаги мастера',
+      errorBanner: {
+        label: 'Не записалось',
+      },
+      previewBanner: {
+        savedLabel: 'Записано',
+        savedBody: 'твоя свежая запись. Отсюда можно отредактировать или добавить заметки.',
+        updatedLabel: 'Обновлено',
+        updatedBody: 'изменения сохранены.',
+      },
       types: {
         spread: 'Спред',
         trade: 'Сделка',
         sale: 'Продажа',
         airdrop: 'Эирдроп',
+      },
+      spreadTypeLabels: {
+        cash_carry: 'Cash-and-carry',
+        cross_exchange: 'Меж-биржевой',
+        funding: 'Сбор фандинга',
+        calendar: 'Календарный',
+        dex_cex: 'DEX-CEX',
       },
     },
     add: {
@@ -1431,9 +1521,15 @@ export const ru: MessageDict = {
         subtitleCreate: 'Последний взгляд перед записью в журнал. Кликни по строке — вернёшься к форме.',
         subtitleEdit: 'Изменения уйдут в ту же запись. Кликни по строке — вернёшься к форме.',
         heroCaption: 'Реализованный APR · превью',
+        heroUnit: 'APR',
         netPrefix: 'Чистыми',
         onCapital: 'на капитал {capital}',
         heldSuffix: 'в позиции {days}',
+        duration: {
+          minutes: '{value} мин',
+          hours: '{value} ч',
+          days: '{value} д',
+        },
         back: 'Назад',
         logTrade: 'Записать сделку',
         saveChanges: 'Сохранить изменения',
@@ -1824,6 +1920,7 @@ export const ru: MessageDict = {
   airdropDetail: {
     editAria: 'Изменить эирдроп',
     daysSinceClaim: '{days}д после клейма',
+    notClaimedYet: 'ещё не клеймили',
     markToMarket: 'MTM',
     mtmAbbrev: 'MTM',
     netPrefix: 'Чистыми',

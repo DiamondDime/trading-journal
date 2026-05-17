@@ -64,7 +64,11 @@ export function EquityCurveLarge({
     peakUsd > 0 && currentDrawdownUsd > 0 && currentEquity < peakUsd;
 
   return (
-    <div className="h-[480px] w-full">
+    <div
+      className="h-[480px] w-full"
+      role="img"
+      aria-label={t("analytics.charts.ariaEquity" as MessageKey)}
+    >
       <ResponsiveContainer width="100%" height="100%">
         <AreaChart
           data={points}

@@ -40,10 +40,7 @@ export default async function PartnersPage() {
   const partners = getPartnerCatalog(catalog);
 
   const count = partners.length;
-  const counterCopy =
-    count === 1
-      ? t("partners.counterOne")
-      : t("partners.counter", { count });
+  const counterCopy = t.plural("partners.counterPlural", count);
 
   // Mean of the published rebate fractions across referral-eligible
   // partners with a non-null rebatePct. This is what the calculator uses

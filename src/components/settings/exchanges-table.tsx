@@ -1,6 +1,9 @@
 import { cn } from "@/lib/utils";
 import { ExchangeRowActions } from "@/components/settings/exchange-row-actions";
 import { ExchangeLogo } from "@/components/settings/exchange-logo";
+import { getT, getLocale } from "@/lib/i18n/server";
+import type { TFunction } from "@/lib/i18n/resolve";
+import type { Locale } from "@/lib/i18n/types";
 import type {
   CatalogEntry,
   ExchangeConnectionRow,
@@ -12,16 +15,6 @@ interface Props {
   catalog: CatalogEntry[];
 }
 
-const STATUS_LABEL: Record<ConnectionStatus, string> = {
-  pending: "Pending",
-  active: "Active",
-  syncing: "Syncing",
-  auth_failed: "Auth failed",
-  rate_limited: "Rate limited",
-  error: "Error",
-  disabled: "Disabled",
-};
-
 const STATUS_TONE: Record<ConnectionStatus, string> = {
   pending: "bg-subtle text-text-secondary",
   active: "bg-up-bg text-up",
@@ -32,7 +25,10 @@ const STATUS_TONE: Record<ConnectionStatus, string> = {
   disabled: "bg-subtle text-text-tertiary",
 };
 
-export function ExchangesTable({ connections, catalog }: Props) {
+export async function ExchangesTable({ connections, catalog }: Props) {
+  const t = await getT();
+  const locale = await getLocale();
+  const intlLocale = locale === "ru" ? "ru-RU" : "en-US";
   // Index catalog rows by code so we can render the logo + display name per
   // connection in O(1). If the connection points at a code missing from the
   // catalog (e.g. an exchange that was removed), we degrade to the raw code
@@ -44,12 +40,16 @@ export function ExchangesTable({ connections, catalog }: Props) {
       <table className="w-full text-left">
         <thead>
           <tr className="border-b border-border">
-            <TableHead>Exchange</TableHead>
-            <TableHead>Label</TableHead>
-            <TableHead>Status</TableHead>
-            <TableHead className="text-right">Fills imported</TableHead>
-            <TableHead>Last sync</TableHead>
-            <TableHead className="sr-only">Actions</TableHead>
+            <TableHead>{t("settings.exchanges.table.columns.exchange")}</TableHead>
+            <TableHead>{t("settings.exchanges.table.columns.label")}</TableHead>
+            <TableHead>{t("settings.exchanges.table.columns.status")}</TableHead>
+            <TableHead className="text-right">
+              {t("settings.exchanges.table.columns.fills")}
+            </TableHead>
+            <TableHead>{t("settings.exchanges.table.columns.lastSync")}</TableHead>
+            <TableHead className="sr-only">
+              {t("settings.exchanges.table.columns.actions")}
+            </TableHead>
           </tr>
         </thead>
         <tbody>
@@ -57,7 +57,19 @@ export function ExchangesTable({ connections, catalog }: Props) {
             const meta = byCode.get(row.exchangeCode);
             const name = meta?.displayName ?? row.exchangeCode;
             const logoUrl = meta?.logoUrl ?? null;
+            // fillsSynced is queried as ::bigint, so values past
+            // Number.MAX_SAFE_INTEGER arrive as a string. Number() handles
+            // both; for a journal, fills past 2^53 isn't realistic.
             const fills = Number(row.fillsSynced ?? 0);
+            const dash = t("settings.exchanges.table.connectionType.dash");
+            const hint =
+              row.connectionType === "wallet_address"
+                ? `${t("settings.exchanges.table.connectionType.wallet")} · ${
+                    row.walletChain ?? dash
+                  }`
+                : `${t("settings.exchanges.table.connectionType.apiKey")} · ${
+                    row.apiKeyHint ?? dash
+                  }`;
             return (
               <tr
                 key={row.id}
@@ -71,39 +83,42 @@ export function ExchangesTable({ connections, catalog }: Props) {
                       logoUrl={logoUrl}
                       size="sm"
                     />
-                    <div className="flex flex-col leading-tight">
-                      <span className="font-serif text-[15px] font-medium text-text">
+                    <div className="flex min-w-0 flex-col leading-tight">
+                      <span className="truncate font-serif text-[15px] font-medium text-text">
                         {name}
                       </span>
-                      <span className="font-mono text-[10px] uppercase tracking-[0.16em] text-text-tertiary">
-                        {row.connectionType === "wallet_address"
-                          ? `wallet · ${row.walletChain ?? "—"}`
-                          : `api key · ${row.apiKeyHint ?? "—"}`}
+                      <span className="truncate font-mono text-[10px] uppercase tracking-[0.16em] text-text-tertiary">
+                        {hint}
                       </span>
                     </div>
                   </div>
                 </TableCell>
                 <TableCell>
-                  <span className="font-mono text-[12px] text-text">
+                  {/* break-all so a paste-bombed 40-char label wraps gracefully
+                      instead of forcing the table to overflow its container. */}
+                  <span className="block max-w-[220px] break-all font-mono text-[12px] text-text">
                     {row.label}
                   </span>
                 </TableCell>
                 <TableCell>
-                  <StatusBadge status={row.status} />
+                  <StatusBadge status={row.status} t={t} />
                   {row.statusMessage && row.status !== "active" && (
-                    <p className="mt-1 max-w-[220px] truncate font-mono text-[10px] text-text-tertiary">
+                    <p
+                      className="mt-1 max-w-[220px] truncate font-mono text-[10px] text-text-tertiary"
+                      title={row.statusMessage}
+                    >
                       {row.statusMessage}
                     </p>
                   )}
                 </TableCell>
                 <TableCell className="text-right">
                   <span className="font-mono text-[13px] tabular-nums text-text">
-                    {fills.toLocaleString("en-US")}
+                    {fills.toLocaleString(intlLocale)}
                   </span>
                 </TableCell>
                 <TableCell>
                   <span className="font-mono text-[12px] text-text-secondary">
-                    {formatRelative(row.lastSyncAt)}
+                    {formatRelative(row.lastSyncAt, locale, t)}
                   </span>
                 </TableCell>
                 <TableCell className="text-right">
@@ -153,7 +168,13 @@ function TableCell({
   );
 }
 
-function StatusBadge({ status }: { status: ConnectionStatus }) {
+function StatusBadge({
+  status,
+  t,
+}: {
+  status: ConnectionStatus;
+  t: TFunction;
+}) {
   return (
     <span
       className={cn(
@@ -173,27 +194,38 @@ function StatusBadge({ status }: { status: ConnectionStatus }) {
           status === "disabled" && "bg-text-disabled",
         )}
       />
-      {STATUS_LABEL[status]}
+      {t(`settings.exchanges.statusBadge.${status}` as const)}
     </span>
   );
 }
 
-function formatRelative(iso: string | null): string {
-  if (!iso) return "Never";
+/**
+ * Locale-aware relative time. Uses Intl.RelativeTimeFormat so Russian gets
+ * "5 минут назад" / "2 дня назад", English gets "5 min ago" etc.
+ */
+function formatRelative(
+  iso: string | null,
+  locale: Locale,
+  t: TFunction,
+): string {
+  if (!iso) return t("settings.exchanges.relative.never");
   const then = new Date(iso).getTime();
-  if (Number.isNaN(then)) return "—";
-  const delta = Date.now() - then;
-  if (delta < 0) return "just now";
+  if (Number.isNaN(then)) return t("settings.exchanges.relative.invalid");
+  // Clamp delta to zero so clock-skew (server slightly ahead of client)
+  // doesn't surface as "in 3s ago" — treat as "just now".
+  const delta = Math.max(0, Date.now() - then);
+  const intlLocale = locale === "ru" ? "ru-RU" : "en-US";
   const sec = Math.floor(delta / 1000);
-  if (sec < 60) return `${sec}s ago`;
+  if (sec < 5) return t("settings.exchanges.relative.justNow");
+  const rtf = new Intl.RelativeTimeFormat(intlLocale, { numeric: "auto" });
+  if (sec < 60) return rtf.format(-sec, "second");
   const min = Math.floor(sec / 60);
-  if (min < 60) return `${min} min ago`;
+  if (min < 60) return rtf.format(-min, "minute");
   const hr = Math.floor(min / 60);
-  if (hr < 24) return `${hr} hr ago`;
+  if (hr < 24) return rtf.format(-hr, "hour");
   const days = Math.floor(hr / 24);
-  if (days < 30) return `${days} d ago`;
+  if (days < 30) return rtf.format(-days, "day");
   const months = Math.floor(days / 30);
-  if (months < 12) return `${months} mo ago`;
-  const years = Math.floor(months / 12);
-  return `${years} yr ago`;
+  if (months < 12) return rtf.format(-months, "month");
+  return rtf.format(-Math.floor(months / 12), "year");
 }

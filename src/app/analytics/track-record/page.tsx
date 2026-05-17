@@ -144,15 +144,19 @@ export default async function TrackRecordPage() {
           )
         : 0;
 
-  const equityPoints = buildEquityPoints(closedRows);
+  // Locale-aware short-month axis labels for every time-series chart on the
+  // page. `series.ts` defaults to `en-US`; we always pass the resolved BCP-47
+  // tag so RU users see localized month names on the x-axis.
+  const intlLocale = locale === "ru" ? "ru-RU" : "en-US";
+  const equityPoints = buildEquityPoints(closedRows, intlLocale);
   const peakUsd = equityPoints.reduce((p, pt) => Math.max(p, pt.peak), 0);
   const currentEquity =
     equityPoints.length > 0 ? equityPoints[equityPoints.length - 1].equity : 0;
   const currentDrawdownUsd = Math.max(0, peakUsd - currentEquity);
   const cumulativeNet = currentEquity;
 
-  const underwater = buildUnderwaterPoints(closedRows);
-  const rolling = buildRollingWinRate(closedRows, ROLLING_WIN_WINDOW);
+  const underwater = buildUnderwaterPoints(closedRows, intlLocale);
+  const rolling = buildRollingWinRate(closedRows, ROLLING_WIN_WINDOW, intlLocale);
   const { best: topBest, worst: topWorst } = pickTopBestWorst(
     closedRows,
     TOP_N,

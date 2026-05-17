@@ -13,6 +13,7 @@ import {
 import { IMPORTED_FILLS } from "@/lib/data/exchange-fills-mock";
 import { cn } from "@/lib/utils";
 import { getT } from "@/lib/i18n/server";
+import { ExchangeChip } from "@/components/settings/exchange-logo";
 
 function fmtUsd(n: number, signed = false) {
   const abs = Math.abs(n).toLocaleString("en-US", {
@@ -111,18 +112,25 @@ export default async function TradePickPage() {
                   <TableCell className="p-0">
                     <Link
                       href={href}
-                      className="flex flex-col gap-0.5 px-4 py-3"
+                      className="flex items-center gap-3 px-4 py-3"
                       aria-label={t("wizard.trade.pick.rowAriaLabel", {
                         symbol: f.symbol,
                         side: f.side,
                         exchange: f.exchange,
                       })}
                     >
-                      <span className="font-serif text-[14px] font-medium text-text">
-                        {f.symbol}
-                      </span>
-                      <span className="font-mono text-[10px] uppercase tracking-[0.12em] text-text-tertiary">
-                        {f.exchange} · {f.instrument}
+                      <ExchangeChip
+                        venue={f.exchange}
+                        size="sm"
+                        className="shrink-0"
+                      />
+                      <span className="flex flex-col gap-0.5">
+                        <span className="font-serif text-[14px] font-medium text-text">
+                          {f.symbol}
+                        </span>
+                        <span className="font-mono text-[10px] uppercase tracking-[0.12em] text-text-tertiary">
+                          {f.exchange} · {f.instrument}
+                        </span>
                       </span>
                     </Link>
                   </TableCell>

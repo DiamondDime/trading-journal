@@ -33,6 +33,10 @@ import { OhlcChart } from "@/components/activity/ohlc-chart";
 import { isKlineSupportedExchange } from "@/lib/exchanges/klines";
 import { getT, getLocale } from "@/lib/i18n/server";
 import type { TFunction } from "@/lib/i18n/resolve";
+import {
+  ExchangeChip,
+  ExchangeVenuesChips,
+} from "@/components/settings/exchange-logo";
 
 export const dynamic = "force-dynamic";
 
@@ -178,11 +182,11 @@ export default async function SpreadDetailPage({
   const closedLabel = activity.closedAt
     ? new Date(activity.closedAt).toLocaleDateString(intlLocale, { month: "short", day: "numeric", year: "numeric" })
     : "—";
-  const statusKey: "open" | "closed" | "pending" =
-    activity.status === "open" || activity.status === "closed" || activity.status === "pending"
-      ? activity.status
-      : "closed";
-  const statusLabel = t(`status.${statusKey}`);
+  // Status uses the top-level status.* dict which has all 9 ActivityStatus
+  // values. Previously narrowed to open|closed|pending and collapsed all
+  // other valid spread statuses (winding_down, orphaned, expired, liquidated)
+  // to "closed", masking the real state in the badge.
+  const statusLabel = t(`status.${activity.status}`);
   const venuesLabel = s.exchanges.length > 0 ? s.exchanges.join(" + ") : manualLabel;
   const serial = `#${activity.id.slice(0, 4).toUpperCase()}`;
 
@@ -215,8 +219,11 @@ export default async function SpreadDetailPage({
             <Pencil className="h-3.5 w-3.5" />
           </Link>
         </div>
-        <p className="mt-3 text-base text-text-secondary">
-          {typeLabel} · {s.variant ?? "—"} · {venuesLabel}
+        <p className="mt-3 flex flex-wrap items-center gap-2 text-base text-text-secondary">
+          <span>{typeLabel} · {s.variant ?? "—"} · {venuesLabel}</span>
+          {s.exchanges.length > 0 && (
+            <ExchangeVenuesChips venues={s.exchanges.join(" + ")} size="sm" />
+          )}
         </p>
         <p className="mt-1 font-mono text-sm text-text-tertiary">
           {t("spreadDetail.heldSuffix", { duration: daysLabel })}
@@ -327,7 +334,21 @@ export default async function SpreadDetailPage({
               </TableRow>
             </TableHeader>
             <TableBody>
-              <LegRow label={t("fields.venue")} leg1={legs.leg1.venue} leg2={legs.leg2.venue} />
+              <LegRow
+                label={t("fields.venue")}
+                leg1={
+                  <span className="inline-flex items-center gap-2">
+                    <ExchangeChip venue={legs.leg1.venue} size="sm" />
+                    <span>{legs.leg1.venue}</span>
+                  </span>
+                }
+                leg2={
+                  <span className="inline-flex items-center gap-2">
+                    <ExchangeChip venue={legs.leg2.venue} size="sm" />
+                    <span>{legs.leg2.venue}</span>
+                  </span>
+                }
+              />
               <LegRow label={t("spreadDetail.legs.symbol")} leg1={legs.leg1.symbol} leg2={legs.leg2.symbol} mono />
               <LegRow label={t("spreadDetail.legs.instrument")} leg1={legs.leg1.instrument} leg2={legs.leg2.instrument} />
               <LegRow

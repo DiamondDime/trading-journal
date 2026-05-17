@@ -66,7 +66,11 @@ export function UnderwaterChart({ points = [] }: Props) {
   }
 
   return (
-    <div className="h-[200px] w-full">
+    <div
+      className="h-[200px] w-full"
+      role="img"
+      aria-label={t("analytics.charts.ariaUnderwater" as MessageKey)}
+    >
       <ResponsiveContainer width="100%" height="100%">
         <AreaChart data={points} margin={{ top: 12, right: 24, left: 12, bottom: 4 }}>
           <defs>
