@@ -5,8 +5,8 @@ import { useRouter } from 'next/navigation';
 import { Search as SearchIcon, ArrowRight, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useT } from '@/lib/i18n/client';
-import type { SearchResultItem } from '@/lib/db/search';
-import { searchHrefFor } from '@/lib/db/search';
+import type { SearchResultItem } from '@/lib/search/types';
+import { searchHrefFor } from '@/lib/search/types';
 import type { ActivityType } from '@/types/canonical';
 
 /**

@@ -19,6 +19,7 @@
  * called from both the API route and the dedicated `/search` server page.
  */
 import { sql } from '@/lib/db/client';
+import type { SearchResultItem } from '@/lib/search/types';
 import type {
   ActivityId,
   ActivityType,
@@ -39,32 +40,10 @@ export const SEARCH_MAX_LIMIT = 50;
  * `kind` is a synonym of `type` kept around for client-side disambiguation
  * (e.g. grouping headers). Mirrors what the spec asked for.
  */
-export interface SearchResultItem {
-  id: ActivityId;
-  type: ActivityType;
-  /** Alias of `type` — convenience for clients grouping by activity kind. */
-  kind: ActivityType;
-  /** activity.name */
-  title: string;
-  /** card_subtitle from the view (e.g. "cash_carry", "Binance · perp"). */
-  subtitle: string | null;
-  status: ActivityStatus;
-  /** primary_symbol from the view (BTC, ETH, ticker, …). */
-  primarySymbol: string | null;
-  openedAt: Iso8601 | null;
-  headlineValue: Decimal | null;
-  headlineFormat: HeadlineFormat;
-  /**
-   * Computed headline kind — drives whether the result row shows USD vs %
-   * vs multiplier. Mirrors the discriminant column on v_activity_feed.
-   */
-  headlineKind: HeadlineKind;
-  /**
-   * Where the match came from. Useful for the UI to render a "matched note"
-   * / "matched tag" hint. 1=name/symbol/title, 2=card/strategy, 3=tag, 4=note.
-   */
-  matchRank: 1 | 2 | 3 | 4;
-}
+// Re-export from the client-safe location so existing server-side imports
+// of `@/lib/db/search` keep working after the type was extracted.
+export { searchHrefFor } from '@/lib/search/types';
+export type { SearchResultItem } from '@/lib/search/types';
 
 /**
  * v_activity_feed row shape returned by the postgres.js camel transform plus
@@ -208,21 +187,8 @@ export async function searchActivities(
   }));
 }
 
-/**
- * Resolve the activity-specific detail route for a search hit. Mirrors the
- * mapping in `src/lib/data/db-adapter.ts` so the search UI and the activity
- * cards agree on where to link.
- */
-export function searchHrefFor(type: ActivityType, id: ActivityId): string {
-  switch (type) {
-    case 'spread':         return `/spreads/${id}`;
-    case 'trade':          return `/trades/${id}`;
-    case 'sale':           return `/sales/${id}`;
-    case 'airdrop':        return `/airdrops/${id}`;
-    case 'yield_position': return `/yield-positions/${id}`;
-    case 'option':         return `/options/${id}`;
-  }
-}
+// searchHrefFor + SearchResultItem live in @/lib/search/types (client-safe).
+// They are re-exported at the top of this file for backwards compatibility.
 
 // ─── internals ────────────────────────────────────────────────────────────
 

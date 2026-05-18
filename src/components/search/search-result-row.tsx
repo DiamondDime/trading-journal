@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { ArrowUpRight } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { searchHrefFor, type SearchResultItem } from '@/lib/db/search';
+import { searchHrefFor, type SearchResultItem } from '@/lib/search/types';
 import type { ActivityStatus, HeadlineFormat } from '@/types/canonical';
 
 /**
