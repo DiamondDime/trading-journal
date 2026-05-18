@@ -66,7 +66,9 @@ export function PartnerCard({ exchange, t }: Props) {
           </h3>
           {exchange.referralBlurb && (
             <p className="mt-1.5 truncate font-serif text-[12.5px] italic leading-snug text-text-secondary">
-              {exchange.referralBlurb}
+              {exchange.referralBlurb.startsWith("partners.blurb.")
+                ? t(exchange.referralBlurb as MessageKey)
+                : exchange.referralBlurb}
             </p>
           )}
         </div>
