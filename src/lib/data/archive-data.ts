@@ -58,6 +58,10 @@ export interface BaseActivity {
   headlineLabel: string;
   tone: "up" | "down";
   regimeTags: string[];
+  /** Primary strategy tag (from activity.strategy_tag). null = untagged.
+   *  Optional in the TS shape because fixture rows pre-date the v5 column;
+   *  any DB-derived Activity from `feedRowsToActivities` will always set it. */
+  strategyTag?: string | null;
   note: string;
   href: string;
 }

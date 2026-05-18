@@ -244,6 +244,7 @@ export function feedRowToActivity(
     headlineLabel,
     tone,
     regimeTags: row.regimeTags,
+    strategyTag: row.strategyTag,
     note,
     href: hrefFor(row.id, row.type),
   } as const;

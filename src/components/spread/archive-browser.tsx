@@ -132,6 +132,8 @@ type DecodedState = {
   asset: Set<Asset>;
   status: Set<ActivityStatus>;
   outcome: OutcomeFilter;
+  /** Single strategy tag (matches Activity.strategyTag exactly). Empty = no filter. */
+  strategy: string;
   sort: { key: SortKey; dir: "asc" | "desc" };
   q: string;
 };
@@ -175,6 +177,7 @@ function decodeFromUrl(sp: { get(key: string): string | null }): DecodedState {
     asset: parseSet("asset", ASSET_ORDER),
     status: parseSet("status", STATUS_ORDER),
     outcome,
+    strategy: sp.get("strategy") ?? "",
     sort: { key: sortKey, dir: sortDir },
     q: sp.get("q") ?? "",
   };
@@ -190,6 +193,7 @@ function buildUrlQuery(state: DecodedState): string {
   writeSet("asset", state.asset);
   writeSet("status", state.status);
   if (state.outcome !== "all") params.set("outcome", state.outcome);
+  if (state.strategy) params.set("strategy", state.strategy);
   if (state.sort.key !== "serial" || state.sort.dir !== "desc") {
     params.set("sort", `${state.sort.key}:${state.sort.dir}`);
   }
@@ -265,6 +269,7 @@ export function ArchiveBrowser({ data }: { data: Activity[] }) {
   const [outcome, setOutcome] = React.useState<OutcomeFilter>(
     initialState.outcome
   );
+  const [strategyFilter, setStrategyFilter] = React.useState(initialState.strategy);
   const [search, setSearch] = React.useState(initialState.q);
   const [sort, setSort] = React.useState<{ key: SortKey; dir: "asc" | "desc" }>(
     initialState.sort
@@ -284,6 +289,7 @@ export function ArchiveBrowser({ data }: { data: Activity[] }) {
       asset: assetFilters,
       status: statusFilters,
       outcome,
+      strategy: strategyFilter,
       sort,
       q: search,
     });
@@ -299,6 +305,7 @@ export function ArchiveBrowser({ data }: { data: Activity[] }) {
     assetFilters,
     statusFilters,
     outcome,
+    strategyFilter,
     sort,
     search,
     router,
@@ -310,6 +317,7 @@ export function ArchiveBrowser({ data }: { data: Activity[] }) {
     setAssetFilters(new Set());
     setStatusFilters(new Set());
     setOutcome("all");
+    setStrategyFilter("");
     setSearch("");
   };
 
@@ -337,12 +345,18 @@ export function ArchiveBrowser({ data }: { data: Activity[] }) {
       rows = rows.filter((r) => statusFilters.has(r.status));
     if (outcome === "winners") rows = rows.filter((r) => r.netPnl > 0);
     if (outcome === "losers") rows = rows.filter((r) => r.netPnl < 0);
+    if (strategyFilter) {
+      // Exact match against activity.strategy_tag. Sidebar generates these
+      // links from a count rollup, so any tag we surface there is guaranteed
+      // to exist on at least one activity in the dataset.
+      rows = rows.filter((r) => r.strategyTag === strategyFilter);
+    }
     const q = search.trim().toLowerCase();
     if (q) {
       rows = rows.filter((r) => rowSearchHaystack(r, retroDropLabel).includes(q));
     }
     return rows;
-  }, [data, activityFilters, spreadTypeFilters, spreadSubtypeApplicable, assetFilters, statusFilters, outcome, search, retroDropLabel]);
+  }, [data, activityFilters, spreadTypeFilters, spreadSubtypeApplicable, assetFilters, statusFilters, outcome, strategyFilter, search, retroDropLabel]);
 
   const sorted = React.useMemo(() => {
     const dir = sort.dir === "asc" ? 1 : -1;
@@ -422,6 +436,7 @@ export function ArchiveBrowser({ data }: { data: Activity[] }) {
     assetFilters.size > 0 ||
     statusFilters.size > 0 ||
     outcome !== "all" ||
+    strategyFilter.length > 0 ||
     search.length > 0;
 
   const handleSort = (key: SortKey) => {
@@ -583,6 +598,18 @@ export function ArchiveBrowser({ data }: { data: Activity[] }) {
                   setOutcome(outcome === "losers" ? "all" : "losers")
                 }
               />
+              {strategyFilter && (
+                <button
+                  type="button"
+                  onClick={() => setStrategyFilter("")}
+                  className="inline-flex items-center gap-1.5 rounded-md border border-signature/40 bg-signature/10 px-2 py-1 font-mono text-[10px] uppercase tracking-[0.14em] text-signature hover:bg-signature/15"
+                  aria-label={`Clear strategy filter ${strategyFilter}`}
+                >
+                  <span className="text-text-tertiary">strategy:</span>
+                  <span className="normal-case tracking-normal text-text">{strategyFilter}</span>
+                  <X className="h-3 w-3" />
+                </button>
+              )}
               {filtersActive && (
                 <button
                   onClick={clearAll}
@@ -602,6 +629,7 @@ export function ArchiveBrowser({ data }: { data: Activity[] }) {
                   asset: assetFilters,
                   status: statusFilters,
                   outcome,
+                  strategy: strategyFilter,
                   sort,
                   q: search,
                 })}

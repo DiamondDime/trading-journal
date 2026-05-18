@@ -92,6 +92,8 @@ export interface ActivityFeedRowDb {
   headlineValue: Decimal | null;
   headlineKind: HeadlineKind;
   primarySymbol: string | null;
+  /** Single primary strategy tag from `activity.strategy_tag`. v5+. */
+  strategyTag: string | null;
   createdAt: string;
   updatedAt: string;
 }
