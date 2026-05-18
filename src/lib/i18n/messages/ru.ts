@@ -380,7 +380,7 @@ export const ru: MessageDict = {
   dashboard: {
     title: 'Журнал',
     subtitle: 'Твой торговый журнал на одном экране.',
-    summary: '{count} активностей · {spread} спредов · {trade} сделок · {sale} продаж · {airdrop} эирдропов · с {date}',
+    summary: '{count} активностей · {spread} спредов · {trade} сделок · {sale} продаж · {airdrop} эирдропов · {yieldPosition} доходных · {option} опционов · с {date}',
     kpi: {
       netPnlYtd: 'PnL чист. · YTD',
       activitiesClosed: 'Закрыто активностей',
@@ -483,7 +483,7 @@ export const ru: MessageDict = {
   archive: {
     title: 'Архив',
     subtitle: 'Каждая закрытая активность — с поиском и сортировкой.',
-    summary: '{count} активностей · {spread} спредов · {trade} сделок · {sale} продаж · {airdrop} эирдропов',
+    summary: '{count} активностей · {spread} спредов · {trade} сделок · {sale} продаж · {airdrop} эирдропов · {yieldPosition} доходных · {option} опционов',
     searchPlaceholder: 'Поиск по активу, бирже, заметкам…',
     searchAria: 'Поиск по архиву',
     clearSearch: 'Очистить поиск',

@@ -469,6 +469,8 @@ export function ArchiveBrowser({ data }: { data: Activity[] }) {
               trade: activityCounts.get("trade") ?? 0,
               sale: activityCounts.get("sale") ?? 0,
               airdrop: activityCounts.get("airdrop") ?? 0,
+              yieldPosition: activityCounts.get("yield_position") ?? 0,
+              option: activityCounts.get("option") ?? 0,
             })}
           </p>
         </div>

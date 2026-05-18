@@ -372,7 +372,7 @@ export const en = {
   dashboard: {
     title: 'The book',
     subtitle: 'Your trading journal at a glance.',
-    summary: '{count} activities · {spread} spreads · {trade} trades · {sale} sales · {airdrop} airdrops · since {date}',
+    summary: '{count} activities · {spread} spreads · {trade} trades · {sale} sales · {airdrop} airdrops · {yieldPosition} yields · {option} options · since {date}',
     kpi: {
       netPnlYtd: 'Net P&L · YTD',
       activitiesClosed: 'Activities closed',
@@ -473,7 +473,7 @@ export const en = {
   archive: {
     title: 'The archive',
     subtitle: 'Every closed activity, searchable and sortable.',
-    summary: '{count} activities · {spread} spreads · {trade} trades · {sale} sales · {airdrop} airdrops',
+    summary: '{count} activities · {spread} spreads · {trade} trades · {sale} sales · {airdrop} airdrops · {yieldPosition} yields · {option} options',
     searchPlaceholder: 'Search activity, venue, note…',
     searchAria: 'Search archive activities',
     clearSearch: 'Clear search',

@@ -465,6 +465,8 @@ export default async function SpreadsPage({ searchParams }: SpreadsPageProps) {
               trade: typeCounts.trade,
               sale: typeCounts.sale,
               airdrop: typeCounts.airdrop,
+              yieldPosition: typeCounts.yield_position,
+              option: typeCounts.option,
               date: sinceLabel,
             })}
           </p>
