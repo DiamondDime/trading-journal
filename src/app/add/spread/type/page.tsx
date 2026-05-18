@@ -4,13 +4,11 @@ import { WizardShell } from "@/components/wizard/wizard-shell";
 import { cn } from "@/lib/utils";
 import { getT } from "@/lib/i18n/server";
 
+export const dynamic = "force-dynamic";
+
 type Search = Promise<{ [key: string]: string | string[] | undefined }>;
 
-function getStr(
-  sp: Awaited<Search>,
-  key: string,
-  fallback = ""
-): string {
+function getStr(sp: Awaited<Search>, key: string, fallback = ""): string {
   const v = sp[key];
   if (typeof v === "string") return v;
   if (Array.isArray(v) && v.length > 0 && typeof v[0] === "string") return v[0];
@@ -21,11 +19,12 @@ function getStr(
 // `?legs=a,b`. Normalise both to a comma-joined string for downstream steps.
 function parseLegsCsv(sp: Awaited<Search>): string {
   const v = sp.legs;
-  const raw = typeof v === "string"
-    ? [v]
-    : Array.isArray(v)
-    ? v.filter((x): x is string => typeof x === "string")
-    : [];
+  const raw =
+    typeof v === "string"
+      ? [v]
+      : Array.isArray(v)
+        ? v.filter((x): x is string => typeof x === "string")
+        : [];
   const ids = raw
     .flatMap((s) => s.split(","))
     .map((s) => s.trim())
@@ -52,6 +51,7 @@ export default async function SpreadTypePage(props: { searchParams: Search }) {
   const legs = parseLegsCsv(sp);
   const matcher = getStr(sp, "matcher"); // "auto" | "manual" | ""
   const preSelected = getStr(sp, "spreadType");
+  const editId = getStr(sp, "edit");
 
   const STEP_LABELS = [
     t("wizard.spread.stepLabels.source"),
@@ -114,6 +114,7 @@ export default async function SpreadTypePage(props: { searchParams: Search }) {
         {/* Pass-through state from the picker. */}
         {legs && <input type="hidden" name="legs" value={legs} />}
         {matcher && <input type="hidden" name="matcher" value={matcher} />}
+        {editId && <input type="hidden" name="edit" value={editId} />}
 
         <fieldset className="grid grid-cols-1 gap-3 md:grid-cols-2">
           <legend className="sr-only">{t("wizard.spread.type.legend")}</legend>
@@ -123,7 +124,7 @@ export default async function SpreadTypePage(props: { searchParams: Search }) {
               className={cn(
                 "group flex cursor-pointer flex-col gap-2 rounded-md border border-border bg-surface p-5 transition-all",
                 "hover:border-border-strong hover:bg-subtle",
-                "has-[input:checked]:border-text has-[input:checked]:bg-subtle"
+                "has-[input:checked]:border-text has-[input:checked]:bg-subtle",
               )}
             >
               <input

@@ -7,35 +7,48 @@ import {
   WizardSelect,
   WizardTextarea,
 } from "@/components/wizard/wizard-field";
+import { WizardValidationSummary } from "@/components/wizard/wizard-validation-summary";
 import { cn } from "@/lib/utils";
 import { requireUser } from "@/lib/auth/server";
-import { getActivity } from "@/lib/db/activity";
 import { getT } from "@/lib/i18n/server";
+import { getTradeForEdit, mapExchangeCodeToLabel } from "../db";
 
-const EXCHANGES = ["Binance", "Bybit", "Hyperliquid", "Coinbase", "OKX", "Other"] as const;
+export const dynamic = "force-dynamic";
+
+// Exchange labels the picker / mapping layer accepts. Coinbase removed — the
+// catalog has no Coinbase entry and the old silent-map-to-kraken behaviour
+// fabricated trade venue data. Add new entries here in lockstep with
+// EXCHANGE_LABEL_TO_CODE in ../db.ts.
+const EXCHANGES = [
+  "Binance",
+  "Bybit",
+  "Hyperliquid",
+  "OKX",
+  "Deribit",
+  "Phemex",
+  "Bitget",
+  "MEXC",
+  "KuCoin",
+  "Kraken",
+  "Gate",
+  "BingX",
+] as const;
 const INSTRUMENTS = ["perp", "spot", "future"] as const;
 const SIDES = ["long", "short"] as const;
+const STATUSES = ["open", "closed", "liquidated"] as const;
+const KINDS = ["spot", "perp", "dated_future", "option", "otc", "nft"] as const;
 
-// Reading searchParams. The pick step encodes pre-fills into the URL; manual
-// entry arrives with an empty bag. We always render the same form.
 type Search = Promise<{ [key: string]: string | string[] | undefined }>;
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-function getStr(
-  sp: Awaited<Search>,
-  key: string,
-  fallback = ""
-): string {
+function getStr(sp: Awaited<Search>, key: string, fallback = ""): string {
   const v = sp[key];
   if (typeof v === "string") return v;
   return fallback;
 }
 
-/**
- * datetime-local <input> wants `YYYY-MM-DDTHH:mm` in local time.
- * Postgres gives us a UTC ISO string. Convert.
- */
+/** datetime-local <input> wants `YYYY-MM-DDTHH:mm` in local time. */
 function isoToDateTimeLocal(iso: string | null): string {
   if (!iso) return "";
   const d = new Date(iso);
@@ -45,30 +58,26 @@ function isoToDateTimeLocal(iso: string | null): string {
 }
 
 /**
- * Trade details step. Uses a native GET form whose action is the review
- * page — submitting the form just appends every named input value to the
- * URL. Server-component-friendly, no client JS needed for happy path.
+ * Step 4 of the trade wizard. Captures every column the v5 schema exposes:
+ *   - status toggle  (open / closed / liquidated)
+ *   - perp-only      (leverage, margin_mode, funding_paid/received, borrow_cost)
+ *   - otc-only       (counterparty, settlement, escrow, premium/discount bps)
+ *   - nft-only       (collection, token id, marketplace, royalty %)
+ *   - common         (target_price, stop_price, exit_plan, entry_thesis, exit_note)
+ *   - cost           (fees_entry / fees_exit — sum into fees_usd server-side)
+ *   - rollups        (strategy_tag, tax_taxable, tax_jurisdiction)
  *
- * Edit mode: when `?edit=<uuid>` is present, the page fetches the existing
- * trade and pre-fills the form with its values. The wizard's other URL
- * params still take precedence — that's intentional so users can step
- * back from review and see their in-progress edits, not the stale DB row.
- * The `edit` flag rides through hidden inputs to the server action which
- * dispatches to the update path instead of create.
+ * The form is a native GET that targets /review. Conditional fieldsets are
+ * rendered server-side based on `kind` so we stay client-JS-free.
  */
-export default async function TradeFieldsPage(props: {
-  searchParams: Search;
-}) {
+export default async function TradeFieldsPage(props: { searchParams: Search }) {
   const t = await getT();
   const sp = await props.searchParams;
   const editId = getStr(sp, "edit");
 
-  // Stepper label set: the label at index 2 ("Details") is shown regardless of
-  // path. When the user took the Manual branch, this page is step 3 of 4 but
-  // effectively skips step 2 ("Pick"); the labelling is slightly off in that
-  // case but the step counter still reads "Step 3 of 4" — acceptable for v1.
   const STEP_LABELS = [
     t("wizard.trade.stepLabels.source"),
+    t("wizard.trade.stepLabels.kind"),
     t("wizard.trade.stepLabels.pick"),
     t("wizard.trade.stepLabels.details"),
     t("wizard.trade.stepLabels.review"),
@@ -85,11 +94,13 @@ export default async function TradeFieldsPage(props: {
     long: t("wizard.trade.fields.side.long"),
     short: t("wizard.trade.fields.side.short"),
   };
+  const statusLabels: Record<(typeof STATUSES)[number], string> = {
+    open: t("wizard.trade.fields.status.open"),
+    closed: t("wizard.trade.fields.status.closed"),
+    liquidated: t("wizard.trade.fields.status.liquidated"),
+  };
 
-  // If edit mode, fetch the existing trade to seed defaults. Treat
-  // ownership-failure / non-trade type as a silent fallback to create mode —
-  // the wizard then renders an empty form. Keeps the URL hackable but
-  // harmless.
+  // Seed from edit-mode DB row when present.
   let dbDefaults: Partial<{
     exchange: string;
     symbol: string;
@@ -100,80 +111,169 @@ export default async function TradeFieldsPage(props: {
     entryPrice: string;
     exitPrice: string;
     fees: string;
+    feesEntry: string;
+    feesExit: string;
     openedAt: string;
     closedAt: string;
     note: string;
+    entryThesis: string;
+    exitPlan: string;
+    exitNote: string;
     regimeTags: string;
     serial: string;
+    kind: string;
+    leverage: string;
+    marginMode: string;
+    fundingPaidUsd: string;
+    fundingReceivedUsd: string;
+    borrowCostUsd: string;
+    targetPrice: string;
+    stopPrice: string;
+    strategyTag: string;
+    taxTaxable: string;
+    taxJurisdiction: string;
+    status: string;
   }> = {};
   let editValid = false;
 
   if (editId && UUID_RE.test(editId)) {
     const { id: userId } = await requireUser();
-    const activity = await getActivity(userId, editId);
-    if (activity && activity.subtype.type === "trade") {
-      const tr = activity.subtype.row;
-      // exchange in the DB is the catalog code (lowercase); the wizard's
-      // <option> values are title-cased. Map back.
-      const exchangeLabel = mapExchangeCodeToLabel(tr.exchange);
-      const instrumentLabel = tr.instrumentKind === "dated_future" ? "future" : tr.instrumentKind;
+    const row = await getTradeForEdit(userId, editId);
+    if (row) {
+      const exchangeLabel = mapExchangeCodeToLabel(row.exchange);
+      const instrumentLabel =
+        row.instrumentKind === "dated_future" ? "future" : row.instrumentKind;
       dbDefaults = {
         exchange: exchangeLabel,
-        symbol: tr.symbol,
+        symbol: row.symbol,
         instrument: instrumentLabel,
-        side: tr.side,
-        capital: activity.capitalDeployedUsd ?? "",
-        qty: tr.qty,
-        entryPrice: tr.avgEntryPrice,
-        exitPrice: tr.avgExitPrice ?? "",
-        fees: activity.feesUsd,
-        openedAt: isoToDateTimeLocal(activity.openedAt),
-        closedAt: isoToDateTimeLocal(activity.closedAt),
-        note: tr.entryThesis ?? "",
-        regimeTags: activity.regimeTags.join(", "),
-        serial: activity.id.slice(0, 4).toUpperCase(),
+        side: row.side,
+        capital: row.capitalDeployedUsd ?? "",
+        qty: row.qty,
+        entryPrice: row.avgEntryPrice,
+        exitPrice: row.avgExitPrice ?? "",
+        fees: row.feesUsd,
+        feesEntry: row.feesEntryUsd ?? "",
+        feesExit: row.feesExitUsd ?? "",
+        openedAt: isoToDateTimeLocal(row.openedAt),
+        closedAt: isoToDateTimeLocal(row.closedAt),
+        note: row.entryThesis ?? "",
+        entryThesis: row.entryThesis ?? "",
+        exitPlan: row.exitPlan ?? "",
+        exitNote: "",
+        regimeTags: row.regimeTags.join(", "),
+        serial: editId.slice(0, 4).toUpperCase(),
+        kind: row.kind,
+        leverage: row.leverage ?? "",
+        marginMode: row.marginMode ?? "",
+        fundingPaidUsd: row.fundingPaidUsd ?? "",
+        fundingReceivedUsd: row.fundingReceivedUsd ?? "",
+        borrowCostUsd: row.borrowCostUsd ?? "",
+        targetPrice: row.targetPrice ?? "",
+        stopPrice: row.stopPrice ?? "",
+        strategyTag: row.strategyTag ?? "",
+        taxTaxable: row.taxTaxable ? "on" : "",
+        taxJurisdiction: row.taxJurisdiction ?? "",
+        status: row.status,
       };
       editValid = true;
     }
   }
 
+  const kindRaw = getStr(sp, "kind") || dbDefaults.kind || "spot";
+  const kind = (KINDS as readonly string[]).includes(kindRaw) ? kindRaw : "spot";
+  const status =
+    (STATUSES as readonly string[]).includes(getStr(sp, "status"))
+      ? getStr(sp, "status")
+      : dbDefaults.status || "closed";
+
   // URL > DB > empty. URL overrides DB so back-from-review keeps user edits.
   const defaults = {
     exchange: getStr(sp, "exchange") || dbDefaults.exchange || "Binance",
     symbol: getStr(sp, "symbol") || dbDefaults.symbol || "",
-    instrument: getStr(sp, "instrument") || dbDefaults.instrument || "perp",
+    instrument: getStr(sp, "instrument") || dbDefaults.instrument || inferInstrumentFromKind(kind),
     side: getStr(sp, "side") || dbDefaults.side || "long",
     capital: getStr(sp, "capital") || dbDefaults.capital || "",
     entryPrice: getStr(sp, "entryPrice") || dbDefaults.entryPrice || "",
     exitPrice: getStr(sp, "exitPrice") || dbDefaults.exitPrice || "",
     qty: getStr(sp, "qty") || dbDefaults.qty || "",
     fees: getStr(sp, "fees") || dbDefaults.fees || "",
+    feesEntry: getStr(sp, "feesEntry") || dbDefaults.feesEntry || "",
+    feesExit: getStr(sp, "feesExit") || dbDefaults.feesExit || "",
     openedAt: getStr(sp, "openedAt") || dbDefaults.openedAt || "",
     closedAt: getStr(sp, "closedAt") || dbDefaults.closedAt || "",
-    note: getStr(sp, "note") || dbDefaults.note || "",
+    entryThesis: getStr(sp, "entryThesis") || dbDefaults.entryThesis || getStr(sp, "note") || dbDefaults.note || "",
+    exitPlan: getStr(sp, "exitPlan") || dbDefaults.exitPlan || "",
+    exitNote: getStr(sp, "exitNote") || dbDefaults.exitNote || "",
     regimeTags: getStr(sp, "regimeTags") || dbDefaults.regimeTags || "",
     source: getStr(sp, "source"),
+    positionId: getStr(sp, "positionId"),
+    // Per-kind columns
+    leverage: getStr(sp, "leverage") || dbDefaults.leverage || "",
+    marginMode: getStr(sp, "marginMode") || dbDefaults.marginMode || "",
+    fundingPaidUsd: getStr(sp, "fundingPaidUsd") || dbDefaults.fundingPaidUsd || "",
+    fundingReceivedUsd: getStr(sp, "fundingReceivedUsd") || dbDefaults.fundingReceivedUsd || "",
+    borrowCostUsd: getStr(sp, "borrowCostUsd") || dbDefaults.borrowCostUsd || "",
+    targetPrice: getStr(sp, "targetPrice") || dbDefaults.targetPrice || "",
+    stopPrice: getStr(sp, "stopPrice") || dbDefaults.stopPrice || "",
+    // OTC
+    counterparty: getStr(sp, "counterparty"),
+    settlementDate: getStr(sp, "settlementDate"),
+    escrowMethod: getStr(sp, "escrowMethod"),
+    premiumOrDiscountBps: getStr(sp, "premiumOrDiscountBps"),
+    // NFT
+    collection: getStr(sp, "collection"),
+    tokenId: getStr(sp, "tokenId"),
+    marketplace: getStr(sp, "marketplace"),
+    royaltyPct: getStr(sp, "royaltyPct"),
+    // Rollups
+    strategyTag: getStr(sp, "strategyTag") || dbDefaults.strategyTag || "",
+    taxTaxable:
+      getStr(sp, "taxTaxable") || dbDefaults.taxTaxable
+        ? getStr(sp, "taxTaxable") || dbDefaults.taxTaxable!
+        : "",
+    taxJurisdiction: getStr(sp, "taxJurisdiction") || dbDefaults.taxJurisdiction || "",
   };
 
-  // Back goes to the right place depending on how the user arrived. Edits
-  // can't go back any further than the detail page they came from.
+  const taxTaxableChecked = defaults.taxTaxable === "on" || defaults.taxTaxable === "true";
+
   const backHref = editValid
     ? `/trades/${editId}`
-    : defaults.source
-      ? "/add/trade/pick"
-      : "/add/trade/source";
+    : defaults.source === "manual"
+      ? `/add/trade/kind?source=manual&kind=${encodeURIComponent(kind)}`
+      : kind === "otc" || kind === "nft" || kind === "option"
+        ? `/add/trade/kind?source=${defaults.source || "auto"}&kind=${encodeURIComponent(kind)}`
+        : `/add/trade/pick?source=auto&kind=${encodeURIComponent(kind)}`;
+
+  // Inline validation surface — populated when the action redirects back with
+  // `?error=...`. Shown above the form so the user sees it before scrolling.
+  const validationErrors = getStr(sp, "error")
+    ? [{ message: getStr(sp, "error") }]
+    : [];
+
+  // "Convert to spread leg" exit ramp. Posts the current draft (just the
+  // fields a spread-leg cares about) to the spread wizard's fields step. The
+  // spread wizard reads these prefilled legs and inserts them into its leg
+  // list. Plain GET keeps it free of client JS.
+  const convertParams = new URLSearchParams();
+  if (defaults.exchange) convertParams.set("legExchange", defaults.exchange);
+  if (defaults.symbol) convertParams.set("legSymbol", defaults.symbol);
+  if (defaults.side) convertParams.set("legSide", defaults.side);
+  if (defaults.qty) convertParams.set("legQty", defaults.qty);
+  if (defaults.entryPrice) convertParams.set("legEntryPrice", defaults.entryPrice);
+  if (defaults.instrument) convertParams.set("legInstrument", defaults.instrument);
 
   return (
     <WizardShell
       type="trade"
-      step={3}
-      totalSteps={4}
+      step={4}
+      totalSteps={5}
       stepLabels={STEP_LABELS}
       title={editValid ? t("wizard.trade.fields.titleEdit") : t("wizard.trade.fields.titleCreate")}
       subtitle={
         editValid
           ? t("wizard.trade.fields.subtitleEdit")
-          : defaults.source
+          : defaults.positionId
             ? t("wizard.trade.fields.subtitleFromFill")
             : t("wizard.trade.fields.subtitleManual")
       }
@@ -192,30 +292,50 @@ export default async function TradeFieldsPage(props: {
           </span>
         </aside>
       )}
+
+      {validationErrors.length > 0 && (
+        <WizardValidationSummary
+          errors={validationErrors}
+          className="mb-6"
+          title={t("wizard.trade.fields.validationTitle")}
+        />
+      )}
+
       <form
         id="trade-fields-form"
         action="/add/trade/review"
         method="get"
         className="flex flex-col gap-7"
       >
-        {/* Pass-through fields. `edit` propagates so the server action
-            knows to update instead of insert. `source` keeps the fill
-            attribution when arriving from the picker. */}
+        {/* Hidden pass-through fields */}
         {editValid && <input type="hidden" name="edit" value={editId} />}
+        {defaults.positionId && (
+          <input type="hidden" name="positionId" value={defaults.positionId} />
+        )}
         {defaults.source && (
           <input type="hidden" name="source" value={defaults.source} />
         )}
+        <input type="hidden" name="kind" value={kind} />
+
+        {/* ── Status ─────────────────────────────────────────────────── */}
+        <SectionLabel>{t("wizard.trade.fields.sections.status")}</SectionLabel>
+        <RadioRow
+          legend={t("wizard.trade.fields.labels.status")}
+          name="status"
+          requiredCue={requiredCue}
+          options={STATUSES.map((s) => ({
+            value: s,
+            label: statusLabels[s],
+            tone: s === "closed" ? "neutral" : s === "open" ? "up" : "down",
+          }))}
+          defaultValue={status}
+        />
 
         {/* ── Venue + symbol ─────────────────────────────────────────── */}
         <SectionLabel>{t("wizard.trade.fields.sections.venue")}</SectionLabel>
         <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
           <WizardField label={t("wizard.trade.fields.labels.exchange")} htmlFor="exchange" required>
-            <WizardSelect
-              id="exchange"
-              name="exchange"
-              defaultValue={defaults.exchange}
-              required
-            >
+            <WizardSelect id="exchange" name="exchange" defaultValue={defaults.exchange} required>
               {EXCHANGES.map((e) => (
                 <option key={e} value={e}>
                   {e}
@@ -247,10 +367,7 @@ export default async function TradeFieldsPage(props: {
             legend={t("wizard.trade.fields.labels.instrument")}
             name="instrument"
             requiredCue={requiredCue}
-            options={INSTRUMENTS.map((i) => ({
-              value: i,
-              label: instrumentLabels[i],
-            }))}
+            options={INSTRUMENTS.map((i) => ({ value: i, label: instrumentLabels[i] }))}
             defaultValue={defaults.instrument}
           />
           <RadioRow
@@ -326,8 +443,12 @@ export default async function TradeFieldsPage(props: {
           <WizardField
             label={t("wizard.trade.fields.labels.exitPrice")}
             htmlFor="exitPrice"
-            helper={t("wizard.trade.fields.helpers.usd")}
-            required
+            helper={
+              status === "open"
+                ? t("wizard.trade.fields.helpers.exitPriceOpen")
+                : t("wizard.trade.fields.helpers.usd")
+            }
+            required={status !== "open"}
           >
             <WizardInput
               id="exitPrice"
@@ -338,25 +459,52 @@ export default async function TradeFieldsPage(props: {
               inputMode="decimal"
               defaultValue={defaults.exitPrice}
               placeholder="66380.00"
-              required
+              required={status !== "open"}
             />
           </WizardField>
+
+          {/* Fees decomposition. Two boxes keeps the cost-attribution clean
+              for the review's stacked-bar render. Either-or vs the old total
+              is fine — when both are 0 the server falls back to `fees`. */}
           <WizardField
-            label={t("wizard.trade.fields.labels.fees")}
-            htmlFor="fees"
-            helper={t("wizard.trade.fields.helpers.fees")}
+            label={t("wizard.trade.fields.labels.feesEntry")}
+            htmlFor="feesEntry"
+            helper={t("wizard.trade.fields.helpers.feesEntry")}
           >
             <WizardInput
-              id="fees"
-              name="fees"
+              id="feesEntry"
+              name="feesEntry"
               type="number"
               step="0.01"
               min="0"
               inputMode="decimal"
-              defaultValue={defaults.fees}
-              placeholder="12.50"
+              defaultValue={defaults.feesEntry}
+              placeholder="6.25"
             />
           </WizardField>
+          <WizardField
+            label={t("wizard.trade.fields.labels.feesExit")}
+            htmlFor="feesExit"
+            helper={t("wizard.trade.fields.helpers.feesExit")}
+          >
+            <WizardInput
+              id="feesExit"
+              name="feesExit"
+              type="number"
+              step="0.01"
+              min="0"
+              inputMode="decimal"
+              defaultValue={defaults.feesExit}
+              placeholder="6.25"
+            />
+          </WizardField>
+          {/* Legacy single "fees" passthrough — only rendered (and used) when
+              the form was prefilled with it (auto path from picker). Lets the
+              server merge it into fees_entry without forcing users to split
+              an already-imported total. */}
+          {defaults.fees && !defaults.feesEntry && !defaults.feesExit && (
+            <input type="hidden" name="fees" value={defaults.fees} />
+          )}
         </div>
 
         {/* ── Timing ─────────────────────────────────────────────────── */}
@@ -371,30 +519,305 @@ export default async function TradeFieldsPage(props: {
               required
             />
           </WizardField>
-          <WizardField label={t("wizard.trade.fields.labels.closedAt")} htmlFor="closedAt" required>
+          <WizardField
+            label={t("wizard.trade.fields.labels.closedAt")}
+            htmlFor="closedAt"
+            helper={status === "open" ? t("wizard.trade.fields.helpers.closedAtOpen") : undefined}
+            required={status !== "open"}
+          >
             <WizardInput
               id="closedAt"
               name="closedAt"
               type="datetime-local"
               defaultValue={defaults.closedAt}
-              required
+              required={status !== "open"}
             />
           </WizardField>
         </div>
 
-        {/* ── Note + tags ────────────────────────────────────────────── */}
-        <SectionLabel>{t("wizard.trade.fields.sections.thesisTags")}</SectionLabel>
+        {/* ── Open-intent ────────────────────────────────────────────── */}
+        <SectionLabel>{t("wizard.trade.fields.sections.intent")}</SectionLabel>
+        <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
+          <WizardField
+            label={t("wizard.trade.fields.labels.targetPrice")}
+            htmlFor="targetPrice"
+            helper={t("wizard.trade.fields.helpers.targetPrice")}
+          >
+            <WizardInput
+              id="targetPrice"
+              name="targetPrice"
+              type="number"
+              step="any"
+              min="0"
+              inputMode="decimal"
+              defaultValue={defaults.targetPrice}
+              placeholder="72000.00"
+            />
+          </WizardField>
+          <WizardField
+            label={t("wizard.trade.fields.labels.stopPrice")}
+            htmlFor="stopPrice"
+            helper={t("wizard.trade.fields.helpers.stopPrice")}
+          >
+            <WizardInput
+              id="stopPrice"
+              name="stopPrice"
+              type="number"
+              step="any"
+              min="0"
+              inputMode="decimal"
+              defaultValue={defaults.stopPrice}
+              placeholder="61500.00"
+            />
+          </WizardField>
+        </div>
         <WizardField
-          label={t("wizard.trade.fields.labels.note")}
-          htmlFor="note"
-          helper={t("wizard.trade.fields.helpers.note")}
+          label={t("wizard.trade.fields.labels.exitPlan")}
+          htmlFor="exitPlan"
+          helper={t("wizard.trade.fields.helpers.exitPlan")}
         >
           <WizardTextarea
-            id="note"
-            name="note"
+            id="exitPlan"
+            name="exitPlan"
+            rows={3}
+            defaultValue={defaults.exitPlan}
+            placeholder={t("wizard.trade.fields.placeholders.exitPlan")}
+          />
+        </WizardField>
+
+        {/* ── Perp-only ──────────────────────────────────────────────── */}
+        {kind === "perp" && (
+          <>
+            <SectionLabel>{t("wizard.trade.fields.sections.perp")}</SectionLabel>
+            <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
+              <WizardField
+                label={t("wizard.trade.fields.labels.leverage")}
+                htmlFor="leverage"
+                helper={t("wizard.trade.fields.helpers.leverage")}
+              >
+                <WizardInput
+                  id="leverage"
+                  name="leverage"
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  inputMode="decimal"
+                  defaultValue={defaults.leverage}
+                  placeholder="3.00"
+                />
+              </WizardField>
+              <RadioRow
+                legend={t("wizard.trade.fields.labels.marginMode")}
+                name="marginMode"
+                options={[
+                  { value: "cross", label: t("wizard.trade.fields.marginMode.cross") },
+                  { value: "isolated", label: t("wizard.trade.fields.marginMode.isolated") },
+                ]}
+                defaultValue={defaults.marginMode}
+              />
+              <WizardField
+                label={t("wizard.trade.fields.labels.fundingPaid")}
+                htmlFor="fundingPaidUsd"
+                helper={t("wizard.trade.fields.helpers.usd")}
+              >
+                <WizardInput
+                  id="fundingPaidUsd"
+                  name="fundingPaidUsd"
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  inputMode="decimal"
+                  defaultValue={defaults.fundingPaidUsd}
+                  placeholder="12.40"
+                />
+              </WizardField>
+              <WizardField
+                label={t("wizard.trade.fields.labels.fundingReceived")}
+                htmlFor="fundingReceivedUsd"
+                helper={t("wizard.trade.fields.helpers.usd")}
+              >
+                <WizardInput
+                  id="fundingReceivedUsd"
+                  name="fundingReceivedUsd"
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  inputMode="decimal"
+                  defaultValue={defaults.fundingReceivedUsd}
+                  placeholder="0.00"
+                />
+              </WizardField>
+              <WizardField
+                label={t("wizard.trade.fields.labels.borrowCost")}
+                htmlFor="borrowCostUsd"
+                helper={t("wizard.trade.fields.helpers.usd")}
+              >
+                <WizardInput
+                  id="borrowCostUsd"
+                  name="borrowCostUsd"
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  inputMode="decimal"
+                  defaultValue={defaults.borrowCostUsd}
+                  placeholder="0.00"
+                />
+              </WizardField>
+            </div>
+          </>
+        )}
+
+        {/* ── OTC-only ───────────────────────────────────────────────── */}
+        {kind === "otc" && (
+          <>
+            <SectionLabel>{t("wizard.trade.fields.sections.otc")}</SectionLabel>
+            <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
+              <WizardField
+                label={t("wizard.trade.fields.labels.counterparty")}
+                htmlFor="counterparty"
+                helper={t("wizard.trade.fields.helpers.counterparty")}
+              >
+                <WizardInput
+                  id="counterparty"
+                  name="counterparty"
+                  defaultValue={defaults.counterparty}
+                  placeholder="Cumberland"
+                  autoComplete="off"
+                />
+              </WizardField>
+              <WizardField
+                label={t("wizard.trade.fields.labels.settlementDate")}
+                htmlFor="settlementDate"
+              >
+                <WizardInput
+                  id="settlementDate"
+                  name="settlementDate"
+                  type="date"
+                  defaultValue={defaults.settlementDate}
+                />
+              </WizardField>
+              <WizardField
+                label={t("wizard.trade.fields.labels.escrowMethod")}
+                htmlFor="escrowMethod"
+              >
+                <WizardSelect
+                  id="escrowMethod"
+                  name="escrowMethod"
+                  defaultValue={defaults.escrowMethod}
+                >
+                  <option value="">—</option>
+                  <option value="direct">{t("wizard.trade.fields.escrow.direct")}</option>
+                  <option value="custodian">{t("wizard.trade.fields.escrow.custodian")}</option>
+                  <option value="multisig">{t("wizard.trade.fields.escrow.multisig")}</option>
+                  <option value="other">{t("wizard.trade.fields.escrow.other")}</option>
+                </WizardSelect>
+              </WizardField>
+              <WizardField
+                label={t("wizard.trade.fields.labels.premiumOrDiscountBps")}
+                htmlFor="premiumOrDiscountBps"
+                helper={t("wizard.trade.fields.helpers.premiumOrDiscountBps")}
+              >
+                <WizardInput
+                  id="premiumOrDiscountBps"
+                  name="premiumOrDiscountBps"
+                  type="number"
+                  step="0.1"
+                  inputMode="decimal"
+                  defaultValue={defaults.premiumOrDiscountBps}
+                  placeholder="-25"
+                />
+              </WizardField>
+            </div>
+          </>
+        )}
+
+        {/* ── NFT-only ───────────────────────────────────────────────── */}
+        {kind === "nft" && (
+          <>
+            <SectionLabel>{t("wizard.trade.fields.sections.nft")}</SectionLabel>
+            <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
+              <WizardField
+                label={t("wizard.trade.fields.labels.collection")}
+                htmlFor="collection"
+                helper={t("wizard.trade.fields.helpers.collection")}
+              >
+                <WizardInput
+                  id="collection"
+                  name="collection"
+                  defaultValue={defaults.collection}
+                  placeholder="Pudgy Penguins"
+                  autoComplete="off"
+                />
+              </WizardField>
+              <WizardField label={t("wizard.trade.fields.labels.tokenId")} htmlFor="tokenId">
+                <WizardInput
+                  id="tokenId"
+                  name="tokenId"
+                  defaultValue={defaults.tokenId}
+                  placeholder="3947"
+                  autoComplete="off"
+                />
+              </WizardField>
+              <WizardField label={t("wizard.trade.fields.labels.marketplace")} htmlFor="marketplace">
+                <WizardSelect
+                  id="marketplace"
+                  name="marketplace"
+                  defaultValue={defaults.marketplace}
+                >
+                  <option value="">—</option>
+                  <option value="opensea">OpenSea</option>
+                  <option value="blur">Blur</option>
+                  <option value="magic_eden">Magic Eden</option>
+                  <option value="tensor">Tensor</option>
+                  <option value="other">{t("wizard.trade.fields.escrow.other")}</option>
+                </WizardSelect>
+              </WizardField>
+              <WizardField
+                label={t("wizard.trade.fields.labels.royaltyPct")}
+                htmlFor="royaltyPct"
+                helper={t("wizard.trade.fields.helpers.royaltyPct")}
+              >
+                <WizardInput
+                  id="royaltyPct"
+                  name="royaltyPct"
+                  type="number"
+                  step="0.1"
+                  min="0"
+                  inputMode="decimal"
+                  defaultValue={defaults.royaltyPct}
+                  placeholder="5.0"
+                />
+              </WizardField>
+            </div>
+          </>
+        )}
+
+        {/* ── Thesis / exit note / tags ──────────────────────────────── */}
+        <SectionLabel>{t("wizard.trade.fields.sections.thesisTags")}</SectionLabel>
+        <WizardField
+          label={t("wizard.trade.fields.labels.entryThesis")}
+          htmlFor="entryThesis"
+          helper={t("wizard.trade.fields.helpers.entryThesis")}
+        >
+          <WizardTextarea
+            id="entryThesis"
+            name="entryThesis"
             rows={4}
-            defaultValue={defaults.note}
-            placeholder={t("wizard.trade.fields.placeholders.note")}
+            defaultValue={defaults.entryThesis}
+            placeholder={t("wizard.trade.fields.placeholders.entryThesis")}
+          />
+        </WizardField>
+        <WizardField
+          label={t("wizard.trade.fields.labels.exitNote")}
+          htmlFor="exitNote"
+          helper={t("wizard.trade.fields.helpers.exitNote")}
+        >
+          <WizardTextarea
+            id="exitNote"
+            name="exitNote"
+            rows={3}
+            defaultValue={defaults.exitNote}
+            placeholder={t("wizard.trade.fields.placeholders.exitNote")}
           />
         </WizardField>
         <WizardField
@@ -411,22 +834,80 @@ export default async function TradeFieldsPage(props: {
           />
         </WizardField>
 
-        {/* ── Nav ────────────────────────────────────────────────────── */}
-        <div className="mt-6 flex items-center justify-between border-t border-border pt-6">
-          <Link
-            href={backHref}
-            className="inline-flex items-center gap-1.5 font-mono text-[11px] uppercase tracking-[0.16em] text-text-tertiary transition-colors hover:text-text"
+        {/* ── Strategy / tax rollups ─────────────────────────────────── */}
+        <SectionLabel>{t("wizard.trade.fields.sections.rollups")}</SectionLabel>
+        <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
+          <WizardField
+            label={t("wizard.trade.fields.labels.strategyTag")}
+            htmlFor="strategyTag"
+            helper={t("wizard.trade.fields.helpers.strategyTag")}
           >
-            <ArrowLeft className="h-3 w-3" />
-            {t("wizard.trade.fields.back")}
-          </Link>
-          <button
-            type="submit"
-            className="inline-flex items-center gap-2 rounded-md border border-text bg-text px-4 py-2 font-mono text-[11px] uppercase tracking-[0.16em] text-app transition-colors hover:bg-text-secondary"
+            <WizardInput
+              id="strategyTag"
+              name="strategyTag"
+              defaultValue={defaults.strategyTag}
+              placeholder="ETH basis carry Q1"
+              autoComplete="off"
+            />
+          </WizardField>
+          <WizardField
+            label={t("wizard.trade.fields.labels.taxJurisdiction")}
+            htmlFor="taxJurisdiction"
+            helper={t("wizard.trade.fields.helpers.taxJurisdiction")}
           >
-            {t("wizard.trade.fields.review")}
-            <ArrowRight className="h-3 w-3" />
-          </button>
+            <WizardInput
+              id="taxJurisdiction"
+              name="taxJurisdiction"
+              defaultValue={defaults.taxJurisdiction}
+              placeholder="EU/DE"
+              autoComplete="off"
+            />
+          </WizardField>
+        </div>
+        <label className="flex items-start gap-2 text-[12px]">
+          <input
+            type="checkbox"
+            name="taxTaxable"
+            value="on"
+            defaultChecked={taxTaxableChecked}
+            className="mt-0.5 h-3.5 w-3.5 accent-text"
+          />
+          <span className="flex flex-col gap-0.5">
+            <span className="font-mono text-[10px] uppercase tracking-[0.16em] text-text-tertiary">
+              {t("wizard.trade.fields.labels.taxTaxable")}
+            </span>
+            <span className="font-serif italic text-text-tertiary">
+              {t("wizard.trade.fields.helpers.taxTaxable")}
+            </span>
+          </span>
+        </label>
+
+        {/* ── Footer: convert-to-spread + nav ────────────────────────── */}
+        <div className="mt-6 border-t border-border pt-6">
+          <p className="mb-4 text-center font-mono text-[10px] uppercase tracking-[0.18em] text-text-tertiary">
+            <Link
+              href={`/add/spread/fields?${convertParams.toString()}`}
+              className="underline-offset-4 hover:text-text hover:underline"
+            >
+              {t("wizard.trade.fields.convertToSpread")}
+            </Link>
+          </p>
+          <div className="flex items-center justify-between">
+            <Link
+              href={backHref}
+              className="inline-flex items-center gap-1.5 font-mono text-[11px] uppercase tracking-[0.16em] text-text-tertiary transition-colors hover:text-text"
+            >
+              <ArrowLeft className="h-3 w-3" />
+              {t("wizard.trade.fields.back")}
+            </Link>
+            <button
+              type="submit"
+              className="inline-flex items-center gap-2 rounded-md border border-text bg-text px-4 py-2 font-mono text-[11px] uppercase tracking-[0.16em] text-app transition-colors hover:bg-text-secondary"
+            >
+              {t("wizard.trade.fields.review")}
+              <ArrowRight className="h-3 w-3" />
+            </button>
+          </div>
         </div>
       </form>
     </WizardShell>
@@ -443,16 +924,11 @@ function SectionLabel({ children }: { children: React.ReactNode }) {
   );
 }
 
-/** Inverse of activity.ts's mapExchangeLabelToCode. */
-function mapExchangeCodeToLabel(code: string): string {
-  const map: Record<string, string> = {
-    binance: "Binance",
-    bybit: "Bybit",
-    hyperliquid: "Hyperliquid",
-    kraken: "Coinbase",
-    okx: "OKX",
-  };
-  return map[code] ?? "Other";
+function inferInstrumentFromKind(kind: string): string {
+  if (kind === "perp") return "perp";
+  if (kind === "dated_future") return "future";
+  if (kind === "spot" || kind === "nft" || kind === "otc") return "spot";
+  return "perp";
 }
 
 function RadioRow({
@@ -464,9 +940,9 @@ function RadioRow({
 }: {
   legend: string;
   name: string;
-  options: { value: string; label: string; tone?: "up" | "down" }[];
+  options: { value: string; label: string; tone?: "up" | "down" | "neutral" }[];
   defaultValue: string;
-  requiredCue: string;
+  requiredCue?: string;
 }) {
   const id = `radio-${name}`;
   return (
@@ -476,7 +952,7 @@ function RadioRow({
         className="mb-0.5 font-mono text-[10px] uppercase tracking-[0.16em] text-text-tertiary"
       >
         {legend}
-        <span className="ml-1.5 text-text-disabled">{requiredCue}</span>
+        {requiredCue && <span className="ml-1.5 text-text-disabled">{requiredCue}</span>}
       </legend>
       <div
         role="radiogroup"
@@ -493,7 +969,7 @@ function RadioRow({
               opt.tone === "up" &&
                 "has-[input:checked]:border-up has-[input:checked]:bg-up/10 has-[input:checked]:text-up",
               opt.tone === "down" &&
-                "has-[input:checked]:border-down has-[input:checked]:bg-down/10 has-[input:checked]:text-down"
+                "has-[input:checked]:border-down has-[input:checked]:bg-down/10 has-[input:checked]:text-down",
             )}
           >
             <input
@@ -501,7 +977,7 @@ function RadioRow({
               name={name}
               value={opt.value}
               defaultChecked={defaultValue === opt.value}
-              required
+              required={Boolean(requiredCue)}
               className="sr-only"
             />
             {opt.label}
@@ -511,3 +987,4 @@ function RadioRow({
     </fieldset>
   );
 }
+

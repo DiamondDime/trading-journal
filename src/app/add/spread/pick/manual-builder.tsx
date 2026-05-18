@@ -12,54 +12,77 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import type { ImportedTradeFill } from "@/lib/data/exchange-fills-mock";
 import { cn } from "@/lib/utils";
 import { useT } from "@/lib/i18n/client";
 import { ExchangeChip } from "@/components/settings/exchange-logo";
 
+/**
+ * Row shape consumed by the builder. Mirrors `PickerOptionRow` from
+ * `../db.ts` but kept local to this client component so the server module
+ * stays free of `"use client"` re-exports.
+ */
+export interface ManualBuilderRow {
+  id: string;
+  positionId: string;
+  symbol: string;
+  instrumentKind: string;
+  exchangeCode: string;
+  side: "long" | "short";
+  qty: string;
+  avgEntryPrice: string;
+  avgExitPrice: string | null;
+  openedAt: string;
+  closedAt: string | null;
+  status: "open" | "closed";
+}
+
 interface ManualBuilderProps {
-  fills: ImportedTradeFill[];
+  rows: ManualBuilderRow[];
 }
 
-function fmtPrice(n: number) {
-  if (n < 1) return n.toLocaleString("en-US", { maximumSignificantDigits: 4 });
-  return n.toLocaleString("en-US", {
+function fmtPrice(n: string) {
+  const v = Number.parseFloat(n);
+  if (!Number.isFinite(v)) return n;
+  if (v < 1) return v.toLocaleString("en-US", { maximumSignificantDigits: 4 });
+  return v.toLocaleString("en-US", {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   });
 }
 
-function fmtQty(n: number) {
-  if (n >= 1_000_000) return n.toExponential(2);
-  if (n >= 1000) return n.toLocaleString("en-US", { maximumFractionDigits: 0 });
-  if (n < 1) return n.toLocaleString("en-US", { maximumSignificantDigits: 4 });
-  return n.toLocaleString("en-US", { maximumFractionDigits: 4 });
+function fmtQty(n: string) {
+  const v = Number.parseFloat(n);
+  if (!Number.isFinite(v)) return n;
+  if (v >= 1_000_000) return v.toExponential(2);
+  if (v >= 1000) return v.toLocaleString("en-US", { maximumFractionDigits: 0 });
+  if (v < 1) return v.toLocaleString("en-US", { maximumSignificantDigits: 4 });
+  return v.toLocaleString("en-US", { maximumFractionDigits: 4 });
 }
 
-function fmtUsd(n: number, signed = false) {
-  const abs = Math.abs(n).toLocaleString("en-US", {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  });
-  const sign = signed ? (n >= 0 ? "+" : "−") : n < 0 ? "−" : "";
-  return `${sign}$${abs}`;
+function fmtDate(s: string | null, status: string): string {
+  if (status === "open") return "open";
+  if (!s) return "—";
+  const d = new Date(s);
+  if (!Number.isFinite(d.getTime())) return "—";
+  return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
 }
 
 /**
- * Right-pane builder. Renders a multi-select table of imported fills; the
- * sticky bottom CTA enables once ≥2 legs are checked and navigates to the
- * type-picker step with the selection encoded in `?legs=`.
+ * Right-pane builder. Renders a multi-select table of the user's open
+ * positions (and any candidate-fanout legs that didn't make it into a
+ * suggested group). The sticky bottom CTA enables once ≥2 positions are
+ * checked and navigates to the type-picker step with the selection encoded
+ * in `?legs=`.
  *
  * Client component because the row checkboxes need React state — every other
  * surface in this wizard is server-rendered.
  *
- * Selection is mirrored into the URL as `?selected=fill-a,fill-b`. This makes
- * the pick step survive back-navigation from /add/spread/type — when the
- * user clicks "Back" from the next step, the same checkboxes are still
- * ticked. We hydrate from the URL on mount only; subsequent edits flow one
- * way (state → URL) so the URL never overwrites in-progress changes.
+ * Selection is mirrored into the URL as `?selected=pos-a,pos-b` so back-nav
+ * from the type-picker preserves the user's selection. We hydrate from the
+ * URL on mount only; subsequent edits flow one way (state → URL) so the URL
+ * never overwrites in-progress changes.
  */
-export function ManualBuilder({ fills }: ManualBuilderProps) {
+export function ManualBuilder({ rows }: ManualBuilderProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const t = useT();
@@ -69,18 +92,18 @@ export function ManualBuilder({ fills }: ManualBuilderProps) {
   const initialSelected = React.useMemo(() => {
     const v = searchParams.get("selected");
     if (!v) return new Set<string>();
-    const validIds = new Set(fills.map((f) => f.id));
+    const validIds = new Set(rows.map((r) => r.positionId));
     return new Set(v.split(",").filter((id) => id && validIds.has(id)));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   const [selected, setSelected] =
     React.useState<Set<string>>(initialSelected);
 
-  const toggle = React.useCallback((id: string) => {
+  const toggle = React.useCallback((positionId: string) => {
     setSelected((prev) => {
       const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
+      if (next.has(positionId)) next.delete(positionId);
+      else next.add(positionId);
       return next;
     });
   }, []);
@@ -139,7 +162,9 @@ export function ManualBuilder({ fills }: ManualBuilderProps) {
                 scope="col"
                 className="w-8 font-serif text-[10px] font-semibold uppercase tracking-[0.16em] text-text-tertiary"
               >
-                <span className="sr-only">{t("wizard.spread.manual.col.selected")}</span>
+                <span className="sr-only">
+                  {t("wizard.spread.manual.col.selected")}
+                </span>
               </TableHead>
               <TableHead
                 scope="col"
@@ -171,102 +196,102 @@ export function ManualBuilder({ fills }: ManualBuilderProps) {
               >
                 {t("wizard.spread.manual.col.closed")}
               </TableHead>
-              <TableHead
-                scope="col"
-                className="text-right font-serif text-[10px] font-semibold uppercase tracking-[0.16em] text-text-tertiary"
-              >
-                {t("wizard.spread.manual.col.pnl")}
-              </TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
-            {fills.map((f) => {
-              const checked = selected.has(f.id);
-              const rowId = `manual-fill-${f.id}`;
-              return (
-                <TableRow
-                  key={f.id}
-                  className={cn(
-                    "cursor-pointer transition-colors",
-                    checked ? "bg-subtle hover:bg-subtle" : "hover:bg-subtle/60"
-                  )}
-                  onClick={() => toggle(f.id)}
-                  aria-selected={checked}
+            {rows.length === 0 ? (
+              <TableRow className="hover:bg-transparent">
+                <TableCell
+                  colSpan={6}
+                  className="py-8 text-center font-serif text-[12px] italic text-text-tertiary"
                 >
-                  <TableCell className="py-2">
-                    <input
-                      id={rowId}
-                      type="checkbox"
-                      checked={checked}
-                      onChange={() => toggle(f.id)}
-                      onClick={(e) => e.stopPropagation()}
-                      aria-label={t("wizard.spread.manual.rowAria", {
-                        symbol: f.symbol,
-                        side: f.side,
-                        exchange: f.exchange,
-                      })}
-                      className="h-3.5 w-3.5 rounded border-border accent-signature"
-                    />
-                  </TableCell>
-                  <TableCell className="py-2">
-                    <label
-                      htmlFor={rowId}
-                      className="flex cursor-pointer items-center gap-2"
-                    >
-                      <ExchangeChip
-                        venue={f.exchange}
-                        size="sm"
-                        className="shrink-0"
+                  {t("wizard.spread.manual.emptyRows")}
+                </TableCell>
+              </TableRow>
+            ) : (
+              rows.map((r) => {
+                const checked = selected.has(r.positionId);
+                const rowId = `manual-pos-${r.positionId}`;
+                return (
+                  <TableRow
+                    key={r.positionId}
+                    className={cn(
+                      "cursor-pointer transition-colors",
+                      checked
+                        ? "bg-subtle hover:bg-subtle"
+                        : "hover:bg-subtle/60",
+                    )}
+                    onClick={() => toggle(r.positionId)}
+                    aria-selected={checked}
+                  >
+                    <TableCell className="py-2">
+                      <input
+                        id={rowId}
+                        type="checkbox"
+                        checked={checked}
+                        onChange={() => toggle(r.positionId)}
+                        onClick={(e) => e.stopPropagation()}
+                        aria-label={t("wizard.spread.manual.rowAria", {
+                          symbol: r.symbol,
+                          side: r.side,
+                          exchange: r.exchangeCode,
+                        })}
+                        className="h-3.5 w-3.5 rounded border-border accent-signature"
                       />
-                      <span className="flex flex-col gap-0.5">
-                        <span className="font-serif text-[13px] font-medium text-text">
-                          {f.symbol}
+                    </TableCell>
+                    <TableCell className="py-2">
+                      <label
+                        htmlFor={rowId}
+                        className="flex cursor-pointer items-center gap-2"
+                      >
+                        <ExchangeChip
+                          venue={r.exchangeCode}
+                          size="sm"
+                          className="shrink-0"
+                        />
+                        <span className="flex flex-col gap-0.5">
+                          <span className="font-serif text-[13px] font-medium text-text">
+                            {r.symbol}
+                          </span>
+                          <span className="font-mono text-[9px] uppercase tracking-[0.12em] text-text-tertiary">
+                            {r.exchangeCode} · {r.instrumentKind}
+                          </span>
                         </span>
-                        <span className="font-mono text-[9px] uppercase tracking-[0.12em] text-text-tertiary">
-                          {f.exchange} · {f.instrument}
-                          {f.expiry ? ` · ${f.expiry}` : ""}
-                        </span>
+                      </label>
+                    </TableCell>
+                    <TableCell className="py-2">
+                      <span
+                        className={cn(
+                          "font-mono text-[10px] uppercase tracking-[0.14em]",
+                          r.side === "long" ? "text-up" : "text-down",
+                        )}
+                      >
+                        {r.side}
                       </span>
-                    </label>
-                  </TableCell>
-                  <TableCell className="py-2">
-                    <span
-                      className={cn(
-                        "font-mono text-[10px] uppercase tracking-[0.14em]",
-                        f.side === "long" ? "text-up" : "text-down"
+                    </TableCell>
+                    <TableCell className="py-2 text-right font-mono text-[11px] tabular-nums text-text-secondary">
+                      {fmtQty(r.qty)}
+                    </TableCell>
+                    <TableCell className="py-2 text-right">
+                      <span className="font-mono text-[11px] tabular-nums text-text">
+                        {fmtPrice(r.avgEntryPrice)}
+                      </span>
+                      {r.avgExitPrice && (
+                        <>
+                          <span className="mx-1 text-text-tertiary">→</span>
+                          <span className="font-mono text-[11px] tabular-nums text-text-secondary">
+                            {fmtPrice(r.avgExitPrice)}
+                          </span>
+                        </>
                       )}
-                    >
-                      {f.side}
-                    </span>
-                  </TableCell>
-                  <TableCell className="py-2 text-right font-mono text-[11px] tabular-nums text-text-secondary">
-                    {fmtQty(f.qty)}
-                  </TableCell>
-                  <TableCell className="py-2 text-right">
-                    <span className="font-mono text-[11px] tabular-nums text-text">
-                      {fmtPrice(f.entryPrice)}
-                    </span>
-                    <span className="mx-1 text-text-tertiary">→</span>
-                    <span className="font-mono text-[11px] tabular-nums text-text-secondary">
-                      {fmtPrice(f.exitPrice)}
-                    </span>
-                  </TableCell>
-                  <TableCell className="py-2 font-serif text-[12px] italic text-text-secondary">
-                    {f.closedLabel}
-                  </TableCell>
-                  <TableCell className="py-2 text-right">
-                    <span
-                      className={cn(
-                        "font-mono text-[11px] font-medium tabular-nums",
-                        f.tone === "up" ? "text-up" : "text-down"
-                      )}
-                    >
-                      {fmtUsd(f.netPnl, true)}
-                    </span>
-                  </TableCell>
-                </TableRow>
-              );
-            })}
+                    </TableCell>
+                    <TableCell className="py-2 font-serif text-[12px] italic text-text-secondary">
+                      {fmtDate(r.closedAt, r.status)}
+                    </TableCell>
+                  </TableRow>
+                );
+              })
+            )}
           </TableBody>
         </Table>
       </div>
@@ -275,7 +300,7 @@ export function ManualBuilder({ fills }: ManualBuilderProps) {
       <div
         className={cn(
           "sticky bottom-0 mt-4 rounded-md border border-border bg-surface/95 p-3 backdrop-blur transition-opacity",
-          count === 0 && "opacity-0 pointer-events-none"
+          count === 0 && "opacity-0 pointer-events-none",
         )}
         aria-hidden={count === 0}
       >

@@ -9,6 +9,9 @@ export const dynamic = "force-dynamic";
 
 export default async function AddIndexPage() {
   const t = await getT();
+  // 7 tiles now: spread / trade / sale / airdrop + yield / option / movement
+  // (added in v5 when activity types yield_position + option and the
+  // event_log accounting table landed).
   const OPTIONS = [
     {
       caption: t("wizard.add.options.spread.caption"),
@@ -36,6 +39,27 @@ export default async function AddIndexPage() {
       title: t("wizard.add.options.airdrop.title"),
       description: t("wizard.add.options.airdrop.description"),
       href: "/add/airdrop/fields",
+      badge: t("wizard.add.manual"),
+    },
+    {
+      caption: t("wizard.add.options.yield.caption"),
+      title: t("wizard.add.options.yield.title"),
+      description: t("wizard.add.options.yield.description"),
+      href: "/add/yield/source",
+      badge: t("wizard.add.options.yield.badge"),
+    },
+    {
+      caption: t("wizard.add.options.option.caption"),
+      title: t("wizard.add.options.option.title"),
+      description: t("wizard.add.options.option.description"),
+      href: "/add/option/source",
+      badge: t("wizard.add.manual"),
+    },
+    {
+      caption: t("wizard.add.options.movement.caption"),
+      title: t("wizard.add.options.movement.title"),
+      description: t("wizard.add.options.movement.description"),
+      href: "/add/movement/kind",
       badge: t("wizard.add.manual"),
     },
   ];

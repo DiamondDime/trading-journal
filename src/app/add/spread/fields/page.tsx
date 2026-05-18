@@ -6,6 +6,7 @@ import {
   WizardInput,
   WizardTextarea,
 } from "@/components/wizard/wizard-field";
+import { WizardValidationSummary } from "@/components/wizard/wizard-validation-summary";
 import {
   Table,
   TableBody,
@@ -14,20 +15,34 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import {
-  getImportedFillById,
-  type ImportedTradeFill,
-} from "@/lib/data/exchange-fills-mock";
-import type { MatcherSpreadType } from "@/lib/matcher/spread-matcher";
 import { cn } from "@/lib/utils";
 import { requireUser } from "@/lib/auth/server";
-import { getActivity } from "@/lib/db/activity";
 import { getT } from "@/lib/i18n/server";
+import {
+  getPickerOptionsByPositionIds,
+  getSpreadForEdit,
+  getStrategyTagSuggestions,
+  type PickerOptionRow,
+} from "../db";
 
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+export const dynamic = "force-dynamic";
 
-/** Map the canonical DB spread_type → matcher key the wizard URL uses. */
-const DB_TO_MATCHER_TYPE: Record<string, string> = {
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+const SPREAD_TYPE_VALUES = [
+  "cash_carry",
+  "funding",
+  "cross_exchange",
+  "calendar",
+  "dex_cex",
+] as const;
+type MatcherSpreadType = (typeof SPREAD_TYPE_VALUES)[number];
+function isSpreadType(v: string): v is MatcherSpreadType {
+  return (SPREAD_TYPE_VALUES as readonly string[]).includes(v);
+}
+
+const DB_TO_MATCHER_TYPE: Record<string, MatcherSpreadType> = {
   cash_carry: "cash_carry",
   funding_capture: "funding",
   cross_exchange_perp_arb: "cross_exchange",
@@ -35,21 +50,11 @@ const DB_TO_MATCHER_TYPE: Record<string, string> = {
   dex_cex_arb: "dex_cex",
 };
 
-function isoToDateTimeLocal(iso: string | null): string {
-  if (!iso) return "";
-  const d = new Date(iso);
-  if (!Number.isFinite(d.getTime())) return "";
-  const pad = (n: number) => n.toString().padStart(2, "0");
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
-}
+const SPREAD_STATUSES = ["open", "winding_down", "orphaned", "expired", "closed"] as const;
 
 type Search = Promise<{ [key: string]: string | string[] | undefined }>;
 
-function getStr(
-  sp: Awaited<Search>,
-  key: string,
-  fallback = ""
-): string {
+function getStr(sp: Awaited<Search>, key: string, fallback = ""): string {
   const v = sp[key];
   if (typeof v === "string") return v;
   if (Array.isArray(v) && v.length > 0 && typeof v[0] === "string") return v[0];
@@ -63,8 +68,6 @@ function getAllStr(sp: Awaited<Search>, key: string): string[] {
   return [];
 }
 
-// Manual builder uses repeated `?legs=…&legs=…`; matcher uses a single
-// `?legs=a,b`. Accept both — flatten + split on commas.
 function parseLegIds(sp: Awaited<Search>): string[] {
   const raw = [...getAllStr(sp, "legs"), getStr(sp, "legs")]
     .filter((s) => s.length > 0)
@@ -74,113 +77,132 @@ function parseLegIds(sp: Awaited<Search>): string[] {
   return [...new Set(raw)];
 }
 
-const SPREAD_TYPE_VALUES: readonly string[] = [
-  "cash_carry",
-  "funding",
-  "cross_exchange",
-  "calendar",
-  "dex_cex",
-];
-
-function isSpreadType(v: string): v is MatcherSpreadType {
-  return SPREAD_TYPE_VALUES.includes(v);
-}
-
-function fmtPrice(n: number) {
-  if (n < 1) return n.toLocaleString("en-US", { maximumSignificantDigits: 4 });
-  return n.toLocaleString("en-US", {
+function fmtPrice(n: string) {
+  const v = Number.parseFloat(n);
+  if (!Number.isFinite(v)) return n;
+  if (v < 1) return v.toLocaleString("en-US", { maximumSignificantDigits: 4 });
+  return v.toLocaleString("en-US", {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   });
 }
 
-function fmtQty(n: number) {
-  if (n >= 1_000_000) return n.toExponential(2);
-  if (n >= 1000) return n.toLocaleString("en-US", { maximumFractionDigits: 0 });
-  if (n < 1) return n.toLocaleString("en-US", { maximumSignificantDigits: 4 });
-  return n.toLocaleString("en-US", { maximumFractionDigits: 4 });
+function fmtQty(n: string) {
+  const v = Number.parseFloat(n);
+  if (!Number.isFinite(v)) return n;
+  if (v >= 1_000_000) return v.toExponential(2);
+  if (v >= 1000) return v.toLocaleString("en-US", { maximumFractionDigits: 0 });
+  if (v < 1) return v.toLocaleString("en-US", { maximumSignificantDigits: 4 });
+  return v.toLocaleString("en-US", { maximumFractionDigits: 4 });
 }
 
-function fmtUsd(n: number, signed = false) {
-  const abs = Math.abs(n).toLocaleString("en-US", {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  });
-  const sign = signed ? (n >= 0 ? "+" : "−") : n < 0 ? "−" : "";
-  return `${sign}$${abs}`;
-}
-
-function fmtDateInput(iso: string): string {
-  // `<input type="datetime-local">` wants `YYYY-MM-DDTHH:mm`. Fill-IDs in our
-  // mock are already in that shape; this is here for safety.
+function isoToDateTimeLocal(iso: string | null): string {
   if (!iso) return "";
   const d = new Date(iso);
-  if (!Number.isFinite(d.getTime())) return iso;
+  if (!Number.isFinite(d.getTime())) return "";
   const pad = (n: number) => n.toString().padStart(2, "0");
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
-function suggestName(
-  legs: ImportedTradeFill[],
-  spreadType: string,
-  t: Awaited<ReturnType<typeof getT>>
-): string {
+function isoToDateInput(iso: string | null): string {
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (!Number.isFinite(d.getTime())) return "";
+  const pad = (n: number) => n.toString().padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
+function suggestName(legs: PickerOptionRow[], spreadType: string): string {
   if (legs.length === 0) return "";
-  const asset = legs[0]?.asset ?? "";
-  const venues = [...new Set(legs.map((l) => l.exchange))].join(" + ");
-  const typeLabel = isSpreadType(spreadType)
-    ? localizedSpreadTypeLabel(spreadType, t)
-    : t("wizard.spread.fields.nameSuggestFallback");
-  return `${asset} ${typeLabel.toLowerCase()} · ${venues}`;
+  const asset = legs[0]?.symbol ?? "";
+  const venues = [...new Set(legs.map((l) => l.exchangeCode))].join(" + ");
+  return `${asset} ${spreadType || "spread"} · ${venues}`;
 }
 
-/** Localised label for a matcher spread type. Wizard-only — the matcher
- *  module's `SPREAD_TYPE_LABELS` const stays as the English default for
- *  non-wizard callers (archive, mix charts). */
-function localizedSpreadTypeLabel(
-  spreadType: MatcherSpreadType,
-  t: Awaited<ReturnType<typeof getT>>,
-): string {
-  return t(`wizard.shell.spreadTypeLabels.${spreadType}` as const);
-}
-
-function suggestSubtitle(
-  spreadType: string,
-  t: Awaited<ReturnType<typeof getT>>
-): string {
-  if (spreadType === "cash_carry") return t("wizard.spread.fields.variantSuggest.cashCarry");
-  if (spreadType === "funding") return t("wizard.spread.fields.variantSuggest.funding");
-  if (spreadType === "cross_exchange") return t("wizard.spread.fields.variantSuggest.crossExchange");
-  if (spreadType === "calendar") return t("wizard.spread.fields.variantSuggest.calendar");
-  if (spreadType === "dex_cex") return t("wizard.spread.fields.variantSuggest.dexCex");
-  return "";
-}
-
-function earliestOpen(legs: ImportedTradeFill[]): string {
+function earliestOpened(legs: PickerOptionRow[]): string {
   if (legs.length === 0) return "";
-  return legs
-    .map((l) => l.openedAt)
-    .sort()
-    .at(0) ?? "";
+  return legs.map((l) => l.openedAt).sort()[0] ?? "";
 }
 
-function latestClose(legs: ImportedTradeFill[]): string {
+function latestClosed(legs: PickerOptionRow[]): string {
   if (legs.length === 0) return "";
-  return legs
-    .map((l) => l.closedAt)
-    .sort()
-    .at(-1) ?? "";
+  const closed = legs.map((l) => l.closedAt).filter((x): x is string => !!x);
+  if (closed.length === 0) return "";
+  return closed.sort().at(-1) ?? "";
 }
 
-function sumCapital(legs: ImportedTradeFill[]): number {
-  // Capital deployed on a spread = the single-side notional (legs are hedged
-  // against each other; the user's actual outlay is one leg's capital, not
-  // their sum). Use the max to be conservative — the user can edit.
-  return legs.reduce((m, l) => Math.max(m, l.capital), 0);
+function deriveDefaultStatus(legs: PickerOptionRow[]): string {
+  if (legs.length === 0) return "open";
+  const allClosed = legs.every((l) => l.status === "closed");
+  if (allClosed) return "closed";
+  const someClosed = legs.some((l) => l.status === "closed");
+  if (someClosed) return "winding_down";
+  return "open";
 }
 
-function sumNetPnl(legs: ImportedTradeFill[]): number {
-  return legs.reduce((s, l) => s + l.netPnl, 0);
+/**
+ * Per-type field gating. Returns the set of open-intent fields that should
+ * be surfaced for the chosen DB spread_type. Mirrors §0 of the master plan:
+ *  - cash_carry / basis → expected_basis_convergence_date, borrow_cost
+ *  - funding_capture    → close_threshold_apr, close_threshold_periods
+ *  - dex_cex_arb        → max_gas_budget_usd, slippage_tolerance_bps
+ *  - cross_exchange     → slippage_tolerance_bps
+ *  - calendar           → expected_basis_convergence_date
+ *
+ * target_apr_at_open + expected_holding_days surface on every type since
+ * the post-trade review uses them for "did the thesis hold" framing.
+ */
+function gatesFor(matcherType: string, variant: string | null): {
+  showTargetApr: boolean;
+  showHoldingDays: boolean;
+  showBasisConvergence: boolean;
+  showBorrowCost: boolean;
+  showCloseThreshold: boolean;
+  showGasBudget: boolean;
+  showSlippageTolerance: boolean;
+} {
+  const isCashCarry = matcherType === "cash_carry";
+  const isFunding = matcherType === "funding";
+  const isCrossEx = matcherType === "cross_exchange";
+  const isCalendar = matcherType === "calendar";
+  const isDexCex = matcherType === "dex_cex";
+
+  return {
+    showTargetApr: true,
+    showHoldingDays: true,
+    showBasisConvergence:
+      (isCashCarry && variant === "basis") || isCalendar,
+    showBorrowCost: isCashCarry,
+    showCloseThreshold: isFunding,
+    showGasBudget: isDexCex,
+    showSlippageTolerance: isCrossEx || isDexCex,
+  };
+}
+
+interface FieldDefaults {
+  name: string;
+  variant: string;
+  variantCanonical: string;
+  openedAt: string;
+  closedAt: string;
+  capital: string;
+  netPnl: string;
+  fees: string;
+  status: string;
+  strategyTag: string;
+  thesis: string;
+  regimeTags: string;
+  // open-intent
+  targetAprAtOpen: string;
+  expectedHoldingDays: string;
+  expectedBasisConvergenceDate: string;
+  borrowCostAssumedBps: string;
+  closeThresholdApr: string;
+  closeThresholdPeriods: string;
+  maxGasBudgetUsd: string;
+  slippageToleranceBps: string;
+  // edit-mode metadata
+  serial: string;
 }
 
 export default async function SpreadFieldsPage(props: { searchParams: Search }) {
@@ -196,71 +218,114 @@ export default async function SpreadFieldsPage(props: { searchParams: Search }) 
     t("wizard.spread.stepLabels.review"),
   ] as const;
 
-  // Edit-mode pre-fill from DB. Manual spreads have no leg rows (the create
-  // action skips them), so the legs table will be empty — that's OK and
-  // matches what the user sees on the detail page.
-  let dbDefaults: Partial<{
-    name: string;
-    variant: string;
-    openedAt: string;
-    closedAt: string;
-    capital: string;
-    netPnl: string;
-    thesis: string;
-    regimeTags: string;
-    spreadType: string;
-    serial: string;
-  }> = {};
+  // ── Edit-mode pre-fill from DB ───────────────────────────────────────────
+  let dbDefaults: Partial<FieldDefaults> & { spreadType?: string } = {};
+  let dbLegs: PickerOptionRow[] = [];
+  let dbLegMap = new Map<string, { intendedPrice: string | null; role: string }>();
   let editValid = false;
+  const { id: userId } = await requireUser();
+
   if (editId && UUID_RE.test(editId)) {
-    const { id: userId } = await requireUser();
-    const activity = await getActivity(userId, editId);
-    if (activity && activity.subtype.type === "spread") {
-      const s = activity.subtype.row;
+    const view = await getSpreadForEdit(userId, editId);
+    if (view) {
       dbDefaults = {
-        name: activity.name,
-        variant: s.variant ?? "",
-        openedAt: isoToDateTimeLocal(activity.openedAt),
-        closedAt: isoToDateTimeLocal(activity.closedAt),
-        capital: activity.capitalDeployedUsd ?? "",
-        netPnl: activity.netPnlUsd ?? "",
-        thesis: s.exitPlan ?? "",
-        regimeTags: activity.regimeTags.join(", "),
-        spreadType: DB_TO_MATCHER_TYPE[s.spreadType] ?? "",
-        serial: activity.id.slice(0, 4).toUpperCase(),
+        name: view.name,
+        variant: view.variant ?? "",
+        variantCanonical: view.variant ?? "",
+        status: view.status,
+        openedAt: isoToDateTimeLocal(view.openedAt),
+        closedAt: isoToDateTimeLocal(view.closedAt),
+        capital: view.capitalDeployedUsd ?? "",
+        netPnl: view.netPnlUsd ?? "",
+        fees: view.feesUsd ?? "0",
+        thesis: view.exitPlan ?? "",
+        regimeTags: view.regimeTags.join(", "),
+        strategyTag: view.strategyTag ?? "",
+        spreadType: DB_TO_MATCHER_TYPE[view.spreadType] ?? "",
+        targetAprAtOpen: view.targetAprAtOpen ?? "",
+        expectedHoldingDays:
+          view.expectedHoldingDays != null ? String(view.expectedHoldingDays) : "",
+        expectedBasisConvergenceDate: view.expectedBasisConvergenceDate ?? "",
+        borrowCostAssumedBps: view.borrowCostAssumedBps ?? "",
+        closeThresholdApr: view.closeThresholdApr ?? "",
+        closeThresholdPeriods:
+          view.closeThresholdPeriods != null
+            ? String(view.closeThresholdPeriods)
+            : "",
+        maxGasBudgetUsd: view.maxGasBudgetUsd ?? "",
+        slippageToleranceBps: view.slippageToleranceBps ?? "",
+        serial: view.activityId.slice(0, 4).toUpperCase(),
       };
+      // Carry the joined legs through so the table renders the existing
+      // position rows on edit.
+      const ids = view.legs.map((l) => l.positionId);
+      dbLegs = await getPickerOptionsByPositionIds(userId, ids);
+      for (const l of view.legs) {
+        dbLegMap.set(l.positionId, {
+          intendedPrice: l.intendedPrice ?? null,
+          role: l.role,
+        });
+      }
       editValid = true;
     }
   }
 
+  // ── URL-mode legs (picker flow) ──────────────────────────────────────────
   const legIds = parseLegIds(sp);
-  const legs = legIds
-    .map((id) => getImportedFillById(id))
-    .filter((l): l is ImportedTradeFill => !!l);
-  const missing = legIds.filter((id) => !getImportedFillById(id));
+  // Empty-string pass-through prevention: if every input cleared and the user
+  // bounced back, we still want the form to render. legs only matters for the
+  // legs table; the form itself is independent.
+  const urlLegs = legIds.length > 0
+    ? await getPickerOptionsByPositionIds(userId, legIds)
+    : [];
+  const legs = editValid ? dbLegs : urlLegs;
+  const missing = editValid
+    ? []
+    : legIds.filter((id) => !urlLegs.some((l) => l.positionId === id));
 
   const spreadType = getStr(sp, "spreadType") || dbDefaults.spreadType || "";
-  const matcher = getStr(sp, "matcher"); // "auto" | "manual" | ""
+  const matcher = getStr(sp, "matcher");
+  const variantCanonical = getStr(sp, "variantCanonical") || dbDefaults.variantCanonical || "";
 
-  // ── Defaults — pre-filled either from URL (matcher path) or derived ────────
-  const defaults = {
-    name: getStr(sp, "name") || dbDefaults.name || suggestName(legs, spreadType, t),
-    variant: getStr(sp, "variant") || dbDefaults.variant || suggestSubtitle(spreadType, t),
+  // ── Defaults ─────────────────────────────────────────────────────────────
+  const defaults: FieldDefaults = {
+    name: getStr(sp, "name") || dbDefaults.name || suggestName(legs, spreadType),
+    variant: getStr(sp, "variant") || dbDefaults.variant || "",
+    variantCanonical,
     openedAt:
-      getStr(sp, "openedAt") || dbDefaults.openedAt || fmtDateInput(earliestOpen(legs)),
+      getStr(sp, "openedAt") || dbDefaults.openedAt || earliestOpened(legs).slice(0, 16),
     closedAt:
-      getStr(sp, "closedAt") || dbDefaults.closedAt || fmtDateInput(latestClose(legs)),
-    capital: getStr(sp, "capital") || dbDefaults.capital || (legs.length ? String(sumCapital(legs)) : ""),
-    netPnl: getStr(sp, "netPnl") || dbDefaults.netPnl || (legs.length ? sumNetPnl(legs).toFixed(2) : ""),
-    headlineUnit: getStr(sp, "headlineUnit", "APR"),
-    headlineValue: getStr(sp, "headlineValue"),
+      getStr(sp, "closedAt") || dbDefaults.closedAt || latestClosed(legs).slice(0, 16),
+    capital: getStr(sp, "capital") || dbDefaults.capital || "",
+    netPnl: getStr(sp, "netPnl") || dbDefaults.netPnl || "",
+    fees: getStr(sp, "fees") || dbDefaults.fees || "0",
+    status: getStr(sp, "status") || dbDefaults.status || deriveDefaultStatus(legs),
+    strategyTag: getStr(sp, "strategyTag") || dbDefaults.strategyTag || "",
     thesis: getStr(sp, "thesis") || dbDefaults.thesis || "",
     regimeTags: getStr(sp, "regimeTags") || dbDefaults.regimeTags || "",
+    targetAprAtOpen: getStr(sp, "targetAprAtOpen") || dbDefaults.targetAprAtOpen || "",
+    expectedHoldingDays:
+      getStr(sp, "expectedHoldingDays") || dbDefaults.expectedHoldingDays || "",
+    expectedBasisConvergenceDate:
+      getStr(sp, "expectedBasisConvergenceDate") ||
+      dbDefaults.expectedBasisConvergenceDate ||
+      "",
+    borrowCostAssumedBps:
+      getStr(sp, "borrowCostAssumedBps") || dbDefaults.borrowCostAssumedBps || "",
+    closeThresholdApr:
+      getStr(sp, "closeThresholdApr") || dbDefaults.closeThresholdApr || "",
+    closeThresholdPeriods:
+      getStr(sp, "closeThresholdPeriods") || dbDefaults.closeThresholdPeriods || "",
+    maxGasBudgetUsd:
+      getStr(sp, "maxGasBudgetUsd") || dbDefaults.maxGasBudgetUsd || "",
+    slippageToleranceBps:
+      getStr(sp, "slippageToleranceBps") || dbDefaults.slippageToleranceBps || "",
+    serial: dbDefaults.serial ?? "",
   };
 
-  // Empty state: manual route arrived without any selected legs. Edit mode
-  // skips this since edits operate on existing rows (no legs stored on v1
-  // manual spreads).
+  const gates = gatesFor(spreadType, defaults.variantCanonical || null);
+
+  // Empty state — user reached /fields without any legs AND isn't editing.
   if (!editValid && legs.length === 0 && legIds.length === 0) {
     return (
       <WizardShell
@@ -287,19 +352,21 @@ export default async function SpreadFieldsPage(props: { searchParams: Search }) 
     );
   }
 
+  // ── Strategy-tag suggestions for autocomplete <datalist> ────────────────
+  const strategyTagSuggestions = await getStrategyTagSuggestions(userId);
+
   const backHref = editValid
     ? `/spreads/${editId}`
-    : matcher === "manual"
-      ? `/add/spread/type?${new URLSearchParams({
-          legs: legIds.join(","),
-          matcher,
-          ...(spreadType ? { spreadType } : {}),
-        }).toString()}`
-      : `/add/spread/type?${new URLSearchParams({
-          legs: legIds.join(","),
-          ...(matcher ? { matcher } : {}),
-          ...(spreadType ? { spreadType } : {}),
-        }).toString()}`;
+    : `/add/spread/type?${new URLSearchParams({
+        legs: legIds.join(","),
+        ...(matcher ? { matcher } : {}),
+        ...(spreadType ? { spreadType } : {}),
+      }).toString()}`;
+
+  // Server-side validation errors carried over via `?fieldErrors=`
+  const fieldErrors = getAllStr(sp, "fieldError")
+    .map((s) => s.trim())
+    .filter(Boolean);
 
   return (
     <WizardShell
@@ -307,13 +374,24 @@ export default async function SpreadFieldsPage(props: { searchParams: Search }) 
       step={4}
       totalSteps={5}
       stepLabels={STEP_LABELS}
-      title={editValid ? t("wizard.spread.fields.titleEdit") : t("wizard.spread.fields.titleNew")}
+      title={
+        editValid
+          ? t("wizard.spread.fields.titleEdit")
+          : t("wizard.spread.fields.titleNew")
+      }
       subtitle={
         editValid
           ? t("wizard.spread.fields.subtitleEdit")
           : t("wizard.spread.fields.subtitleNew")
       }
     >
+      {fieldErrors.length > 0 && (
+        <WizardValidationSummary
+          errors={fieldErrors.map((m) => ({ message: m }))}
+          className="mb-6"
+        />
+      )}
+
       {editValid && (
         <aside
           className="mb-6 rounded-md border border-warn/30 bg-warn/5 px-4 py-2.5 text-[12px] text-warn"
@@ -325,12 +403,13 @@ export default async function SpreadFieldsPage(props: { searchParams: Search }) 
           {" — "}
           <span className="font-serif italic">
             {t("wizard.spread.fields.editBanner.body", {
-              serial: dbDefaults.serial ?? "",
+              serial: defaults.serial,
             })}
           </span>
         </aside>
       )}
-      {/* ── Legs summary (read-only) ──────────────────────────────────────── */}
+
+      {/* ── Legs summary ────────────────────────────────────────────────── */}
       <section className="mb-10">
         <h2 className="mb-3 font-serif text-[11px] font-semibold uppercase tracking-[0.18em] text-text-tertiary">
           {t("wizard.spread.fields.sections.legs")}
@@ -339,77 +418,121 @@ export default async function SpreadFieldsPage(props: { searchParams: Search }) 
           <Table>
             <TableHeader>
               <TableRow className="hover:bg-transparent">
-                <TableHead scope="col" className="font-serif text-[10px] font-semibold uppercase tracking-[0.16em] text-text-tertiary">
+                <TableHead
+                  scope="col"
+                  className="font-serif text-[10px] font-semibold uppercase tracking-[0.16em] text-text-tertiary"
+                >
                   {t("wizard.spread.fields.legsTable.symbol")}
                 </TableHead>
-                <TableHead scope="col" className="font-serif text-[10px] font-semibold uppercase tracking-[0.16em] text-text-tertiary">
+                <TableHead
+                  scope="col"
+                  className="font-serif text-[10px] font-semibold uppercase tracking-[0.16em] text-text-tertiary"
+                >
                   {t("wizard.spread.fields.legsTable.venue")}
                 </TableHead>
-                <TableHead scope="col" className="font-serif text-[10px] font-semibold uppercase tracking-[0.16em] text-text-tertiary">
+                <TableHead
+                  scope="col"
+                  className="font-serif text-[10px] font-semibold uppercase tracking-[0.16em] text-text-tertiary"
+                >
                   {t("wizard.spread.fields.legsTable.side")}
                 </TableHead>
-                <TableHead scope="col" className="text-right font-serif text-[10px] font-semibold uppercase tracking-[0.16em] text-text-tertiary">
+                <TableHead
+                  scope="col"
+                  className="text-right font-serif text-[10px] font-semibold uppercase tracking-[0.16em] text-text-tertiary"
+                >
                   {t("wizard.spread.fields.legsTable.qty")}
                 </TableHead>
-                <TableHead scope="col" className="text-right font-serif text-[10px] font-semibold uppercase tracking-[0.16em] text-text-tertiary">
+                <TableHead
+                  scope="col"
+                  className="text-right font-serif text-[10px] font-semibold uppercase tracking-[0.16em] text-text-tertiary"
+                >
                   {t("wizard.spread.fields.legsTable.entryExit")}
                 </TableHead>
-                <TableHead scope="col" className="text-right font-serif text-[10px] font-semibold uppercase tracking-[0.16em] text-text-tertiary">
-                  {t("wizard.spread.fields.legsTable.netPnl")}
+                <TableHead
+                  scope="col"
+                  className="text-right font-serif text-[10px] font-semibold uppercase tracking-[0.16em] text-text-tertiary"
+                >
+                  {t("wizard.spread.fields.legsTable.intendedPrice")}
                 </TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {legs.map((l) => (
-                <TableRow key={l.id} className="hover:bg-transparent">
-                  <TableCell>
-                    <div className="flex flex-col gap-0.5">
-                      <span className="font-serif text-[13px] font-medium text-text">
-                        {l.symbol}
-                      </span>
-                      <span className="font-mono text-[9px] uppercase tracking-[0.12em] text-text-tertiary">
-                        {l.instrument}
-                        {l.expiry ? ` · ${l.expiry}` : ""}
-                      </span>
-                    </div>
-                  </TableCell>
-                  <TableCell className="font-mono text-[11px] text-text-secondary">
-                    {l.exchange}
-                  </TableCell>
-                  <TableCell>
-                    <span
-                      className={cn(
-                        "font-mono text-[10px] uppercase tracking-[0.14em]",
-                        l.side === "long" ? "text-up" : "text-down"
-                      )}
-                    >
-                      {l.side}
-                    </span>
-                  </TableCell>
-                  <TableCell className="text-right font-mono text-[11px] tabular-nums text-text-secondary">
-                    {fmtQty(l.qty)}
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <span className="font-mono text-[11px] tabular-nums text-text">
-                      {fmtPrice(l.entryPrice)}
-                    </span>
-                    <span className="mx-1 text-text-tertiary">→</span>
-                    <span className="font-mono text-[11px] tabular-nums text-text-secondary">
-                      {fmtPrice(l.exitPrice)}
-                    </span>
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <span
-                      className={cn(
-                        "font-mono text-[11px] font-medium tabular-nums",
-                        l.tone === "up" ? "text-up" : "text-down"
-                      )}
-                    >
-                      {fmtUsd(l.netPnl, true)}
-                    </span>
+              {legs.length === 0 ? (
+                <TableRow className="hover:bg-transparent">
+                  <TableCell
+                    colSpan={6}
+                    className="py-6 text-center font-serif text-[12px] italic text-text-tertiary"
+                  >
+                    {t("wizard.spread.fields.legsTable.noLegs")}
                   </TableCell>
                 </TableRow>
-              ))}
+              ) : (
+                legs.map((l) => {
+                  const prior = dbLegMap.get(l.positionId);
+                  const defaultIntended =
+                    getStr(sp, `legIntended:${l.positionId}`) ||
+                    prior?.intendedPrice ||
+                    "";
+                  return (
+                    <TableRow key={l.positionId} className="hover:bg-transparent">
+                      <TableCell>
+                        <div className="flex flex-col gap-0.5">
+                          <span className="font-serif text-[13px] font-medium text-text">
+                            {l.symbol}
+                          </span>
+                          <span className="font-mono text-[9px] uppercase tracking-[0.12em] text-text-tertiary">
+                            {l.instrumentKind}
+                          </span>
+                        </div>
+                      </TableCell>
+                      <TableCell className="font-mono text-[11px] text-text-secondary">
+                        {l.exchangeCode}
+                      </TableCell>
+                      <TableCell>
+                        <span
+                          className={cn(
+                            "font-mono text-[10px] uppercase tracking-[0.14em]",
+                            l.side === "long" ? "text-up" : "text-down",
+                          )}
+                        >
+                          {l.side}
+                        </span>
+                      </TableCell>
+                      <TableCell className="text-right font-mono text-[11px] tabular-nums text-text-secondary">
+                        {fmtQty(l.qty)}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <span className="font-mono text-[11px] tabular-nums text-text">
+                          {fmtPrice(l.avgEntryPrice)}
+                        </span>
+                        {l.avgExitPrice && (
+                          <>
+                            <span className="mx-1 text-text-tertiary">→</span>
+                            <span className="font-mono text-[11px] tabular-nums text-text-secondary">
+                              {fmtPrice(l.avgExitPrice)}
+                            </span>
+                          </>
+                        )}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <input
+                          form="spread-fields-form"
+                          type="number"
+                          step="any"
+                          inputMode="decimal"
+                          name={`legIntended:${l.positionId}`}
+                          defaultValue={defaultIntended}
+                          placeholder="—"
+                          aria-label={t("wizard.spread.fields.legsTable.intendedPriceAria", {
+                            symbol: l.symbol,
+                          })}
+                          className="w-28 rounded-md border border-border bg-surface px-2 py-1 text-right font-mono text-[11px] text-text placeholder:text-text-disabled focus:border-border-strong focus:outline-none focus:ring-1 focus:ring-text"
+                        />
+                      </TableCell>
+                    </TableRow>
+                  );
+                })
+              )}
             </TableBody>
           </Table>
         </div>
@@ -424,7 +547,7 @@ export default async function SpreadFieldsPage(props: { searchParams: Search }) 
           {t("wizard.spread.fields.spreadTypeLabel")}{" "}
           <span className="not-italic font-medium text-text">
             {isSpreadType(spreadType)
-              ? localizedSpreadTypeLabel(spreadType, t)
+              ? t(`wizard.shell.spreadTypeLabels.${spreadType}` as const)
               : t("wizard.spread.fields.spreadTypeNotPicked")}
           </span>
           {matcher === "auto" && (
@@ -434,11 +557,11 @@ export default async function SpreadFieldsPage(props: { searchParams: Search }) 
           )}
         </p>
         <p className="mt-2 font-serif text-[11px] italic leading-snug text-text-tertiary">
-          {t("wizard.spread.fields.v1ManualNote")}
+          {t("wizard.spread.fields.intendedPriceHint")}
         </p>
       </section>
 
-      {/* ── Form ──────────────────────────────────────────────────────────── */}
+      {/* ── Form ─────────────────────────────────────────────────────────── */}
       <form
         id="spread-fields-form"
         action="/add/spread/review"
@@ -452,6 +575,30 @@ export default async function SpreadFieldsPage(props: { searchParams: Search }) 
         {spreadType && (
           <input type="hidden" name="spreadType" value={spreadType} />
         )}
+        {/* Round-trip each leg's positionId + role + intendedPrice into hidden
+            fields so /review can re-render the per-leg table from URL alone. */}
+        {legs.map((l) => (
+          <input
+            key={`pid-${l.positionId}`}
+            type="hidden"
+            name="legPositionId"
+            value={l.positionId}
+          />
+        ))}
+        {legs.map((l) => (
+          <input
+            key={`role-${l.positionId}`}
+            type="hidden"
+            name="legRole"
+            value={dbLegMap.get(l.positionId)?.role ?? l.side}
+          />
+        ))}
+        <input type="hidden" name="legCount" value={String(legs.length)} />
+        <input
+          type="hidden"
+          name="primaryBase"
+          value={legs[0]?.symbol?.split(/[-/]/)[0] ?? ""}
+        />
 
         <SectionLabel>{t("wizard.spread.fields.sections.identity")}</SectionLabel>
         <WizardField
@@ -469,23 +616,98 @@ export default async function SpreadFieldsPage(props: { searchParams: Search }) 
             autoComplete="off"
           />
         </WizardField>
-        <WizardField
-          label={t("wizard.spread.fields.variant.label")}
-          htmlFor="variant"
-          helper={t("wizard.spread.fields.variant.helper")}
-        >
-          <WizardInput
-            id="variant"
-            name="variant"
-            defaultValue={defaults.variant}
-            placeholder={t("wizard.spread.fields.variant.placeholder")}
-            autoComplete="off"
-          />
-        </WizardField>
-
-        <SectionLabel>{t("wizard.spread.fields.sections.timing")}</SectionLabel>
         <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
-          <WizardField label={t("wizard.spread.fields.openedAt.label")} htmlFor="openedAt" required>
+          <WizardField
+            label={t("wizard.spread.fields.variant.label")}
+            htmlFor="variant"
+            helper={t("wizard.spread.fields.variant.helper")}
+          >
+            <WizardInput
+              id="variant"
+              name="variant"
+              defaultValue={defaults.variant}
+              placeholder={t("wizard.spread.fields.variant.placeholder")}
+              autoComplete="off"
+            />
+          </WizardField>
+          {/* Variant radio — visible only on cash_carry/funding_capture
+              where the DB CHECK enforces canonical values. */}
+          {(spreadType === "cash_carry" || spreadType === "funding") && (
+            <fieldset className="flex flex-col gap-1.5">
+              <legend className="mb-0.5 font-mono text-[10px] uppercase tracking-[0.16em] text-text-tertiary">
+                {t("wizard.spread.fields.variantCanonical.legend")}
+              </legend>
+              <div
+                role="radiogroup"
+                aria-label={t("wizard.spread.fields.variantCanonical.aria")}
+                className="grid grid-cols-2 gap-2"
+              >
+                {(spreadType === "cash_carry"
+                  ? (["funding", "basis"] as const)
+                  : (["same_venue", "cross_venue"] as const)
+                ).map((v) => (
+                  <label
+                    key={v}
+                    className={cn(
+                      "flex cursor-pointer items-center justify-center rounded-md border border-border bg-surface px-2 py-2 font-mono text-[11px] uppercase tracking-[0.14em] text-text-secondary transition-colors hover:border-border-strong hover:text-text",
+                      "has-[input:checked]:border-text has-[input:checked]:bg-subtle has-[input:checked]:text-text",
+                    )}
+                  >
+                    <input
+                      type="radio"
+                      name="variantCanonical"
+                      value={v}
+                      defaultChecked={defaults.variantCanonical === v}
+                      className="sr-only"
+                    />
+                    {v.replace("_", " ")}
+                  </label>
+                ))}
+              </div>
+            </fieldset>
+          )}
+        </div>
+
+        <SectionLabel>{t("wizard.spread.fields.sections.lifecycle")}</SectionLabel>
+        <fieldset className="flex flex-col gap-1.5">
+          <legend className="mb-0.5 font-mono text-[10px] uppercase tracking-[0.16em] text-text-tertiary">
+            {t("wizard.spread.fields.status.legend")}
+            <span className="ml-1.5 text-text-disabled">
+              · {t("wizard.spread.fields.status.requiredSuffix")}
+            </span>
+          </legend>
+          <div
+            role="radiogroup"
+            aria-label={t("wizard.spread.fields.status.aria")}
+            className="grid grid-cols-2 gap-2 md:grid-cols-5"
+          >
+            {SPREAD_STATUSES.map((s) => (
+              <label
+                key={s}
+                className={cn(
+                  "flex cursor-pointer items-center justify-center rounded-md border border-border bg-surface px-2 py-2 font-mono text-[11px] uppercase tracking-[0.14em] text-text-secondary transition-colors hover:border-border-strong hover:text-text",
+                  "has-[input:checked]:border-text has-[input:checked]:bg-subtle has-[input:checked]:text-text",
+                )}
+              >
+                <input
+                  type="radio"
+                  name="status"
+                  value={s}
+                  defaultChecked={defaults.status === s}
+                  required
+                  className="sr-only"
+                />
+                {s.replace("_", " ")}
+              </label>
+            ))}
+          </div>
+        </fieldset>
+        <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
+          <WizardField
+            label={t("wizard.spread.fields.openedAt.label")}
+            htmlFor="openedAt"
+            required
+          >
             <WizardInput
               id="openedAt"
               name="openedAt"
@@ -494,19 +716,22 @@ export default async function SpreadFieldsPage(props: { searchParams: Search }) 
               required
             />
           </WizardField>
-          <WizardField label={t("wizard.spread.fields.closedAt.label")} htmlFor="closedAt" required>
+          <WizardField
+            label={t("wizard.spread.fields.closedAt.label")}
+            htmlFor="closedAt"
+            helper={t("wizard.spread.fields.closedAt.helper")}
+          >
             <WizardInput
               id="closedAt"
               name="closedAt"
               type="datetime-local"
               defaultValue={defaults.closedAt}
-              required
             />
           </WizardField>
         </div>
 
         <SectionLabel>{t("wizard.spread.fields.sections.numbers")}</SectionLabel>
-        <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
+        <div className="grid grid-cols-1 gap-5 md:grid-cols-3">
           <WizardField
             label={t("wizard.spread.fields.capital.label")}
             htmlFor="capital"
@@ -529,7 +754,6 @@ export default async function SpreadFieldsPage(props: { searchParams: Search }) 
             label={t("wizard.spread.fields.netPnl.label")}
             htmlFor="netPnl"
             helper={t("wizard.spread.fields.netPnl.helper")}
-            required
           >
             <WizardInput
               id="netPnl"
@@ -539,58 +763,188 @@ export default async function SpreadFieldsPage(props: { searchParams: Search }) 
               inputMode="decimal"
               defaultValue={defaults.netPnl}
               placeholder="1314.40"
-              required
             />
           </WizardField>
-        </div>
-
-        <SectionLabel>{t("wizard.spread.fields.sections.headline")}</SectionLabel>
-        <div className="grid grid-cols-1 gap-5 md:grid-cols-[120px_1fr]">
-          <fieldset className="flex flex-col gap-1.5">
-            <legend className="mb-0.5 font-mono text-[10px] uppercase tracking-[0.16em] text-text-tertiary">
-              {t("wizard.spread.fields.unit.legend")}
-              <span className="ml-1.5 text-text-disabled">{t("wizard.spread.fields.unit.requiredSuffix")}</span>
-            </legend>
-            <div role="radiogroup" aria-label={t("wizard.spread.fields.unit.ariaLabel")} className="grid grid-cols-2 gap-2">
-              {(["APR", "BPS/D"] as const).map((u) => (
-                <label
-                  key={u}
-                  className={cn(
-                    "flex cursor-pointer items-center justify-center rounded-md border border-border bg-surface px-2 py-2 font-mono text-[11px] uppercase tracking-[0.14em] text-text-secondary transition-colors hover:border-border-strong hover:text-text",
-                    "has-[input:checked]:border-text has-[input:checked]:bg-subtle has-[input:checked]:text-text"
-                  )}
-                >
-                  <input
-                    type="radio"
-                    name="headlineUnit"
-                    value={u}
-                    defaultChecked={defaults.headlineUnit === u}
-                    required
-                    className="sr-only"
-                  />
-                  {u}
-                </label>
-              ))}
-            </div>
-          </fieldset>
           <WizardField
-            label={t("wizard.spread.fields.headlineValue.label")}
-            htmlFor="headlineValue"
-            helper={t("wizard.spread.fields.headlineValue.helper")}
+            label={t("wizard.spread.fields.fees.label")}
+            htmlFor="fees"
+            helper={t("wizard.spread.fields.fees.helper")}
           >
             <WizardInput
-              id="headlineValue"
-              name="headlineValue"
+              id="fees"
+              name="fees"
               type="number"
-              step="any"
+              step="0.01"
+              min="0"
               inputMode="decimal"
-              defaultValue={defaults.headlineValue}
-              placeholder="14.0"
+              defaultValue={defaults.fees}
+              placeholder="42.00"
             />
           </WizardField>
         </div>
 
-        <SectionLabel>{t("wizard.spread.fields.sections.thesisAndTags")}</SectionLabel>
+        {/* ── Open-intent — per-type gated ──────────────────────────────── */}
+        {(gates.showTargetApr ||
+          gates.showHoldingDays ||
+          gates.showBasisConvergence ||
+          gates.showBorrowCost ||
+          gates.showCloseThreshold ||
+          gates.showGasBudget ||
+          gates.showSlippageTolerance) && (
+          <>
+            <SectionLabel>
+              {t("wizard.spread.fields.sections.openIntent")}
+            </SectionLabel>
+            <p className="-mt-3 font-serif text-[12px] italic leading-snug text-text-tertiary">
+              {t("wizard.spread.fields.openIntentHint")}
+            </p>
+            <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
+              {gates.showTargetApr && (
+                <WizardField
+                  label={t("wizard.spread.fields.targetAprAtOpen.label")}
+                  htmlFor="targetAprAtOpen"
+                  helper={t("wizard.spread.fields.targetAprAtOpen.helper")}
+                >
+                  <WizardInput
+                    id="targetAprAtOpen"
+                    name="targetAprAtOpen"
+                    type="number"
+                    step="0.0001"
+                    inputMode="decimal"
+                    defaultValue={defaults.targetAprAtOpen}
+                    placeholder="0.178"
+                  />
+                </WizardField>
+              )}
+              {gates.showHoldingDays && (
+                <WizardField
+                  label={t("wizard.spread.fields.expectedHoldingDays.label")}
+                  htmlFor="expectedHoldingDays"
+                  helper={t("wizard.spread.fields.expectedHoldingDays.helper")}
+                >
+                  <WizardInput
+                    id="expectedHoldingDays"
+                    name="expectedHoldingDays"
+                    type="number"
+                    step="1"
+                    min="1"
+                    inputMode="numeric"
+                    defaultValue={defaults.expectedHoldingDays}
+                    placeholder="14"
+                  />
+                </WizardField>
+              )}
+              {gates.showBasisConvergence && (
+                <WizardField
+                  label={t("wizard.spread.fields.expectedBasisConvergenceDate.label")}
+                  htmlFor="expectedBasisConvergenceDate"
+                  helper={t("wizard.spread.fields.expectedBasisConvergenceDate.helper")}
+                  required={spreadType === "cash_carry" && defaults.variantCanonical === "basis"}
+                >
+                  <WizardInput
+                    id="expectedBasisConvergenceDate"
+                    name="expectedBasisConvergenceDate"
+                    type="date"
+                    defaultValue={defaults.expectedBasisConvergenceDate || isoToDateInput(defaults.closedAt)}
+                  />
+                </WizardField>
+              )}
+              {gates.showBorrowCost && (
+                <WizardField
+                  label={t("wizard.spread.fields.borrowCostAssumedBps.label")}
+                  htmlFor="borrowCostAssumedBps"
+                  helper={t("wizard.spread.fields.borrowCostAssumedBps.helper")}
+                >
+                  <WizardInput
+                    id="borrowCostAssumedBps"
+                    name="borrowCostAssumedBps"
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    inputMode="decimal"
+                    defaultValue={defaults.borrowCostAssumedBps}
+                    placeholder="35"
+                  />
+                </WizardField>
+              )}
+              {gates.showCloseThreshold && (
+                <>
+                  <WizardField
+                    label={t("wizard.spread.fields.closeThresholdApr.label")}
+                    htmlFor="closeThresholdApr"
+                    helper={t("wizard.spread.fields.closeThresholdApr.helper")}
+                  >
+                    <WizardInput
+                      id="closeThresholdApr"
+                      name="closeThresholdApr"
+                      type="number"
+                      step="0.0001"
+                      inputMode="decimal"
+                      defaultValue={defaults.closeThresholdApr}
+                      placeholder="0.05"
+                    />
+                  </WizardField>
+                  <WizardField
+                    label={t("wizard.spread.fields.closeThresholdPeriods.label")}
+                    htmlFor="closeThresholdPeriods"
+                    helper={t("wizard.spread.fields.closeThresholdPeriods.helper")}
+                  >
+                    <WizardInput
+                      id="closeThresholdPeriods"
+                      name="closeThresholdPeriods"
+                      type="number"
+                      step="1"
+                      min="1"
+                      inputMode="numeric"
+                      defaultValue={defaults.closeThresholdPeriods}
+                      placeholder="3"
+                    />
+                  </WizardField>
+                </>
+              )}
+              {gates.showGasBudget && (
+                <WizardField
+                  label={t("wizard.spread.fields.maxGasBudgetUsd.label")}
+                  htmlFor="maxGasBudgetUsd"
+                  helper={t("wizard.spread.fields.maxGasBudgetUsd.helper")}
+                >
+                  <WizardInput
+                    id="maxGasBudgetUsd"
+                    name="maxGasBudgetUsd"
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    inputMode="decimal"
+                    defaultValue={defaults.maxGasBudgetUsd}
+                    placeholder="40.00"
+                  />
+                </WizardField>
+              )}
+              {gates.showSlippageTolerance && (
+                <WizardField
+                  label={t("wizard.spread.fields.slippageToleranceBps.label")}
+                  htmlFor="slippageToleranceBps"
+                  helper={t("wizard.spread.fields.slippageToleranceBps.helper")}
+                >
+                  <WizardInput
+                    id="slippageToleranceBps"
+                    name="slippageToleranceBps"
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    inputMode="decimal"
+                    defaultValue={defaults.slippageToleranceBps}
+                    placeholder="8"
+                  />
+                </WizardField>
+              )}
+            </div>
+          </>
+        )}
+
+        <SectionLabel>
+          {t("wizard.spread.fields.sections.thesisAndTags")}
+        </SectionLabel>
         <WizardField
           label={t("wizard.spread.fields.thesis.label")}
           htmlFor="thesis"
@@ -604,19 +958,40 @@ export default async function SpreadFieldsPage(props: { searchParams: Search }) 
             placeholder={t("wizard.spread.fields.thesis.placeholder")}
           />
         </WizardField>
-        <WizardField
-          label={t("wizard.spread.fields.regimeTags.label")}
-          htmlFor="regimeTags"
-          helper={t("wizard.spread.fields.regimeTags.helper")}
-        >
-          <WizardInput
-            id="regimeTags"
-            name="regimeTags"
-            defaultValue={defaults.regimeTags}
-            placeholder="funding-positive, contango"
-            autoComplete="off"
-          />
-        </WizardField>
+        <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
+          <WizardField
+            label={t("wizard.spread.fields.strategyTag.label")}
+            htmlFor="strategyTag"
+            helper={t("wizard.spread.fields.strategyTag.helper")}
+          >
+            <WizardInput
+              id="strategyTag"
+              name="strategyTag"
+              defaultValue={defaults.strategyTag}
+              placeholder="basis_book"
+              list="strategy-tags"
+              autoComplete="off"
+            />
+            <datalist id="strategy-tags">
+              {strategyTagSuggestions.map((s) => (
+                <option key={s} value={s} />
+              ))}
+            </datalist>
+          </WizardField>
+          <WizardField
+            label={t("wizard.spread.fields.regimeTags.label")}
+            htmlFor="regimeTags"
+            helper={t("wizard.spread.fields.regimeTags.helper")}
+          >
+            <WizardInput
+              id="regimeTags"
+              name="regimeTags"
+              defaultValue={defaults.regimeTags}
+              placeholder="funding-positive, contango"
+              autoComplete="off"
+            />
+          </WizardField>
+        </div>
 
         <div className="mt-6 flex items-center justify-between border-t border-border pt-6">
           <Link

@@ -31,7 +31,9 @@ from datetime import UTC, datetime, timedelta
 from typing import NoReturn
 
 import psycopg
+import psycopg.rows  # noqa: F401 — re-exported via psycopg in newer versions, explicit here for typecheck
 
+from csj_worker import balances as balx
 from csj_worker import db as dbx
 from csj_worker import excursions as excx
 from csj_worker import positions_aggregator as agg
@@ -341,6 +343,31 @@ async def sync_one_connection(
             conn, row.id, ConnectionStatus.ERROR, f"{type(exc).__name__}: {exc}"
         )
         return {"status": "error", "reason": "unexpected", "fills_added": fills_added}
+
+    # Balance tracker (Wave v6) — fetch + price + persist before marking
+    # synced. Failures are non-fatal: the connection still completes the
+    # fills/funding sync; we just won't have fresh balance rows. This
+    # keeps balance tracking decoupled from the journal's core data
+    # pipeline.
+    balance_summary: dict[str, int] | None = None
+    try:
+        balance_summary = await balx.fetch_and_persist_balances(
+            conn,
+            user_id=row.user_id,
+            connection_id=row.id,
+            adapter=adapter,
+            credentials=credentials,
+            snapshot_at=now,
+        )
+        if balance_summary and balance_summary.get("upserted", 0) > 0:
+            log.info(
+                "sync.balances_persisted",
+                extra={**base_ctx, **balance_summary},
+            )
+    except Exception:
+        await conn.rollback()
+        log.exception("sync.balances_failed", extra=base_ctx)
+        # Continue — balance fetching is best-effort.
 
     # Success path
     await dbx.mark_connection_synced(
@@ -724,12 +751,171 @@ async def run_once(database_url: str, lookback_days: int) -> dict[str, object]:
             )
             summary["positions_inserted"] = agg_totals["positions_inserted"]
 
+            # Balance snapshots (Wave v6) — record one portfolio snapshot
+            # per user that just synced. Non-fatal: balance pipeline is
+            # decoupled from the matcher / aggregator path.
+            try:
+                bal_totals = await balx.aggregate_balances_for_users(
+                    conn, sorted(synced_user_ids)
+                )
+                summary["balance_snapshots"] = bal_totals.get("snapshots", 0)
+            except Exception:
+                log.exception("cycle.balances_snapshot_failed")
+
         # Matcher always runs — produces zero candidates if no positions yet.
         await run_matcher_for_all_users(conn)
     finally:
         await conn.close()
 
     log.info("cycle.complete", extra=summary)
+    return summary
+
+
+# ---------------------------------------------------------------------------
+# Scheduled balance snapshots — Wave v6
+# ---------------------------------------------------------------------------
+
+
+async def run_balance_snapshots(database_url: str) -> dict[str, int]:
+    """One pass: snapshot every user with non-zero balances.
+
+    Called by the daemon loop on its hourly tick. Independent connection
+    so it can be scheduled separately from the sync cycle. Returns a
+    summary dict for telemetry.
+
+    Source is 'scheduled' so the UI can distinguish hourly cron rows from
+    event-driven ones (which arrive after a sync) and manual_refresh ones
+    (which come from the user clicking the refresh button).
+    """
+    log = logging.getLogger("csj_worker.balance_snapshot")
+    summary = {"users": 0, "snapshots": 0}
+    conn = await dbx.open_async_conn(database_url)
+    try:
+        async with conn.cursor() as cur:
+            await cur.execute(
+                "select distinct user_id::text"
+                " from public.exchange_balances"
+                " where total > 0"
+            )
+            user_ids = [r[0] for r in await cur.fetchall()]
+
+        for user_id in user_ids:
+            summary["users"] += 1
+            try:
+                wrote = await balx.snapshot_portfolio(
+                    conn,
+                    user_id=user_id,
+                    snapshot_at=datetime.now(tz=UTC),
+                    source="scheduled",
+                )
+                if wrote:
+                    summary["snapshots"] += 1
+            except Exception:
+                await conn.rollback()
+                log.exception(
+                    "balance_snapshot.user_failed",
+                    extra={"user_id": user_id},
+                )
+    finally:
+        await conn.close()
+
+    log.info("balance_snapshot.complete", extra=summary)
+    return summary
+
+
+async def run_balance_refresh(
+    database_url: str,
+    *,
+    user_id: str,
+) -> dict[str, int]:
+    """User-triggered refresh: re-fetch every connection's balances + snapshot.
+
+    Called by the HTTP bridge's POST /refresh-balances endpoint (mounted in
+    ``csj_worker.http_server``). The Next.js API route invokes this after the
+    user clicks the refresh button on the balances page; we re-sync each of
+    that user's connections' balance tables in turn, drop the price cache so
+    we get fresh quotes, then record one snapshot with source=manual_refresh.
+
+    Returns a summary the HTTP handler echoes back to the UI so it can
+    render "fetched N balances across M exchanges in T seconds".
+    """
+    log = logging.getLogger("csj_worker.balance_refresh")
+    summary = {
+        "connections": 0,
+        "upserted": 0,
+        "reaped": 0,
+        "snapshots": 0,
+        "errors": 0,
+    }
+    # Drop the in-memory price cache so the refresh gets brand new quotes.
+    from csj_worker import prices as _prices
+
+    _prices.clear_cache()
+
+    conn = await dbx.open_async_conn(database_url)
+    try:
+        async with conn.cursor(row_factory=psycopg.rows.dict_row) as cur:
+            await cur.execute(
+                "select id::text as id, exchange_code, label, user_id::text as user_id"
+                " from public.exchange_connections"
+                " where user_id::text = %s and deleted_at is null"
+                "   and status::text in ('active', 'rate_limited')",
+                (user_id,),
+            )
+            conn_rows = await cur.fetchall()
+
+        snapshot_at = datetime.now(tz=UTC)
+        for cr in conn_rows:
+            summary["connections"] += 1
+            row = await dbx.get_connection(conn, cr["id"])
+            if row is None:
+                summary["errors"] += 1
+                continue
+            adapter = _get_adapter(row.exchange_code)
+            if adapter is None:
+                continue
+            creds = dbx.decrypt_connection_credentials(row)
+            if creds is None:
+                continue
+            try:
+                result = await balx.fetch_and_persist_balances(
+                    conn,
+                    user_id=row.user_id,
+                    connection_id=row.id,
+                    adapter=adapter,
+                    credentials=creds,
+                    snapshot_at=snapshot_at,
+                )
+                summary["upserted"] += int(result.get("upserted", 0) or 0)
+                summary["reaped"] += int(result.get("reaped", 0) or 0)
+            except Exception:
+                await conn.rollback()
+                log.exception(
+                    "balance_refresh.connection_failed",
+                    extra={"connection_id": row.id},
+                )
+                summary["errors"] += 1
+
+        # One snapshot per refresh, with source=manual_refresh.
+        try:
+            wrote = await balx.snapshot_portfolio(
+                conn,
+                user_id=user_id,
+                snapshot_at=snapshot_at,
+                source="manual_refresh",
+            )
+            if wrote:
+                summary["snapshots"] = 1
+        except Exception:
+            await conn.rollback()
+            log.exception(
+                "balance_refresh.snapshot_failed", extra={"user_id": user_id}
+            )
+            summary["errors"] += 1
+    finally:
+        await conn.close()
+
+    log.info("balance_refresh.complete", extra=summary)
     return summary
 
 
@@ -1026,6 +1212,8 @@ async def run_daemon(
     )
 
     last_cycle = 0.0  # asyncio loop monotonic time of last run_once
+    last_snapshot = 0.0  # last hourly balance snapshot tick
+    snapshot_interval_seconds = _env_int("WORKER_SNAPSHOT_INTERVAL_SECONDS", 3600)
 
     while not stop_event.is_set():
         now = loop.time()
@@ -1038,6 +1226,17 @@ async def run_daemon(
                 # A cycle should never crash the daemon. Log and continue.
                 log.exception("daemon.cycle_crashed")
             last_cycle = loop.time()
+
+        # Hourly balance snapshot tick (Wave v6) — independent of the
+        # sync cycle so a long backfill doesn't delay the equity curve's
+        # next data point. snapshot_portfolio is cheap (~1 SELECT + INSERT
+        # per user) so we run it even when nothing synced this cycle.
+        if now - last_snapshot >= snapshot_interval_seconds:
+            try:
+                await run_balance_snapshots(database_url)
+            except Exception:
+                log.exception("daemon.balance_snapshot_crashed")
+            last_snapshot = loop.time()
 
         if stop_event.is_set():
             break
@@ -1116,6 +1315,23 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     p_test.add_argument("--connection-id", required=True, help="UUID of the connection")
 
+    # Wave v6: manual portfolio snapshot trigger.
+    p_snapshot = sub.add_parser(
+        "snapshot-balances",
+        help="Snapshot a user's portfolio (writes one portfolio_snapshots row).",
+    )
+    p_snapshot.add_argument(
+        "--user-id",
+        required=True,
+        help="UUID of the user to snapshot",
+    )
+    p_snapshot.add_argument(
+        "--source",
+        default="manual_refresh",
+        choices=["scheduled", "manual_refresh", "event_driven"],
+        help="Snapshot source tag (default: manual_refresh)",
+    )
+
     p_http = sub.add_parser(
         "http-server",
         help="Run the worker HTTP server (connect-test endpoint).",
@@ -1190,6 +1406,22 @@ def main(argv: list[str] | None = None) -> NoReturn:
             result = asyncio.run(test_connection(database_url, args.connection_id))
             print(_json.dumps(result), flush=True)
             rc = 0 if result.get("ok") else 1
+        elif args.cmd == "snapshot-balances":
+            # Wave v6 manual snapshot. Single-user, single-row.
+            async def _do_snapshot() -> int:
+                conn = await dbx.open_async_conn(database_url)
+                try:
+                    wrote = await balx.snapshot_portfolio(
+                        conn,
+                        user_id=args.user_id,
+                        snapshot_at=datetime.now(tz=UTC),
+                        source=args.source,
+                    )
+                    return 0 if wrote else 1
+                finally:
+                    await conn.close()
+
+            rc = asyncio.run(_do_snapshot())
         elif args.cmd == "http-server":
             from csj_worker.http_server import run as run_http
 

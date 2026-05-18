@@ -93,9 +93,10 @@ describe('POST /api/activities/trade', () => {
   });
 
   it('returns 400 VALIDATION on unknown extra keys (.strict)', async () => {
+    // v5: leverage is now a valid field; use a key that's definitely unknown.
     const req = jsonReq('http://localhost/api/activities/trade', {
       ...validBody,
-      leverage: '5',
+      totallyUnknownField: 'yes',
     });
     const res = await POST_TRADE(req, emptyCtx());
     expect(res.status).toBe(400);

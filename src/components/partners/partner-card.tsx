@@ -36,8 +36,6 @@ interface Props {
 }
 
 export function PartnerCard({ exchange, t }: Props) {
-  if (!exchange.referralUrl) return null;
-
   const kindLabel =
     exchange.kind === "cex" ? t("partners.kindCex") : t("partners.kindDex");
 
@@ -116,19 +114,27 @@ export function PartnerCard({ exchange, t }: Props) {
       </div>
 
       {/* ── CTA ────────────────────────────────────────────────────────── */}
-      <a
-        href={exchange.referralUrl}
-        target="_blank"
-        rel="noopener noreferrer sponsored"
-        className={cn(
-          "group flex items-center justify-between gap-2 border-t border-border bg-text px-5 py-3 text-app transition-opacity hover:opacity-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-text",
-        )}
-      >
-        <span className="font-mono text-[11px] uppercase tracking-[0.16em]">
-          {t("partners.signupCta", { exchange: exchange.displayName })}
-        </span>
-        <ArrowUpRight className="h-3.5 w-3.5 transition-transform group-hover:-translate-y-px group-hover:translate-x-px" />
-      </a>
+      {exchange.referralUrl ? (
+        <a
+          href={exchange.referralUrl}
+          target="_blank"
+          rel="noopener noreferrer sponsored"
+          className={cn(
+            "group flex items-center justify-between gap-2 border-t border-border bg-text px-5 py-3 text-app transition-opacity hover:opacity-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-text",
+          )}
+        >
+          <span className="font-mono text-[11px] uppercase tracking-[0.16em]">
+            {t("partners.signupCta", { exchange: exchange.displayName })}
+          </span>
+          <ArrowUpRight className="h-3.5 w-3.5 transition-transform group-hover:-translate-y-px group-hover:translate-x-px" />
+        </a>
+      ) : (
+        <div className="flex items-center justify-between gap-2 border-t border-border bg-subtle px-5 py-3 text-text-tertiary">
+          <span className="font-mono text-[10px] uppercase tracking-[0.16em]">
+            {t("partners.noReferral")}
+          </span>
+        </div>
+      )}
     </article>
   );
 }

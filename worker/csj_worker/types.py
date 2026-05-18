@@ -231,6 +231,59 @@ class CanonicalPosition(CanonicalBase):
 
 
 # ---------------------------------------------------------------------------
+# Balance tracker (Wave v6) — per-wallet, per-asset live state
+# ---------------------------------------------------------------------------
+
+
+class WalletType(str, Enum):
+    """Canonical wallet-type bucket.
+
+    Stored as a free-form text column in Postgres (see v6 migration) so that
+    new venues with new wallet types don't force a schema migration; this
+    enum is the *worker-emitted* set of canonical values. Adapters mapping a
+    venue-specific string into this set is enforced in
+    ``csj_worker.adapters.generic`` (the universal adapter) — see
+    ``_MARKET_TYPE_TO_WALLET_TYPE``.
+    """
+
+    SPOT = "spot"
+    MARGIN = "margin"               # legacy / aggregate margin wallet
+    CROSS_MARGIN = "cross_margin"
+    ISOLATED_MARGIN = "isolated_margin"
+    FUTURES = "futures"             # USDT-M / USDC-M / inverse perp; unified by venue
+    EARN = "earn"
+    FUNDING = "funding"             # transfer-in / staging wallet on some venues
+
+
+class CanonicalBalance(CanonicalBase):
+    """One (connection, wallet_type, asset, chain) balance row.
+
+    Quantity / USD types match ``exchange_balances`` columns 1:1. The DB
+    upsert is keyed on ``(exchange_connection_id, wallet_type, asset,
+    coalesce(chain, ''))`` so emitting two rows with same key in one batch
+    is an idempotency bug — adapters MUST coalesce per-wallet duplicates
+    before yielding.
+
+    Pricing fields (``usd_price`` / ``usd_value``) are filled in by
+    ``prices.resolve_usd_prices`` after the adapter returns the raw amount.
+    ``None`` means we couldn't price the asset; the row is still written so
+    the user can see the holding in the UI (with a "—" in the USD column).
+    """
+
+    exchange_connection_id: str
+    wallet_type: WalletType
+    asset: str               # uppercase canonical code (BTC, ETH, USDT, ...)
+    chain: str | None = None # "ERC20" / "BSC" / "TRC20" / None for unified
+    total: Decimal
+    available: Decimal = Decimal(0)
+    locked: Decimal = Decimal(0)
+    borrowed: Decimal = Decimal(0)
+    usd_price: Decimal | None = None
+    usd_value: Decimal | None = None
+    snapshot_at: datetime
+
+
+# ---------------------------------------------------------------------------
 # Credentials
 # ---------------------------------------------------------------------------
 

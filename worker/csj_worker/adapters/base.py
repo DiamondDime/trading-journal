@@ -19,6 +19,7 @@ from csj_worker.types import (
     AdapterCapabilities,
     AdapterErrorCode,
     AuthMode,
+    CanonicalBalance,
     CanonicalFill,
     CanonicalFundingEvent,
     CanonicalPosition,
@@ -232,3 +233,42 @@ class ExchangeAdapter(ABC):
         """
         _ = credentials
         return set()
+
+    # ----- Balance tracker (Wave v6) -----
+    #
+    # Adapters that can enumerate every wallet on a venue (spot, margin,
+    # futures, earn, ...) override this and return one CanonicalBalance per
+    # (wallet_type, asset, chain) with nonzero ``total``. The orchestration
+    # layer attaches USD pricing and persists; the adapter is responsible
+    # only for the venue's raw view.
+    #
+    # Default impl raises ``AdapterUnsupportedError`` — opt-in per adapter
+    # so legacy adapters (Hyperliquid, etc.) can ship without this surface
+    # immediately. Skipping an adapter at run-time is handled in
+    # ``balances.fetch_and_persist_balances``.
+
+    async def fetch_balances_all_wallets(
+        self,
+        credentials: Credentials,
+    ) -> list[CanonicalBalance]:
+        """Return every nonzero balance across every wallet type on the venue.
+
+        Output contract:
+            - One row per (wallet_type, asset, chain) with total > 0.
+            - Decimal-only quantities (no float coercion mid-pipeline).
+            - ``snapshot_at`` set to a single timestamp for the whole batch
+              so the upsert layer sees a coherent boundary.
+
+        Adapters MUST emit rows with the canonical ``WalletType`` enum
+        (see ``csj_worker.types``). Venue-specific bucket names (Binance's
+        ``MARGIN``, OKX's ``ASSET``, etc.) are mapped to canonical values
+        in the adapter, NOT in the storage layer.
+
+        Raises ``AdapterUnsupportedError`` by default. Adapters opt in by
+        overriding.
+        """
+        _ = credentials
+        raise AdapterUnsupportedError(
+            f"Adapter for {self.exchange.value} does not implement "
+            f"fetch_balances_all_wallets"
+        )

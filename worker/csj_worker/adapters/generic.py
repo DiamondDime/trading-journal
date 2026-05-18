@@ -84,6 +84,7 @@ from csj_worker.types import (
     AdapterErrorCode,
     ApiKeyCredentials,
     AuthMode,
+    CanonicalBalance,
     CanonicalFill,
     CanonicalFundingEvent,
     CanonicalInstrument,
@@ -100,6 +101,7 @@ from csj_worker.types import (
     RateLimitPolicy,
     RetryPolicy,
     Side,
+    WalletType,
 )
 
 log: structlog.BoundLogger = structlog.get_logger(__name__)
@@ -185,6 +187,20 @@ _CCXT_KIND_MAP: dict[str, InstrumentKind] = {
     "option": InstrumentKind.OPTION,
     "delivery": InstrumentKind.DATED_FUTURE,
     "futures": InstrumentKind.DATED_FUTURE,
+}
+
+
+# ccxt market_type → canonical WalletType for the balance tracker.
+# Wave v6: drives ``fetch_balances_all_wallets`` row emission.
+_MARKET_TYPE_TO_WALLET_TYPE: dict[str, WalletType] = {
+    "spot":     WalletType.SPOT,
+    "swap":     WalletType.FUTURES,
+    "future":   WalletType.FUTURES,
+    "futures":  WalletType.FUTURES,
+    "delivery": WalletType.FUTURES,
+    "margin":   WalletType.MARGIN,
+    "earn":     WalletType.EARN,
+    "funding":  WalletType.FUNDING,
 }
 
 
@@ -1108,6 +1124,180 @@ class CcxtUniversalAdapter(ExchangeAdapter):
                     raw_count=len(raw_positions),
                     open_count=len(out),
                 )
+            finally:
+                await self._close_safely(client)
+
+        return out
+
+    # ------------------------------------------------------------------
+    # fetch_balances_all_wallets (Wave v6)
+    # ------------------------------------------------------------------
+
+    async def fetch_balances_all_wallets(
+        self,
+        credentials: Credentials,
+    ) -> list[CanonicalBalance]:
+        """Walk every market type configured for this venue, calling
+        ``fetch_balance`` per type and yielding one CanonicalBalance per
+        nonzero asset.
+
+        Per market_type → wallet_type mapping
+        -------------------------------------
+            'spot'      → WalletType.SPOT
+            'swap'      → WalletType.FUTURES
+            'future'    → WalletType.FUTURES
+            'delivery'  → WalletType.FUTURES
+            'margin'    → WalletType.MARGIN
+            'earn'      → WalletType.EARN
+            'funding'   → WalletType.FUNDING
+
+        Venues with separate cross/isolated margin endpoints surface a
+        single ``margin`` market type in ccxt's unified view; we emit
+        ``WalletType.MARGIN`` and rely on the venue API's nested response
+        to split cross vs isolated where possible (most venues don't).
+        Tightening that split is a per-venue concern handled in the
+        VenueConfig overrides; out of scope for v6.
+
+        Chain handling
+        --------------
+        ccxt's ``fetch_balance`` unified shape doesn't expose per-network
+        breakdowns — those live in ``fetch_deposit_addresses`` / venue
+        raw endpoints. We emit chain=None and accept that the user sees
+        a unified balance per asset. A future per-venue extension can
+        flip this on for venues that bury network info in `info`.
+
+        Failures
+        --------
+        - If load_markets fails for a market_type, we skip that bucket
+          (some venues 4xx on unsupported markets).
+        - If fetch_balance raises NotSupported, we skip.
+        - Anything else maps via _map_ccxt_error and is re-raised.
+
+        Snapshot timestamp
+        ------------------
+        ``snapshot_at`` is stamped fresh for each row (datetime.now(UTC)).
+        The orchestration layer in balances.py overrides this with a
+        cycle-wide value, so all rows in one fetch share a boundary.
+        """
+        if not isinstance(credentials, ApiKeyCredentials):
+            raise AdapterAuthError(
+                f"{self.config.code} requires ApiKeyCredentials"
+            )
+
+        snapshot_at = datetime.now(tz=UTC)
+        out: list[CanonicalBalance] = []
+        # Track (wallet_type, asset, chain) tuples we've emitted to dedupe —
+        # a venue might surface the same asset across multiple market types
+        # in degenerate edge cases (eg. unified-account mode).
+        seen: set[tuple[str, str, str]] = set()
+
+        for market_type in self.config.market_types:
+            wallet_type = _MARKET_TYPE_TO_WALLET_TYPE.get(
+                market_type, WalletType.SPOT
+            )
+
+            client = self._build_client(credentials, market_type=market_type)
+            try:
+                try:
+                    balance_resp: dict[str, Any] = await client.fetch_balance()
+                except ccxt_async.NotSupported:
+                    log.info(
+                        f"{self.config.code}.fetch_balance.unsupported",
+                        market_type=market_type,
+                    )
+                    continue
+                except ccxt_async.AuthenticationError as exc:
+                    raise AdapterAuthError(str(exc), cause=exc) from exc
+                except ccxt_async.PermissionDenied as exc:
+                    raise AdapterPermissionError(str(exc), cause=exc) from exc
+                except Exception as exc:
+                    raise _map_ccxt_error(exc, venue=self.config.code) from exc
+
+                # ccxt unified shape:
+                #   {
+                #     'free': {'BTC': 0.5, 'USDT': 100, ...},
+                #     'used': {'BTC': 0.1, 'USDT': 0, ...},
+                #     'total': {'BTC': 0.6, ...},
+                #     'info': <raw venue response>,
+                #     'BTC': {'free': 0.5, 'used': 0.1, 'total': 0.6}, ...
+                #   }
+                totals = balance_resp.get("total") or {}
+                free = balance_resp.get("free") or {}
+                used = balance_resp.get("used") or {}
+                info = balance_resp.get("info") or {}
+
+                # Margin borrowed is venue-specific; ccxt sometimes exposes
+                # it as `used` (when collateralized) or in the raw info.
+                # We try ccxt's `debt` first, then assume zero.
+                debt = balance_resp.get("debt") or {}
+
+                if not isinstance(totals, dict):
+                    log.debug(
+                        f"{self.config.code}.fetch_balance.empty_total",
+                        market_type=market_type,
+                    )
+                    continue
+
+                for asset, total_raw in totals.items():
+                    if not isinstance(asset, str) or not asset:
+                        continue
+                    asset_upper = asset.upper()
+                    # Skip zero-balance rows. We use Decimal coercion to
+                    # avoid 1e-18 dust appearing as nonzero.
+                    total = _to_decimal_safe(total_raw, default=Decimal(0))
+                    if total <= Decimal("0"):
+                        continue
+
+                    available = _to_decimal_safe(
+                        free.get(asset) if isinstance(free, dict) else None,
+                        default=Decimal(0),
+                    )
+                    locked = _to_decimal_safe(
+                        used.get(asset) if isinstance(used, dict) else None,
+                        default=Decimal(0),
+                    )
+                    borrowed = _to_decimal_safe(
+                        debt.get(asset) if isinstance(debt, dict) else None,
+                        default=Decimal(0),
+                    )
+
+                    key = (wallet_type.value, asset_upper, "")
+                    if key in seen:
+                        # Already emitted by a previous market_type — most
+                        # likely a unified-account venue surfacing the same
+                        # balance twice. Skip the duplicate.
+                        continue
+                    seen.add(key)
+
+                    out.append(
+                        CanonicalBalance(
+                            exchange_connection_id="",  # set by caller
+                            wallet_type=wallet_type,
+                            asset=asset_upper,
+                            chain=None,
+                            total=total,
+                            available=available,
+                            locked=locked,
+                            borrowed=borrowed,
+                            snapshot_at=snapshot_at,
+                        )
+                    )
+
+                # Hint: log how many we surfaced per market_type so
+                # the operator can spot a venue that's quiet (zero rows
+                # in spot when there should be holdings).
+                log.info(
+                    f"{self.config.code}.fetch_balance.market_complete",
+                    market_type=market_type,
+                    wallet_type=wallet_type.value,
+                    rows=len(out),
+                )
+
+                # Silence linter — `info` is captured for future per-venue
+                # extensions (e.g. parsing chain-specific buckets out of
+                # raw info). Keeping the reference makes the intent explicit.
+                _ = info
+
             finally:
                 await self._close_safely(client)
 

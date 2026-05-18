@@ -3,135 +3,176 @@
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { requireUser } from "@/lib/auth/server";
-import { createTrade, updateTradeActivity } from "@/lib/db/activity";
 import { CreateTradeBody } from "@/lib/db/zod-schemas";
+import {
+  createTradeFromWizard,
+  updateTradeFromWizard,
+  type ExtendedTradeInput,
+} from "./db";
 
-// Next.js's server-action machinery injects internal keys like
-// `$ACTION_ID_*` into the FormData. Strip them before Zod parsing since the
-// create-body schemas use `.strict()` which would otherwise 400 the request.
-function stripNextInternals(entries: [string, FormDataEntryValue][]): [string, FormDataEntryValue][] {
+// Next.js's server-action machinery injects internal keys like `$ACTION_ID_*`
+// into the FormData. Strip them before Zod parsing since CreateTradeBody is
+// strict and would 400 the request otherwise.
+function stripNextInternals(
+  entries: [string, FormDataEntryValue][],
+): [string, FormDataEntryValue][] {
   return entries.filter(([k]) => !k.startsWith("$ACTION_"));
 }
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-/** Mirror of activity.ts mapExchangeLabelToCode. Kept in sync by hand. */
-function mapExchangeLabelToCode(label: string): string {
-  const map: Record<string, string> = {
-    Binance: "binance",
-    Bybit: "bybit",
-    Hyperliquid: "hyperliquid",
-    Coinbase: "kraken",
-    OKX: "okx",
-    Other: "binance",
-  };
-  return map[label] ?? "binance";
-}
+// Fields the wizard collects beyond what CreateTradeBody validates. These
+// flow straight into createTradeFromWizard / updateTradeFromWizard as
+// pass-through — the action layer doesn't need to re-validate them.
+const PASSTHROUGH_KEYS = [
+  "tradeStatus",
+  "entryThesis",
+  "exitNote",
+  "counterparty",
+  "settlementDate",
+  "escrowMethod",
+  "premiumOrDiscountBps",
+  "collection",
+  "tokenId",
+  "marketplace",
+  "royaltyPct",
+  "strategyTag",
+  "taxTaxable",
+  "taxJurisdiction",
+  "positionId",
+] as const;
 
-function deriveTradeName(symbol: string, side: string, instrument: string): string {
-  const base = symbol.split(/[-/_]/)[0] || symbol;
-  return `${base} ${side} · ${instrument}`;
+/**
+ * Carve out the keys that aren't part of CreateTradeBody so the body parse
+ * doesn't trip on `.strict()`. We feed them straight through to the DB layer
+ * via ExtendedTradeInput. The action layer's only job for these is shape
+ * normalization (booleans, trimmed strings, presence).
+ */
+function partitionExtras(
+  raw: Record<string, string>,
+): {
+  body: Record<string, string>;
+  extras: Pick<ExtendedTradeInput, (typeof PASSTHROUGH_KEYS)[number]> & {
+    tradeStatus?: "open" | "closed" | "liquidated";
+    taxTaxable?: boolean;
+    positionId?: string;
+  };
+} {
+  const body: Record<string, string> = {};
+  const extras = {} as Pick<ExtendedTradeInput, (typeof PASSTHROUGH_KEYS)[number]> & {
+    tradeStatus?: "open" | "closed" | "liquidated";
+    taxTaxable?: boolean;
+    positionId?: string;
+  };
+
+  for (const [k, vRaw] of Object.entries(raw)) {
+    const v = vRaw.trim();
+    if (k === "status") {
+      // Status comes in as `status` from the form but the DB layer reads
+      // `tradeStatus`. Map and validate against the allowed values.
+      if (v === "open" || v === "closed" || v === "liquidated") {
+        extras.tradeStatus = v;
+      } else if (v) {
+        // Unknown status — let the DB layer reject through a CHECK violation
+        // rather than silently defaulting. Surface a clean error below.
+        throw new Error(
+          `Unknown trade status "${v}". Allowed: open / closed / liquidated.`,
+        );
+      }
+      continue;
+    }
+    if (k === "taxTaxable") {
+      extras.taxTaxable = v === "on" || v === "true" || v === "1";
+      continue;
+    }
+    if (k === "positionId") {
+      if (v && UUID_RE.test(v)) extras.positionId = v;
+      continue;
+    }
+    if ((PASSTHROUGH_KEYS as readonly string[]).includes(k)) {
+      if (v) (extras as Record<string, string>)[k] = v;
+      continue;
+    }
+    // Strip optional v5 fields that are blank — Zod's `.optional()` doesn't
+    // accept `""`, only `undefined`. Empty strings show up because the wizard
+    // emits every named input regardless of whether the user touched it.
+    if (
+      [
+        "leverage",
+        "marginMode",
+        "targetPrice",
+        "stopPrice",
+        "exitPlan",
+        "feesEntry",
+        "feesExit",
+        "fundingPaidUsd",
+        "fundingReceivedUsd",
+        "borrowCostUsd",
+        "fees",
+        "note",
+      ].includes(k)
+    ) {
+      if (v) body[k] = v;
+      continue;
+    }
+    body[k] = v;
+  }
+  return { body, extras };
 }
 
 /**
- * Server action for the trade wizard's final submit.
+ * Server action for the trade wizard's final submit. Validates the FormData,
+ * dispatches to create- or update-from-wizard, and redirects to the new
+ * detail page. On any validation/DB failure, redirects back to /review with
+ * the error URL-encoded so the page can surface it inline.
  *
- * Path: /add/trade/review → submits hidden form whose action targets this.
- * Validates the FormData payload via CreateTradeBody, inserts position +
- * activity + activity_trade transactionally, then redirects to the new
- * detail page. On any validation/DB failure, redirects back to /review
- * with the error URL-encoded so the page can surface it inline.
- *
- * Edit mode: when `edit=<uuid>` is in the FormData, the action dispatches
- * to updateTradeActivity instead of createTrade. The redirect target is
- * `/trades/<id>?from=wizard&action=edited` which the preview banner
- * picks up.
+ * Edit mode: when `edit=<uuid>` is in the FormData, dispatches to
+ * updateTradeFromWizard. The redirect target is
+ * `/trades/<id>?from=wizard&action=edited` which the preview banner picks up.
  */
 export async function logTrade(formData: FormData): Promise<void> {
   let activityId: string | null = null;
   let isEdit = false;
   let redirectError: string | null = null;
 
-  // Pull `edit` out separately so CreateTradeBody (which is .strict()) doesn't
-  // see it. The body schema validates the field payload, not the edit flag.
   const editRaw = formData.get("edit");
-  const editId = typeof editRaw === "string" && UUID_RE.test(editRaw) ? editRaw : null;
+  const editId =
+    typeof editRaw === "string" && UUID_RE.test(editRaw) ? editRaw : null;
 
-  // Capture the cleaned FormData payload BEFORE the auth call so that an
-  // auth error (or any other unexpected throw) still has the form fields
-  // available to round-trip via the redirect query string. Without this,
-  // a failure in requireUser() would surface the wizard back at /review
-  // with all inputs blanked out.
+  // Capture cleaned payload BEFORE auth so an unexpected throw still rides
+  // through the redirect query string with all inputs intact.
   const cleanedRaw: Record<string, string> = Object.fromEntries(
     stripNextInternals([...formData.entries()]).filter(([k]) => k !== "edit"),
   ) as Record<string, string>;
+
   try {
     const { id: userId } = await requireUser();
-    const input = CreateTradeBody.parse(cleanedRaw);
+    const { body, extras } = partitionExtras(cleanedRaw);
+
+    const input = CreateTradeBody.parse(body);
+    const extended: ExtendedTradeInput = { ...input, ...extras };
 
     if (editId) {
       isEdit = true;
-      // Recompute the same derived aggregates createTrade does, so the parent
-      // activity row stays consistent with the subtype row.
-      const opened = new Date(input.openedAt).toISOString();
-      const closed = new Date(input.closedAt).toISOString();
-      const qty = Number(input.qty);
-      const entry = Number(input.entryPrice);
-      const exit = Number(input.exitPrice);
-      const capital = Number(input.capital);
-      const fees = Number(input.fees ?? "0");
-      const dir = input.side === "short" ? -1 : 1;
-      const gross = qty * (exit - entry) * dir;
-      const net = gross - fees;
-      const daysHeld = (new Date(closed).getTime() - new Date(opened).getTime()) / 86_400_000;
-      const realizedApr =
-        capital > 0 && daysHeld > 0 ? (net / capital) * (365 / daysHeld) : null;
-      const exchangeCode = mapExchangeLabelToCode(input.exchange);
-      const instrumentKind = input.instrument === "future" ? "dated_future" : input.instrument;
-
-      const ok = await updateTradeActivity(
-        userId,
-        editId,
-        {
-          name: deriveTradeName(input.symbol, input.side, input.instrument),
-          regimeTags: input.regimeTags as string[],
-          openedAt: opened,
-          closedAt: closed,
-          capitalDeployedUsd: capital.toString(),
-          realizedPnlUsd: gross.toString(),
-          feesUsd: fees.toString(),
-          netPnlUsd: net.toString(),
-        },
-        {
-          symbol: input.symbol,
-          exchange: exchangeCode,
-          instrumentKind,
-          side: input.side,
-          entryThesis: input.note || null,
-          qty: qty.toString(),
-          avgEntryPrice: entry.toString(),
-          avgExitPrice: exit.toString(),
-          realizedApr: realizedApr !== null ? realizedApr.toString() : null,
-        },
-      );
+      const ok = await updateTradeFromWizard(userId, editId, extended);
       if (!ok) throw new Error("Trade not found or not owned by you");
       activityId = editId;
     } else {
-      const { id } = await createTrade(userId, input);
+      const { id } = await createTradeFromWizard(userId, extended);
       activityId = id;
     }
   } catch (e) {
     redirectError = e instanceof Error ? e.message : String(e);
   }
 
-  // Redirect must live outside try/catch: `redirect()` throws an internal
-  // signal that Next intercepts; if it's caught it never actually navigates.
+  // redirect() throws an internal signal Next intercepts — must live outside
+  // the try/catch or it never actually navigates.
   if (activityId) {
-    // Invalidate the dashboard + archive's cached render so the new/edited
-    // activity shows up immediately on next navigation. revalidatePath must
-    // run BEFORE redirect() — redirect throws, so any call after it dies.
+    // Invalidate the unified-feed pages so the new/edited trade shows up
+    // immediately on next navigation. revalidatePath must run BEFORE redirect.
     revalidatePath("/spreads");
     revalidatePath("/spreads/archive");
+    revalidatePath("/trades");
     const qs = isEdit ? "from=wizard&action=edited" : "from=wizard";
     redirect(`/trades/${activityId}?${qs}`);
   } else {

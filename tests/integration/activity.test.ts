@@ -155,8 +155,11 @@ describe('createTrade', () => {
       ).toThrow();
     });
     it('rejects unknown extra keys (.strict)', () => {
+      // v5: leverage / kind / marginMode etc. are now valid fields on
+      // CreateTradeBody. Use a definitively-unknown key for the strict
+      // rejection assertion.
       expect(() =>
-        CreateTradeBody.parse({ ...validInput, leverage: '10' } as Record<string, unknown>),
+        CreateTradeBody.parse({ ...validInput, totallyUnknownField: 'yes' } as Record<string, unknown>),
       ).toThrow();
     });
   });

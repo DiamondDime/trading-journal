@@ -1,0 +1,256 @@
+/**
+ * /balances — portfolio dashboard.
+ *
+ * Top-to-bottom layout per the master plan:
+ *   1. PortfolioHero (total + stable/volatile/24h)
+ *   2. PortfolioHistoryChart (range tabs as URL state)
+ *   3. AllocationPie + BalanceTable (assets desc)
+ *   4. Per-exchange cards grid
+ *   5. Drift banner (when any non-stable asset's drift > 0.5%)
+ *
+ * `force-dynamic` because balance state changes every sync — the page must
+ * never serve a prerender.
+ */
+import Link from "next/link";
+import { ArrowRight } from "lucide-react";
+import { requireUser } from "@/lib/auth/server";
+import {
+  getBalancesResponse,
+  getSnapshotSeries,
+} from "@/lib/db/balances";
+import type { UserId } from "@/types/canonical";
+import type { DriftHint } from "@/types/balances";
+import { PortfolioHero } from "@/components/balances/portfolio-hero";
+import { PortfolioHistoryChart } from "@/components/balances/portfolio-history-chart";
+import { AllocationPie } from "@/components/balances/allocation-pie";
+import { BalanceTable } from "@/components/balances/balance-table";
+import { ExchangeBalanceRow } from "@/components/balances/exchange-balance-row";
+
+export const dynamic = "force-dynamic";
+
+interface PageProps {
+  searchParams: Promise<{ range?: string | string[] }>;
+}
+
+function pickRange(
+  v: string | string[] | undefined,
+): "24h" | "7d" | "30d" | "90d" | "all" {
+  const raw = Array.isArray(v) ? v[0] : v;
+  if (raw === "24h" || raw === "7d" || raw === "90d" || raw === "all") return raw;
+  return "30d";
+}
+
+function fmtRelative(iso: string | null): string {
+  if (iso == null) return "no snapshot yet";
+  const ms = Date.now() - new Date(iso).getTime();
+  if (!Number.isFinite(ms) || ms < 0) return "moments ago";
+  const mins = Math.floor(ms / 60_000);
+  if (mins < 1) return "moments ago";
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs}h ago`;
+  const days = Math.floor(hrs / 24);
+  return `${days}d ago`;
+}
+
+export default async function BalancesPage({ searchParams }: PageProps) {
+  const { id: userId } = await requireUser();
+  const raw = await searchParams;
+  const range = pickRange(raw.range);
+
+  const [balances, series] = await Promise.all([
+    getBalancesResponse(userId as UserId),
+    getSnapshotSeries(userId as UserId, range),
+  ]);
+
+  const hasAnything = Number(balances.totalUsd) > 0;
+  const updatedLabel = fmtRelative(balances.snapshotAt);
+
+  return (
+    <div className="w-full">
+      <header className="flex flex-col gap-3 border-b border-border px-8 py-7 md:flex-row md:items-end md:justify-between lg:px-12">
+        <div>
+          <h1 className="font-serif text-[40px] font-medium leading-none tracking-tight text-text">
+            Balances
+          </h1>
+          <p className="mt-2 font-serif text-sm italic text-text-tertiary">
+            Live multi-asset portfolio across every connected exchange.
+          </p>
+        </div>
+        <div className="flex items-center gap-3">
+          <span className="font-mono text-[10px] uppercase tracking-[0.18em] text-text-tertiary">
+            updated {updatedLabel}
+          </span>
+          <RefreshButton />
+        </div>
+      </header>
+
+      <div className="space-y-8 px-8 py-8 lg:px-12">
+        {/* Drift banner — surfaced when journal fills math conflicts with reported balances. */}
+        {balances.drift.length > 0 && (
+          <DriftBanner drift={balances.drift} />
+        )}
+
+        {!hasAnything ? (
+          <EmptyState />
+        ) : (
+          <>
+            <PortfolioHero
+              totalUsd={balances.totalUsd}
+              stableUsd={balances.stableUsd}
+              volatileUsd={balances.volatileUsd}
+              delta24hUsd={balances.delta24hUsd}
+              snapshotLabel={`updated ${updatedLabel}`}
+            />
+
+            <PortfolioHistoryChart points={series.points} range={range} />
+
+            <section className="grid grid-cols-1 gap-6 xl:grid-cols-[280px_1fr]">
+              <div className="rounded-md border border-border bg-surface p-6 flex flex-col items-center">
+                <h3 className="self-start font-serif text-[12px] font-semibold uppercase tracking-[0.16em] text-text">
+                  Allocation
+                </h3>
+                <div className="mt-4">
+                  <AllocationPie assets={balances.byAsset} />
+                </div>
+              </div>
+              <div>
+                <div className="mb-3 flex items-baseline justify-between">
+                  <h3 className="font-serif text-[12px] font-semibold uppercase tracking-[0.16em] text-text">
+                    By asset
+                  </h3>
+                  <span className="font-mono text-[10px] uppercase tracking-[0.18em] text-text-tertiary">
+                    {balances.byAsset.length} assets
+                  </span>
+                </div>
+                <BalanceTable
+                  assets={balances.byAsset}
+                  totalUsd={balances.totalUsd}
+                />
+              </div>
+            </section>
+
+            <section>
+              <div className="mb-3 flex items-baseline justify-between">
+                <h3 className="font-serif text-[12px] font-semibold uppercase tracking-[0.16em] text-text">
+                  By exchange
+                </h3>
+                <span className="font-mono text-[10px] uppercase tracking-[0.18em] text-text-tertiary">
+                  {balances.byExchange.length} connection
+                  {balances.byExchange.length === 1 ? "" : "s"}
+                </span>
+              </div>
+              {balances.byExchange.length > 0 ? (
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
+                  {balances.byExchange.map((e) => (
+                    <ExchangeBalanceRow key={e.connectionId} entry={e} />
+                  ))}
+                </div>
+              ) : (
+                <div className="rounded-md border border-dashed border-border bg-surface py-10 text-center">
+                  <p className="font-serif text-sm italic text-text-tertiary">
+                    No exchange-level breakdown — connect a venue to see this.
+                  </p>
+                </div>
+              )}
+            </section>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Soft-amber banner shown when at least one non-stable asset's reported
+ * balance disagrees with the journal's fills math by more than 0.5%.
+ * Helps the user spot an unexpected transfer-in or a missed sync gap
+ * before it becomes a tax-reconciliation headache.
+ */
+function DriftBanner({ drift }: { drift: DriftHint[] }) {
+  const headliner = drift[0];
+  const more = drift.length - 1;
+  return (
+    <div className="flex flex-col gap-3 rounded-md border border-border border-l-4 border-l-signature bg-surface px-5 py-4 md:flex-row md:items-center md:justify-between">
+      <div className="flex-1">
+        <p className="font-serif text-[13px] font-semibold text-text">
+          Reported balance disagrees with your fills
+        </p>
+        <p className="mt-1 font-mono text-[12px] tabular-nums text-text-secondary">
+          {fmtBase(headliner.asset)}: fills suggest{" "}
+          <span className="text-text">
+            {fmtQtyHint(headliner.expectedQty, headliner.asset)}
+          </span>
+          , exchanges report{" "}
+          <span className="text-text">
+            {fmtQtyHint(headliner.reportedQty, headliner.asset)}
+          </span>{" "}
+          ({(headliner.driftPct * 100).toFixed(1)}%)
+        </p>
+        {more > 0 && (
+          <p className="mt-1 font-serif text-[11px] italic text-text-tertiary">
+            + {more} other asset{more === 1 ? "" : "s"} above the 0.5% threshold.
+          </p>
+        )}
+      </div>
+      <Link
+        href="/settings/exchanges"
+        className="inline-flex items-center gap-2 self-start rounded-md border border-border bg-app px-4 py-2 font-mono text-[11px] uppercase tracking-[0.16em] text-text hover:border-border-strong md:self-auto"
+      >
+        Investigate
+        <ArrowRight className="h-3 w-3" />
+      </Link>
+    </div>
+  );
+}
+
+function fmtBase(asset: string): string {
+  return asset.toUpperCase();
+}
+
+function fmtQtyHint(qty: string, asset: string): string {
+  const n = Number(qty);
+  if (!Number.isFinite(n)) return "—";
+  const dp = Math.abs(n) >= 100 ? 2 : Math.abs(n) >= 1 ? 4 : 6;
+  return `${n.toLocaleString("en-US", { maximumFractionDigits: dp })} ${asset}`;
+}
+
+function EmptyState() {
+  return (
+    <div className="rounded-md border border-dashed border-border bg-surface px-6 py-16 text-center">
+      <h2 className="font-serif text-[24px] font-medium leading-none text-text">
+        Connect an exchange to start tracking
+      </h2>
+      <p className="mx-auto mt-3 max-w-md font-serif text-sm italic text-text-tertiary">
+        The balance tracker pulls live spot, margin, and futures balances from
+        every exchange you connect — priced in USD, snapshotted hourly.
+      </p>
+      <Link
+        href="/settings/exchanges"
+        className="mt-6 inline-flex items-center gap-2 rounded-md bg-text px-5 py-2.5 font-mono text-[11px] uppercase tracking-[0.16em] text-app transition-opacity hover:opacity-90"
+      >
+        Connect exchange
+        <ArrowRight className="h-3.5 w-3.5" />
+      </Link>
+    </div>
+  );
+}
+
+/**
+ * Manual-refresh button — fires the `/api/balances/refresh` route which
+ * synchronously asks the worker to re-fetch every connection. Implemented
+ * as a tiny client island so the rest of the page stays server-rendered;
+ * the refresh action is a `<form>` with a server-side route handler.
+ */
+function RefreshButton() {
+  return (
+    <form action="/api/balances/refresh" method="post">
+      <button
+        type="submit"
+        className="rounded-md border border-border bg-app px-3 py-1.5 font-mono text-[10px] uppercase tracking-[0.18em] text-text hover:border-border-strong"
+      >
+        Refresh
+      </button>
+    </form>
+  );
+}

@@ -23,6 +23,11 @@ export function SettingsSubnav() {
       caption: t("subnav.settings.exchangesCaption"),
     },
     {
+      label: t("settings.sections.import"),
+      href: "/settings/import",
+      caption: t("subnav.settings.importCaption"),
+    },
+    {
       label: t("settings.sections.profile"),
       href: "/settings/profile",
       caption: t("subnav.settings.profileCaption"),

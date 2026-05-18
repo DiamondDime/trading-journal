@@ -4,15 +4,17 @@ import { WizardShell } from "@/components/wizard/wizard-shell";
 import {
   WizardField,
   WizardInput,
+  WizardSelect,
   WizardTextarea,
 } from "@/components/wizard/wizard-field";
-import { cn } from "@/lib/utils";
+import { WizardVestingEditor } from "@/components/wizard/wizard-vesting-editor";
 import { requireUser } from "@/lib/auth/server";
-import { getActivity } from "@/lib/db/activity";
 import { getT } from "@/lib/i18n/server";
+import { getSaleForEdit } from "../db";
 
-// Canonical enum values for sale_kind. Labels resolved via i18n at render.
-const SALE_KINDS = ["ido", "launchpad", "premarket", "otc"] as const;
+// Reads searchParams + (when editing) the DB — never static. Master plan §0:
+// every wizard step that reads searchParams must opt out of static rendering.
+export const dynamic = "force-dynamic";
 
 type Search = Promise<{ [key: string]: string | string[] | undefined }>;
 
@@ -21,6 +23,8 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 function getStr(sp: Awaited<Search>, key: string, fallback = ""): string {
   const v = sp[key];
   if (typeof v === "string") return v;
+  if (Array.isArray(v) && v.length > 0 && typeof v[0] === "string")
+    return v[0];
   return fallback;
 }
 
@@ -41,95 +45,92 @@ function isoToDate(iso: string | null): string {
 }
 
 /**
- * Decompose an activity_sale.vesting_schedule jsonb back into the three
- * wizard inputs (tgePct, cliffMonths, durationMonths). Inverse of
- * buildVestingSchedule in activity.ts.
- */
-function vestingScheduleToInputs(
-  schedule: Record<string, unknown> | null,
-): { tgePct: string; cliffMonths: string; durationMonths: string } {
-  if (!schedule) return { tgePct: "", cliffMonths: "", durationMonths: "" };
-  const kind = String(schedule.kind ?? "");
-  if (kind === "all_at_tge") {
-    return { tgePct: "100", cliffMonths: "0", durationMonths: "0" };
-  }
-  if (kind === "tge_plus_linear") {
-    const linearDays = Number(schedule.linear_days ?? 0);
-    return {
-      tgePct: String(schedule.tge_pct ?? 0),
-      cliffMonths: "0",
-      durationMonths: String(Math.round(linearDays / 30)),
-    };
-  }
-  if (kind === "cliff_plus_linear") {
-    const cliffDays = Number(schedule.cliff_days ?? 0);
-    const linearDays = Number(schedule.linear_days ?? 0);
-    return {
-      tgePct: String(schedule.tge_pct ?? 0),
-      cliffMonths: String(Math.round(cliffDays / 30)),
-      durationMonths: String(Math.round(linearDays / 30)),
-    };
-  }
-  return { tgePct: "", cliffMonths: "", durationMonths: "" };
-}
-
-/**
- * Sale details — the only data-entry step for Sale activities. Token
- * allocations don't appear in exchange trade history, so there's no
- * exchange-fills picker; the wizard collapses to Fields → Review.
+ * Step 2 — Sale details. Collects every column the wizard owns in the
+ * activity + activity_sale schema, including the v5 additions:
+ *   - tokenChain (drives the wallet-paste explorer)
+ *   - claimWallet (auto-import cost basis verification)
+ *   - saleDate (separate from tgeDate — premarket / OTC allocations have
+ *     distinct payment vs TGE moments)
+ *   - fundraisingRound / allocationMethod / tier / bonusPct (round metadata)
+ *   - vesting schedule via the 4-variant editor (replaces the v1
+ *     months×cliff approximation; emits days-granular JSON)
+ *   - eligibilityReason (structured, separate from free-form note/thesis)
+ *   - strategyTag / taxTaxable / taxJurisdiction (activity supertype v5 cols)
  *
- * Edit mode (`?edit=<uuid>`): pre-fill from the existing sale row. The
- * `edit` flag rides through hidden inputs to the server action, which
- * dispatches to the update path.
+ * Edit mode (`?edit=<uuid>`): pre-fill via getSaleForEdit, which loads the
+ * full v5 column set (more than the canonical getActivity returns). Hidden
+ * `edit` ride-through goes to /review and ultimately the server action's
+ * update branch.
  */
-export default async function SaleFieldsPage(props: {
-  searchParams: Search;
-}) {
+export default async function SaleFieldsPage(props: { searchParams: Search }) {
   const t = await getT();
-  const STEP_LABELS = [
-    t("wizard.sale.stepLabels.details"),
-    t("wizard.sale.stepLabels.review"),
-  ] as const;
   const sp = await props.searchParams;
   const editId = getStr(sp, "edit");
 
+  const STEP_LABELS = [
+    t("wizard.sale.stepLabels.kind"),
+    t("wizard.sale.stepLabels.details"),
+    t("wizard.sale.stepLabels.review"),
+  ] as const;
+
+  // DB defaults are only consulted when editing. URL params (from a /review
+  // bounce-back or kind-step ride-through) always win because they reflect
+  // the user's most recent typing.
   let dbDefaults: Partial<{
     saleKind: string;
     venue: string;
     asset: string;
     usdPaid: string;
     tokensAllocated: string;
+    saleDate: string;
     tgeDate: string;
-    tgeUnlockPct: string;
-    vestingCliffMonths: string;
-    vestingDurationMonths: string;
     currentPriceUsd: string;
     openedAt: string;
     regimeTags: string;
     serial: string;
+    tokenChain: string;
+    claimWallet: string;
+    fundraisingRound: string;
+    allocationMethod: string;
+    tier: string;
+    bonusPct: string;
+    vestingScheduleJson: string;
+    strategyTag: string;
+    taxTaxable: string;
+    taxJurisdiction: string;
+    eligibilityReason: string;
   }> = {};
   let editValid = false;
 
   if (editId && UUID_RE.test(editId)) {
     const { id: userId } = await requireUser();
-    const activity = await getActivity(userId, editId);
-    if (activity && activity.subtype.type === "sale") {
-      const s = activity.subtype.row;
-      const v = vestingScheduleToInputs(s.vestingSchedule);
+    const row = await getSaleForEdit(userId, editId);
+    if (row) {
       dbDefaults = {
-        saleKind: s.saleKind,
-        venue: s.saleVenue ?? "",
-        asset: s.tokenSymbol,
-        usdPaid: s.usdPaid,
-        tokensAllocated: s.tokensAllocated,
-        tgeDate: isoToDate(s.saleDate),
-        tgeUnlockPct: v.tgePct,
-        vestingCliffMonths: v.cliffMonths,
-        vestingDurationMonths: v.durationMonths,
-        currentPriceUsd: s.currentPriceUsd ?? "",
-        openedAt: isoToDateTimeLocal(activity.openedAt),
-        regimeTags: activity.regimeTags.join(", "),
-        serial: activity.id.slice(0, 4).toUpperCase(),
+        saleKind: row.saleKind,
+        venue: row.saleVenue ?? "",
+        asset: row.tokenSymbol,
+        usdPaid: row.usdPaid,
+        tokensAllocated: row.tokensAllocated,
+        saleDate: isoToDate(row.saleDate),
+        tgeDate: isoToDate(row.saleDate),
+        currentPriceUsd: row.currentPriceUsd ?? "",
+        openedAt: isoToDateTimeLocal(row.openedAt),
+        regimeTags: row.regimeTags.join(", "),
+        serial: row.activityId.slice(0, 4).toUpperCase(),
+        tokenChain: row.tokenChain ?? "",
+        claimWallet: row.claimWallet ?? "",
+        fundraisingRound: row.fundraisingRound ?? "",
+        allocationMethod: row.allocationMethod ?? "",
+        tier: row.tier ?? "",
+        bonusPct: row.bonusPct ?? "",
+        vestingScheduleJson: row.vestingSchedule
+          ? JSON.stringify(row.vestingSchedule)
+          : "",
+        strategyTag: row.strategyTag ?? "",
+        taxTaxable: row.taxTaxable ? "on" : "",
+        taxJurisdiction: row.taxJurisdiction ?? "",
+        eligibilityReason: row.eligibilityReason ?? "",
       };
       editValid = true;
     }
@@ -140,26 +141,50 @@ export default async function SaleFieldsPage(props: {
     venue: getStr(sp, "venue") || dbDefaults.venue || "",
     asset: getStr(sp, "asset") || dbDefaults.asset || "",
     usdPaid: getStr(sp, "usdPaid") || dbDefaults.usdPaid || "",
-    tokensAllocated: getStr(sp, "tokensAllocated") || dbDefaults.tokensAllocated || "",
+    tokensAllocated:
+      getStr(sp, "tokensAllocated") || dbDefaults.tokensAllocated || "",
+    saleDate: getStr(sp, "saleDate") || dbDefaults.saleDate || "",
     tgeDate: getStr(sp, "tgeDate") || dbDefaults.tgeDate || "",
-    tgeUnlockPct: getStr(sp, "tgeUnlockPct") || dbDefaults.tgeUnlockPct || "",
-    vestingCliffMonths: getStr(sp, "vestingCliffMonths") || dbDefaults.vestingCliffMonths || "",
-    vestingDurationMonths: getStr(sp, "vestingDurationMonths") || dbDefaults.vestingDurationMonths || "",
-    currentPriceUsd: getStr(sp, "currentPriceUsd") || dbDefaults.currentPriceUsd || "",
+    currentPriceUsd:
+      getStr(sp, "currentPriceUsd") || dbDefaults.currentPriceUsd || "",
     openedAt: getStr(sp, "openedAt") || dbDefaults.openedAt || "",
     note: getStr(sp, "note") || "",
     regimeTags: getStr(sp, "regimeTags") || dbDefaults.regimeTags || "",
+    tokenChain: getStr(sp, "tokenChain") || dbDefaults.tokenChain || "",
+    claimWallet: getStr(sp, "claimWallet") || dbDefaults.claimWallet || "",
+    fundraisingRound:
+      getStr(sp, "fundraisingRound") || dbDefaults.fundraisingRound || "",
+    allocationMethod:
+      getStr(sp, "allocationMethod") || dbDefaults.allocationMethod || "",
+    tier: getStr(sp, "tier") || dbDefaults.tier || "",
+    bonusPct: getStr(sp, "bonusPct") || dbDefaults.bonusPct || "",
+    tgeUnlockPct: getStr(sp, "tgeUnlockPct") || "",
+    vestingScheduleJson:
+      getStr(sp, "vestingScheduleJson") || dbDefaults.vestingScheduleJson || "",
+    strategyTag: getStr(sp, "strategyTag") || dbDefaults.strategyTag || "",
+    taxTaxable:
+      getStr(sp, "taxTaxable") || dbDefaults.taxTaxable || "",
+    taxJurisdiction:
+      getStr(sp, "taxJurisdiction") || dbDefaults.taxJurisdiction || "",
+    eligibilityReason:
+      getStr(sp, "eligibilityReason") || dbDefaults.eligibilityReason || "",
   };
 
-  const backHref = editValid ? `/sales/${editId}` : "/add";
+  const backHref = editValid
+    ? `/sales/${editId}`
+    : `/add/sale/kind?saleKind=${encodeURIComponent(defaults.saleKind)}`;
 
   return (
     <WizardShell
       type="sale"
-      step={1}
-      totalSteps={2}
+      step={2}
+      totalSteps={3}
       stepLabels={STEP_LABELS}
-      title={editValid ? t("wizard.sale.fields.titleEdit") : t("wizard.sale.fields.title")}
+      title={
+        editValid
+          ? t("wizard.sale.fields.titleEdit")
+          : t("wizard.sale.fields.title")
+      }
       subtitle={
         editValid
           ? t("wizard.sale.fields.subtitleEdit")
@@ -176,7 +201,9 @@ export default async function SaleFieldsPage(props: {
           </span>
           {" — "}
           <span className="font-serif italic">
-            {t("wizard.sale.fields.editingNote", { serial: dbDefaults.serial ?? "" })}
+            {t("wizard.sale.fields.editingNote", {
+              serial: dbDefaults.serial ?? "",
+            })}
           </span>
         </aside>
       )}
@@ -187,22 +214,14 @@ export default async function SaleFieldsPage(props: {
         className="flex flex-col gap-7"
       >
         {editValid && <input type="hidden" name="edit" value={editId} />}
-
-        {/* ── Kind ───────────────────────────────────────────────────── */}
-        <SectionLabel>{t("wizard.sale.fields.sections.kind")}</SectionLabel>
-        <RadioGrid
-          legend={t("wizard.sale.fields.kindLegend")}
-          requiredLabel={t("wizard.sale.fields.requiredHint")}
-          name="saleKind"
-          options={SALE_KINDS.map((k) => ({
-            value: k,
-            label: t(`wizard.sale.fields.kinds.${k}`),
-          }))}
-          defaultValue={defaults.saleKind}
-        />
+        {/* Carry the kind discriminator from step 1 into /review without
+            re-rendering it on this page. Users go back to /kind to change it. */}
+        <input type="hidden" name="saleKind" value={defaults.saleKind} />
 
         {/* ── Venue + token ─────────────────────────────────────────── */}
-        <SectionLabel>{t("wizard.sale.fields.sections.venueToken")}</SectionLabel>
+        <SectionLabel>
+          {t("wizard.sale.fields.sections.venueToken")}
+        </SectionLabel>
         <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
           <WizardField
             label={t("wizard.sale.fields.venue.label")}
@@ -235,10 +254,135 @@ export default async function SaleFieldsPage(props: {
               style={{ textTransform: "uppercase" }}
             />
           </WizardField>
+          <WizardField
+            label={t("wizard.sale.fields.tokenChain.label")}
+            htmlFor="tokenChain"
+            helper={t("wizard.sale.fields.tokenChain.helper")}
+          >
+            <WizardInput
+              id="tokenChain"
+              name="tokenChain"
+              defaultValue={defaults.tokenChain}
+              placeholder={t("wizard.sale.fields.tokenChain.placeholder")}
+              autoComplete="off"
+            />
+          </WizardField>
+          <WizardField
+            label={t("wizard.sale.fields.claimWallet.label")}
+            htmlFor="claimWallet"
+            helper={t("wizard.sale.fields.claimWallet.helper")}
+          >
+            <WizardInput
+              id="claimWallet"
+              name="claimWallet"
+              defaultValue={defaults.claimWallet}
+              placeholder={t("wizard.sale.fields.claimWallet.placeholder")}
+              autoComplete="off"
+            />
+          </WizardField>
+        </div>
+
+        {/* ── Round metadata ────────────────────────────────────────── */}
+        <SectionLabel>
+          {t("wizard.sale.fields.sections.round")}
+        </SectionLabel>
+        <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
+          <WizardField
+            label={t("wizard.sale.fields.fundraisingRound.label")}
+            htmlFor="fundraisingRound"
+            helper={t("wizard.sale.fields.fundraisingRound.helper")}
+          >
+            <WizardSelect
+              id="fundraisingRound"
+              name="fundraisingRound"
+              defaultValue={defaults.fundraisingRound}
+            >
+              <option value="">
+                {t("wizard.sale.fields.fundraisingRound.unset")}
+              </option>
+              <option value="seed">
+                {t("wizard.sale.fields.fundraisingRound.seed")}
+              </option>
+              <option value="private">
+                {t("wizard.sale.fields.fundraisingRound.private")}
+              </option>
+              <option value="public">
+                {t("wizard.sale.fields.fundraisingRound.public")}
+              </option>
+              <option value="strategic">
+                {t("wizard.sale.fields.fundraisingRound.strategic")}
+              </option>
+              <option value="other">
+                {t("wizard.sale.fields.fundraisingRound.other")}
+              </option>
+            </WizardSelect>
+          </WizardField>
+          <WizardField
+            label={t("wizard.sale.fields.allocationMethod.label")}
+            htmlFor="allocationMethod"
+            helper={t("wizard.sale.fields.allocationMethod.helper")}
+          >
+            <WizardSelect
+              id="allocationMethod"
+              name="allocationMethod"
+              defaultValue={defaults.allocationMethod}
+            >
+              <option value="">
+                {t("wizard.sale.fields.allocationMethod.unset")}
+              </option>
+              <option value="fcfs">
+                {t("wizard.sale.fields.allocationMethod.fcfs")}
+              </option>
+              <option value="lottery">
+                {t("wizard.sale.fields.allocationMethod.lottery")}
+              </option>
+              <option value="staking">
+                {t("wizard.sale.fields.allocationMethod.staking")}
+              </option>
+              <option value="whitelist">
+                {t("wizard.sale.fields.allocationMethod.whitelist")}
+              </option>
+              <option value="other">
+                {t("wizard.sale.fields.allocationMethod.other")}
+              </option>
+            </WizardSelect>
+          </WizardField>
+          <WizardField
+            label={t("wizard.sale.fields.tier.label")}
+            htmlFor="tier"
+            helper={t("wizard.sale.fields.tier.helper")}
+          >
+            <WizardInput
+              id="tier"
+              name="tier"
+              defaultValue={defaults.tier}
+              placeholder={t("wizard.sale.fields.tier.placeholder")}
+              autoComplete="off"
+            />
+          </WizardField>
+          <WizardField
+            label={t("wizard.sale.fields.bonusPct.label")}
+            htmlFor="bonusPct"
+            helper={t("wizard.sale.fields.bonusPct.helper")}
+          >
+            <WizardInput
+              id="bonusPct"
+              name="bonusPct"
+              type="number"
+              step="0.01"
+              min="-100"
+              max="500"
+              inputMode="decimal"
+              defaultValue={defaults.bonusPct}
+              placeholder="30"
+            />
+          </WizardField>
         </div>
 
         {/* ── Allocation ───────────────────────────────────────────── */}
-        <SectionLabel>{t("wizard.sale.fields.sections.allocation")}</SectionLabel>
+        <SectionLabel>
+          {t("wizard.sale.fields.sections.allocation")}
+        </SectionLabel>
         <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
           <WizardField
             label={t("wizard.sale.fields.usdPaid.label")}
@@ -276,12 +420,24 @@ export default async function SaleFieldsPage(props: {
               required
             />
           </WizardField>
-        </div>
-
-        {/* ── Vesting schedule ──────────────────────────────────────── */}
-        <SectionLabel>{t("wizard.sale.fields.sections.vesting")}</SectionLabel>
-        <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
-          <WizardField label={t("wizard.sale.fields.tgeDate.label")} htmlFor="tgeDate" required>
+          <WizardField
+            label={t("wizard.sale.fields.saleDate.label")}
+            htmlFor="saleDate"
+            helper={t("wizard.sale.fields.saleDate.helper")}
+          >
+            <WizardInput
+              id="saleDate"
+              name="saleDate"
+              type="date"
+              defaultValue={defaults.saleDate}
+            />
+          </WizardField>
+          <WizardField
+            label={t("wizard.sale.fields.tgeDate.label")}
+            htmlFor="tgeDate"
+            helper={t("wizard.sale.fields.tgeDate.helper")}
+            required
+          >
             <WizardInput
               id="tgeDate"
               name="tgeDate"
@@ -290,58 +446,56 @@ export default async function SaleFieldsPage(props: {
               required
             />
           </WizardField>
-          <WizardField
-            label={t("wizard.sale.fields.tgeUnlockPct.label")}
-            htmlFor="tgeUnlockPct"
-            helper={t("wizard.sale.fields.tgeUnlockPct.helper")}
-            required
-          >
-            <WizardInput
-              id="tgeUnlockPct"
-              name="tgeUnlockPct"
-              type="number"
-              step="1"
-              min="0"
-              max="100"
-              inputMode="numeric"
-              defaultValue={defaults.tgeUnlockPct}
-              placeholder="20"
-              required
-            />
-          </WizardField>
-          <WizardField
-            label={t("wizard.sale.fields.vestingCliff.label")}
-            htmlFor="vestingCliffMonths"
-            helper={t("wizard.sale.fields.vestingCliff.helper")}
-          >
-            <WizardInput
-              id="vestingCliffMonths"
-              name="vestingCliffMonths"
-              type="number"
-              step="1"
-              min="0"
-              inputMode="numeric"
-              defaultValue={defaults.vestingCliffMonths}
-              placeholder="6"
-            />
-          </WizardField>
-          <WizardField
-            label={t("wizard.sale.fields.vestingDuration.label")}
-            htmlFor="vestingDurationMonths"
-            helper={t("wizard.sale.fields.vestingDuration.helper")}
-          >
-            <WizardInput
-              id="vestingDurationMonths"
-              name="vestingDurationMonths"
-              type="number"
-              step="1"
-              min="0"
-              inputMode="numeric"
-              defaultValue={defaults.vestingDurationMonths}
-              placeholder="18"
-            />
-          </WizardField>
         </div>
+
+        {/* ── Vesting schedule ──────────────────────────────────────── */}
+        <SectionLabel>
+          {t("wizard.sale.fields.sections.vesting")}
+        </SectionLabel>
+        <WizardField
+          label={t("wizard.sale.fields.tgeUnlockPct.label")}
+          htmlFor="tgeUnlockPct"
+          helper={t("wizard.sale.fields.tgeUnlockPct.helper")}
+          required
+        >
+          <WizardInput
+            id="tgeUnlockPct"
+            name="tgeUnlockPct"
+            type="number"
+            step="1"
+            min="0"
+            max="100"
+            inputMode="numeric"
+            defaultValue={defaults.tgeUnlockPct}
+            placeholder="20"
+            required
+          />
+        </WizardField>
+        <WizardVestingEditor
+          name="vestingScheduleJson"
+          defaultValue={defaults.vestingScheduleJson}
+          labels={{
+            variantLabel: t("wizard.sale.fields.vesting.variantLabel"),
+            variants: {
+              all_at_tge: t("wizard.sale.fields.vesting.variants.allAtTge"),
+              tge_plus_linear: t(
+                "wizard.sale.fields.vesting.variants.tgePlusLinear",
+              ),
+              cliff_plus_linear: t(
+                "wizard.sale.fields.vesting.variants.cliffPlusLinear",
+              ),
+              custom: t("wizard.sale.fields.vesting.variants.custom"),
+            },
+            tgePctLabel: t("wizard.sale.fields.vesting.tgePct"),
+            linearDaysLabel: t("wizard.sale.fields.vesting.linearDays"),
+            cliffDaysLabel: t("wizard.sale.fields.vesting.cliffDays"),
+            customAddRow: t("wizard.sale.fields.vesting.customAddRow"),
+            customDate: t("wizard.sale.fields.vesting.customDate"),
+            customPct: t("wizard.sale.fields.vesting.customPct"),
+            customRunningTotal: t("wizard.sale.fields.vesting.customTotal"),
+            customOver100: t("wizard.sale.fields.vesting.customOver100"),
+          }}
+        />
 
         {/* ── Mark-to-market ────────────────────────────────────────── */}
         <SectionLabel>{t("wizard.sale.fields.sections.mtm")}</SectionLabel>
@@ -380,8 +534,25 @@ export default async function SaleFieldsPage(props: {
           </WizardField>
         </div>
 
-        {/* ── Thesis + tags ─────────────────────────────────────────── */}
-        <SectionLabel>{t("wizard.sale.fields.sections.thesis")}</SectionLabel>
+        {/* ── Thesis + tags + tax + strategy ─────────────────────────── */}
+        <SectionLabel>
+          {t("wizard.sale.fields.sections.thesis")}
+        </SectionLabel>
+        <WizardField
+          label={t("wizard.sale.fields.eligibilityReason.label")}
+          htmlFor="eligibilityReason"
+          helper={t("wizard.sale.fields.eligibilityReason.helper")}
+        >
+          <WizardInput
+            id="eligibilityReason"
+            name="eligibilityReason"
+            defaultValue={defaults.eligibilityReason}
+            placeholder={t(
+              "wizard.sale.fields.eligibilityReason.placeholder",
+            )}
+            autoComplete="off"
+          />
+        </WizardField>
         <WizardField
           label={t("wizard.sale.fields.note.label")}
           htmlFor="note"
@@ -395,19 +566,65 @@ export default async function SaleFieldsPage(props: {
             placeholder={t("wizard.sale.fields.note.placeholder")}
           />
         </WizardField>
-        <WizardField
-          label={t("wizard.sale.fields.regimeTags.label")}
-          htmlFor="regimeTags"
-          helper={t("wizard.sale.fields.regimeTags.helper")}
-        >
-          <WizardInput
-            id="regimeTags"
-            name="regimeTags"
-            defaultValue={defaults.regimeTags}
-            placeholder={t("wizard.sale.fields.regimeTags.placeholder")}
-            autoComplete="off"
-          />
-        </WizardField>
+        <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
+          <WizardField
+            label={t("wizard.sale.fields.regimeTags.label")}
+            htmlFor="regimeTags"
+            helper={t("wizard.sale.fields.regimeTags.helper")}
+          >
+            <WizardInput
+              id="regimeTags"
+              name="regimeTags"
+              defaultValue={defaults.regimeTags}
+              placeholder={t("wizard.sale.fields.regimeTags.placeholder")}
+              autoComplete="off"
+            />
+          </WizardField>
+          <WizardField
+            label={t("wizard.sale.fields.strategyTag.label")}
+            htmlFor="strategyTag"
+            helper={t("wizard.sale.fields.strategyTag.helper")}
+          >
+            <WizardInput
+              id="strategyTag"
+              name="strategyTag"
+              defaultValue={defaults.strategyTag}
+              placeholder={t("wizard.sale.fields.strategyTag.placeholder")}
+              autoComplete="off"
+            />
+          </WizardField>
+          <WizardField
+            label={t("wizard.sale.fields.taxJurisdiction.label")}
+            htmlFor="taxJurisdiction"
+            helper={t("wizard.sale.fields.taxJurisdiction.helper")}
+          >
+            <WizardInput
+              id="taxJurisdiction"
+              name="taxJurisdiction"
+              defaultValue={defaults.taxJurisdiction}
+              placeholder={t(
+                "wizard.sale.fields.taxJurisdiction.placeholder",
+              )}
+              autoComplete="off"
+            />
+          </WizardField>
+          <WizardField
+            label={t("wizard.sale.fields.taxTaxable.label")}
+            htmlFor="taxTaxable"
+            helper={t("wizard.sale.fields.taxTaxable.helper")}
+          >
+            <label className="flex cursor-pointer items-center gap-2 rounded-md border border-border bg-surface px-3 py-2 font-mono text-[11px] uppercase tracking-[0.14em] text-text-secondary has-[input:checked]:border-text has-[input:checked]:bg-subtle has-[input:checked]:text-text">
+              <input
+                type="checkbox"
+                id="taxTaxable"
+                name="taxTaxable"
+                defaultChecked={defaults.taxTaxable === "on"}
+                className="h-3 w-3 accent-text"
+              />
+              {t("wizard.sale.fields.taxTaxable.toggle")}
+            </label>
+          </WizardField>
+        </div>
 
         {/* ── Nav ────────────────────────────────────────────────────── */}
         <div className="mt-6 flex items-center justify-between border-t border-border pt-6">
@@ -438,62 +655,5 @@ function SectionLabel({ children }: { children: React.ReactNode }) {
     <h2 className="border-b border-border-subtle pb-2 font-serif text-[11px] font-semibold uppercase tracking-[0.18em] text-text-tertiary">
       {children}
     </h2>
-  );
-}
-
-/**
- * Radio grid for the sale-kind picker. Same pattern as the Trade flow's
- * RadioRow but with a 4-up grid that wraps on small screens.
- */
-function RadioGrid({
-  legend,
-  requiredLabel,
-  name,
-  options,
-  defaultValue,
-}: {
-  legend: string;
-  requiredLabel: string;
-  name: string;
-  options: { value: string; label: string }[];
-  defaultValue: string;
-}) {
-  const id = `radio-${name}`;
-  return (
-    <fieldset className="flex flex-col gap-1.5">
-      <legend
-        id={id}
-        className="mb-0.5 font-mono text-[10px] uppercase tracking-[0.16em] text-text-tertiary"
-      >
-        {legend}
-        <span className="ml-1.5 text-text-disabled">{requiredLabel}</span>
-      </legend>
-      <div
-        role="radiogroup"
-        aria-labelledby={id}
-        className="grid grid-cols-2 gap-2 md:grid-cols-4"
-      >
-        {options.map((opt) => (
-          <label
-            key={opt.value}
-            className={cn(
-              "flex cursor-pointer items-center justify-center rounded-md border px-3 py-2 font-mono text-[11px] uppercase tracking-[0.14em] transition-colors",
-              "border-border bg-surface text-text-secondary hover:border-border-strong hover:text-text",
-              "has-[input:checked]:border-text has-[input:checked]:bg-subtle has-[input:checked]:text-text"
-            )}
-          >
-            <input
-              type="radio"
-              name={name}
-              value={opt.value}
-              defaultChecked={defaultValue === opt.value}
-              required
-              className="sr-only"
-            />
-            {opt.label}
-          </label>
-        ))}
-      </div>
-    </fieldset>
   );
 }

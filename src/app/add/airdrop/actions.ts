@@ -3,8 +3,8 @@
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { requireUser } from "@/lib/auth/server";
-import { createAirdrop, updateAirdropActivity } from "@/lib/db/activity";
 import { CreateAirdropBody } from "@/lib/db/zod-schemas";
+import { createAirdropV5, updateAirdropV5, type AirdropExtras } from "./db";
 
 function stripNextInternals(entries: [string, FormDataEntryValue][]): [string, FormDataEntryValue][] {
   return entries.filter(([k]) => !k.startsWith("$ACTION_"));
@@ -12,19 +12,51 @@ function stripNextInternals(entries: [string, FormDataEntryValue][]): [string, F
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-function deriveAirdropName(asset: string, protocol: string): string {
-  return `${asset.toUpperCase()} · ${protocol} airdrop`;
+/**
+ * Fields the wizard sends but `CreateAirdropBody` doesn't recognise (strict
+ * schema). We strip them from the payload before zod parses, then handle
+ * them separately as `AirdropExtras`. The shared zod schema stays
+ * untouched — this preserves Wave-1's contract.
+ */
+const EXTRAS_KEYS = new Set([
+  "edit",
+  "validation",
+  "error",
+  "eligibilityConfidence",
+  "customTags",
+  "strategyTag",
+  "taxTaxable",
+  "taxJurisdiction",
+]);
+
+function extractExtras(raw: Record<string, string>): AirdropExtras {
+  const confidence = raw.eligibilityConfidence ?? "";
+  return {
+    strategyTag: raw.strategyTag?.trim() ? raw.strategyTag.trim() : null,
+    taxTaxable: raw.taxTaxable === "1" || raw.taxTaxable === "on" || raw.taxTaxable === "true",
+    taxJurisdiction: raw.taxJurisdiction?.trim() ? raw.taxJurisdiction.trim() : null,
+    customTagsRaw: raw.customTags ?? "",
+    eligibilityConfidence:
+      confidence === "snapshot_listed" ||
+      confidence === "expected_unconfirmed" ||
+      confidence === "claimed_confirmed"
+        ? confidence
+        : null,
+  };
 }
 
 /**
  * Server action for the airdrop wizard's final submit.
  *
- * Cost basis is always $0 for airdrops; net_pnl_usd captures the current
- * MTM value, realized_pnl_usd captures the income value at claim. The
- * row's redirect target is /airdrops/<new-uuid>?from=wizard.
+ * Status branches:
+ *   - status=pending → activity.status='pending', closed_at null, no income
+ *     event recorded. The wizard tells the trader they're tracking the drop
+ *     pre-claim.
+ *   - status=claimed → activity.status='claimed', realized = value_at_claim,
+ *     net_pnl = current_value − gas_cost.
  *
- * Edit mode: when `edit=<uuid>` is in the FormData, the action dispatches
- * to updateAirdropActivity. Redirect adds `action=edited`.
+ * Edit mode (`edit=<uuid>`): dispatches to updateAirdropV5; redirect picks
+ * up `action=edited` so the detail page shows the "Just saved" banner.
  */
 export async function logAirdrop(formData: FormData): Promise<void> {
   let activityId: string | null = null;
@@ -34,53 +66,36 @@ export async function logAirdrop(formData: FormData): Promise<void> {
   const editRaw = formData.get("edit");
   const editId = typeof editRaw === "string" && UUID_RE.test(editRaw) ? editRaw : null;
 
-  // Capture cleaned form payload BEFORE the auth call so wizard errors keep
-  // the user's inputs around for the redirect-back round trip.
-  const cleanedRaw: Record<string, string> = Object.fromEntries(
-    stripNextInternals([...formData.entries()]).filter(([k]) => k !== "edit"),
-  ) as Record<string, string>;
+  const allEntries = stripNextInternals([...formData.entries()]);
+  const rawAll: Record<string, string> = Object.fromEntries(allEntries) as Record<string, string>;
+
+  // Split the payload: zod-recognised keys go to the schema; everything else
+  // becomes AirdropExtras for the wizard-local helpers to consume.
+  const zodPayload: Record<string, string> = {};
+  for (const [k, v] of Object.entries(rawAll)) {
+    if (!EXTRAS_KEYS.has(k)) zodPayload[k] = v;
+  }
+  // Legacy alias: the form's `note` textarea is the eligibility free-text
+  // for v5. Map it onto `eligibilityReason` before zod parse so existing
+  // edit-paths keep working with both names.
+  if (zodPayload.note && !zodPayload.eligibilityReason) {
+    zodPayload.eligibilityReason = zodPayload.note;
+  }
+  delete zodPayload.note;
+
+  const extras = extractExtras(rawAll);
+
   try {
     const { id: userId } = await requireUser();
-    const input = CreateAirdropBody.parse(cleanedRaw);
+    const input = CreateAirdropBody.parse(zodPayload);
 
     if (editId) {
       isEdit = true;
-      // v5: status='pending' airdrops can edit without a claim_date yet.
-      // For the edit path, fall back to opened_at (today) when fields are
-      // absent; the Wave-2D wizard rewrite will surface a richer pending UX.
-      const claimIso = new Date(input.claimDate ?? new Date().toISOString()).toISOString();
-      const tokens = Number(input.tokensClaimed ?? '0');
-      const valueAtClaim = Number(input.usdValueAtClaim ?? '0');
-      const currentPrice = Number(input.currentPriceUsd ?? '0');
-      const currentValue = tokens * currentPrice;
-      const realized = valueAtClaim;
-      const netPnl = currentValue;
-
-      const ok = await updateAirdropActivity(
-        userId,
-        editId,
-        {
-          name: deriveAirdropName(input.asset, input.protocol),
-          regimeTags: input.regimeTags as string[],
-          openedAt: claimIso,
-          closedAt: claimIso,
-          realizedPnlUsd: realized.toString(),
-          netPnlUsd: netPnl.toString(),
-        },
-        {
-          tokenSymbol: input.asset.toUpperCase(),
-          protocol: input.protocol,
-          qtyReceived: tokens.toString(),
-          claimDate: claimIso,
-          valueAtReceiptUsd: valueAtClaim.toString(),
-          currentPriceUsd: currentPrice.toString(),
-          eligibilityReason: input.note || null,
-        },
-      );
+      const ok = await updateAirdropV5(userId, editId, input, extras);
       if (!ok) throw new Error("Airdrop not found or not owned by you");
       activityId = editId;
     } else {
-      const { id } = await createAirdrop(userId, input);
+      const { id } = await createAirdropV5(userId, input, extras);
       activityId = id;
     }
   } catch (e) {
@@ -88,16 +103,24 @@ export async function logAirdrop(formData: FormData): Promise<void> {
   }
 
   if (activityId) {
-    // Invalidate dashboard + archive: see trade/actions.ts for the order rule
-    // (revalidatePath runs before redirect because redirect throws).
+    // revalidate dashboard + archive — must run before redirect (redirect
+    // throws and short-circuits the rest of the action).
     revalidatePath("/spreads");
     revalidatePath("/spreads/archive");
+    revalidatePath("/airdrops");
     const qs = isEdit ? "from=wizard&action=edited" : "from=wizard";
     redirect(`/airdrops/${activityId}?${qs}`);
   } else {
+    // Preserve user input on the round trip back to /review so they don't
+    // re-type everything after a validation failure.
+    const preserve: Record<string, string> = {};
+    for (const [k, v] of Object.entries(rawAll)) {
+      if (k === "edit") continue;
+      preserve[k] = v;
+    }
     const qs = new URLSearchParams({
       error: redirectError ?? "Unknown error logging airdrop",
-      ...cleanedRaw,
+      ...preserve,
       ...(editId ? { edit: editId } : {}),
     }).toString();
     redirect(`/add/airdrop/review?${qs}`);

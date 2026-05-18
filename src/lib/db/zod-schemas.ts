@@ -1145,3 +1145,87 @@ export const UpdateSavedViewBody = z
   .strict();
 
 export type UpdateSavedViewData = z.infer<typeof UpdateSavedViewBody>;
+
+// ============================================================================
+// Balance tracker schemas (Wave v6)
+//
+// Match exchange_balances + portfolio_snapshots column shapes 1:1 so the
+// API routes can parse rows coming back from postgres.js with `.parse()`.
+// The DB column comments document the rationale for the decimal-as-string
+// fields inside the jsonb columns; we replicate the contract here.
+// ============================================================================
+
+export const WalletTypeSchema = z.enum([
+  'spot', 'margin', 'cross_margin', 'isolated_margin',
+  'futures', 'earn', 'funding',
+]);
+
+export const BalanceSourceSchema = z.enum(['worker', 'manual']);
+
+export const SnapshotSourceSchema = z.enum([
+  'scheduled', 'manual_refresh', 'event_driven',
+]);
+
+/**
+ * BalanceRow — one row from `public.exchange_balances` (camelCase via
+ * postgres.js transform). Decimals come back as strings; we validate the
+ * string shape via DecimalSchema (already defined above).
+ */
+export const BalanceRowSchema = z.object({
+  id:                   z.string().uuid(),
+  userId:               z.string().uuid(),
+  exchangeConnectionId: z.string().uuid(),
+  walletType:           WalletTypeSchema,
+  asset:                z.string(),
+  chain:                z.string().nullable(),
+  total:                DecimalSchema,
+  available:            DecimalSchema,
+  locked:               DecimalSchema,
+  borrowed:             DecimalSchema,
+  usdPrice:             DecimalSchema.nullable(),
+  usdValue:             DecimalSchema.nullable(),
+  snapshotAt:           z.string().datetime(),
+  source:               BalanceSourceSchema,
+  createdAt:            z.string().datetime(),
+  updatedAt:            z.string().datetime(),
+});
+
+export type BalanceRow = z.infer<typeof BalanceRowSchema>;
+
+/**
+ * PortfolioSnapshotRow — one row from `public.portfolio_snapshots`. The
+ * jsonb columns are typed as Record<string, string> because the migration
+ * stores decimals as strings inside the blob.
+ */
+export const PortfolioSnapshotRowSchema = z.object({
+  id:                 z.string().uuid(),
+  userId:             z.string().uuid(),
+  snapshotAt:         z.string().datetime(),
+  totalUsd:           DecimalSchema,
+  totalStableUsd:     DecimalSchema,
+  totalVolatileUsd:   DecimalSchema,
+  byExchange:         z.record(z.string(), z.string()),
+  byAsset:            z.record(z.string(), z.string()),
+  byChain:            z.record(z.string(), z.string()).nullable(),
+  driftFromFillsUsd:  DecimalSchema.nullable(),
+  source:             SnapshotSourceSchema,
+  createdAt:          z.string().datetime(),
+});
+
+export type PortfolioSnapshotRow = z.infer<typeof PortfolioSnapshotRowSchema>;
+
+/**
+ * `GET /api/balances/snapshot?range=...` query schema. The range is
+ * resolved server-side to a `since` timestamp.
+ */
+export const SnapshotRangeQuerySchema = z.object({
+  range: z.enum(['24h', '7d', '30d', '90d', 'all']).default('30d'),
+});
+
+export type SnapshotRangeQuery = z.infer<typeof SnapshotRangeQuerySchema>;
+
+/**
+ * Empty body for `POST /api/balances/refresh`. We don't accept a body —
+ * the user_id is derived from the authenticated session.
+ */
+export const RefreshBalancesBodySchema = z.object({}).strict().optional();

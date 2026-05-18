@@ -3,122 +3,164 @@
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { requireUser } from "@/lib/auth/server";
-import { createSale, updateSaleActivity } from "@/lib/db/activity";
-import { CreateSaleBody } from "@/lib/db/zod-schemas";
+import {
+  CreateSaleBody,
+  VestingScheduleSchema,
+} from "@/lib/db/zod-schemas";
+import {
+  createSaleFull,
+  updateSaleFull,
+  type SaleExtendedInput,
+} from "./db";
+import type { VestingSchedule } from "@/types/canonical";
 
-function stripNextInternals(entries: [string, FormDataEntryValue][]): [string, FormDataEntryValue][] {
+/**
+ * Server action for the sale wizard's final submit.
+ *
+ * v5 differences vs v1:
+ *   - the kind picker is its own step (/add/sale/kind) — the body still
+ *     carries saleKind as a hidden input
+ *   - vesting schedule arrives as a JSON-encoded discriminated union from
+ *     the WizardVestingEditor (4 variants incl. custom)
+ *   - additional columns: tokenChain, claimWallet, fundraisingRound,
+ *     allocationMethod, tier, bonusPct, strategyTag, taxTaxable,
+ *     taxJurisdiction, eligibilityReason
+ *   - status is derived from {tgeUnlockPct, tgeDate, vesting duration} —
+ *     see deriveSaleStatus in db.ts
+ *
+ * The action delegates create / update to db.ts (createSaleFull /
+ * updateSaleFull) so the full v5 column set is written atomically.
+ */
+
+// Next.js's server-action machinery injects internal keys like
+// `$ACTION_ID_*` into the FormData. Strip them before Zod parsing since the
+// create-body schemas use `.strict()` which would otherwise 400 the request.
+function stripNextInternals(
+  entries: [string, FormDataEntryValue][],
+): [string, FormDataEntryValue][] {
   return entries.filter(([k]) => !k.startsWith("$ACTION_"));
 }
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-function deriveSaleName(saleKind: string, asset: string, venue: string): string {
-  const kindLabel =
-    saleKind === "ido"
-      ? "IDO"
-      : saleKind.charAt(0).toUpperCase() + saleKind.slice(1);
-  return `${asset.toUpperCase()} — ${venue} ${kindLabel}`;
+/** Subset of valid fundraising_round values for the constraint check. */
+const FUNDRAISING_ROUNDS = [
+  "seed",
+  "private",
+  "public",
+  "strategic",
+  "other",
+] as const;
+type FundraisingRound = (typeof FUNDRAISING_ROUNDS)[number];
+
+const ALLOCATION_METHODS = [
+  "fcfs",
+  "lottery",
+  "staking",
+  "whitelist",
+  "other",
+] as const;
+type AllocationMethod = (typeof ALLOCATION_METHODS)[number];
+
+/**
+ * Parse the vesting JSON payload from the WizardVestingEditor. Returns null
+ * when the field is missing or invalid — the schedule column is nullable on
+ * the schema side, so a missing variant translates to "no schedule recorded".
+ */
+function parseVestingSchedule(raw: string | undefined): VestingSchedule | null {
+  if (!raw) return null;
+  try {
+    const parsed = JSON.parse(raw);
+    return VestingScheduleSchema.parse(parsed);
+  } catch {
+    return null;
+  }
 }
 
 /**
- * Mirror of activity.ts buildVestingSchedule. Encoded for the edit path so
- * the same shape lands in activity_sale.vesting_schedule jsonb.
+ * Derive the v5 SaleExtendedInput shape from raw FormData. Keeps the action
+ * thin: schema-side fields run through CreateSaleBody, supertype / round /
+ * vesting fields run through this helper.
  */
-function buildVestingSchedule(
-  tgePct: number,
-  cliffMonths: number,
-  durationMonths: number,
-):
-  | { kind: "all_at_tge" }
-  | { kind: "tge_plus_linear"; tge_pct: number; linear_days: number }
-  | { kind: "cliff_plus_linear"; cliff_days: number; linear_days: number; tge_pct?: number }
-  | null {
-  const cliffDays = cliffMonths * 30;
-  const linearDays = durationMonths * 30;
-  if (tgePct >= 100 && cliffDays === 0 && linearDays === 0) {
-    return { kind: "all_at_tge" };
-  }
-  if (cliffDays > 0) {
-    return {
-      kind: "cliff_plus_linear",
-      cliff_days: cliffDays,
-      linear_days: linearDays,
-      ...(tgePct > 0 ? { tge_pct: tgePct } : {}),
-    };
-  }
+function buildExtendedInput(
+  raw: Record<string, string>,
+): SaleExtendedInput {
+  const round = raw.fundraisingRound as FundraisingRound | "" | undefined;
+  const alloc = raw.allocationMethod as AllocationMethod | "" | undefined;
   return {
-    kind: "tge_plus_linear",
-    tge_pct: tgePct,
-    linear_days: linearDays,
+    saleDateIso: raw.saleDate || null,
+    vestingSchedule: parseVestingSchedule(raw.vestingScheduleJson),
+    tokenChain: raw.tokenChain || null,
+    claimWallet: raw.claimWallet || null,
+    fundraisingRound:
+      round && FUNDRAISING_ROUNDS.includes(round as FundraisingRound)
+        ? (round as FundraisingRound)
+        : null,
+    allocationMethod:
+      alloc && ALLOCATION_METHODS.includes(alloc as AllocationMethod)
+        ? (alloc as AllocationMethod)
+        : null,
+    tier: raw.tier || null,
+    bonusPct:
+      raw.bonusPct && Number.isFinite(Number(raw.bonusPct))
+        ? raw.bonusPct
+        : null,
+    strategyTag: raw.strategyTag || null,
+    taxTaxable: raw.taxTaxable === "on",
+    taxJurisdiction: raw.taxJurisdiction || null,
   };
 }
 
-/**
- * Server action for the sale wizard's final submit.
- *
- * Edit mode: when `edit=<uuid>` is in the FormData, the action dispatches
- * to updateSaleActivity. Redirect target adds `action=edited` for the
- * preview banner.
- */
 export async function logSale(formData: FormData): Promise<void> {
   let activityId: string | null = null;
   let isEdit = false;
   let redirectError: string | null = null;
 
   const editRaw = formData.get("edit");
-  const editId = typeof editRaw === "string" && UUID_RE.test(editRaw) ? editRaw : null;
+  const editId =
+    typeof editRaw === "string" && UUID_RE.test(editRaw) ? editRaw : null;
 
   // Capture cleaned form payload BEFORE the auth call so wizard errors keep
-  // the user's inputs around for the redirect-back round trip.
+  // the user's inputs around for the redirect-back round trip. Same pattern
+  // as /add/trade/actions.ts — auth errors should never blank the form.
   const cleanedRaw: Record<string, string> = Object.fromEntries(
-    stripNextInternals([...formData.entries()]).filter(([k]) => k !== "edit"),
+    stripNextInternals([...formData.entries()]).filter(
+      ([k]) => k !== "edit",
+    ),
   ) as Record<string, string>;
+
   try {
     const { id: userId } = await requireUser();
-    const input = CreateSaleBody.parse(cleanedRaw);
+
+    // CreateSaleBody is .strict() — fields it doesn't know about (the v5
+    // extras + the vesting JSON blob + the tax flags) would 400 unless we
+    // remove them before parsing. Pull them out into `extras` first.
+    const extras = buildExtendedInput(cleanedRaw);
+    const bodyOnly: Record<string, string> = { ...cleanedRaw };
+    [
+      "tokenChain",
+      "claimWallet",
+      "saleDate",
+      "fundraisingRound",
+      "allocationMethod",
+      "tier",
+      "bonusPct",
+      "vestingScheduleJson",
+      "strategyTag",
+      "taxTaxable",
+      "taxJurisdiction",
+      "eligibilityReason",
+    ].forEach((k) => delete bodyOnly[k]);
+
+    const input = CreateSaleBody.parse(bodyOnly);
 
     if (editId) {
       isEdit = true;
-      const openedIso = new Date(input.openedAt).toISOString();
-      const tgeIso = new Date(input.tgeDate).toISOString();
-      const usdPaid = Number(input.usdPaid);
-      const tokens = Number(input.tokensAllocated);
-      const currentPrice = Number(input.currentPriceUsd);
-      const currentValue = tokens * currentPrice;
-      const netPnl = currentValue - usdPaid;
-      const vestingSchedule = buildVestingSchedule(
-        input.tgeUnlockPct,
-        input.vestingCliffMonths ?? 0,
-        input.vestingDurationMonths ?? 0,
-      );
-
-      const ok = await updateSaleActivity(
-        userId,
-        editId,
-        {
-          name: deriveSaleName(input.saleKind, input.asset, input.venue),
-          status: input.tgeUnlockPct >= 100 ? "vesting" : "pending",
-          regimeTags: input.regimeTags as string[],
-          openedAt: openedIso,
-          capitalDeployedUsd: usdPaid.toString(),
-          realizedPnlUsd: "0",
-          netPnlUsd: netPnl.toString(),
-        },
-        {
-          tokenSymbol: input.asset.toUpperCase(),
-          saleKind: input.saleKind,
-          saleVenue: input.venue,
-          saleDate: tgeIso,
-          usdPaid: usdPaid.toString(),
-          tokensAllocated: tokens.toString(),
-          vestingSchedule,
-          currentPriceUsd: currentPrice.toString(),
-        },
-      );
+      const ok = await updateSaleFull(userId, editId, input, extras);
       if (!ok) throw new Error("Sale not found or not owned by you");
       activityId = editId;
     } else {
-      const { id } = await createSale(userId, input);
+      const { id } = await createSaleFull(userId, input, extras);
       activityId = id;
     }
   } catch (e) {
@@ -126,8 +168,9 @@ export async function logSale(formData: FormData): Promise<void> {
   }
 
   if (activityId) {
-    // Invalidate dashboard + archive: see trade/actions.ts for the order rule
-    // (revalidatePath runs before redirect because redirect throws).
+    // Invalidate dashboard + archive: see /add/trade/actions.ts for the
+    // order rule (revalidatePath runs before redirect because redirect
+    // throws).
     revalidatePath("/spreads");
     revalidatePath("/spreads/archive");
     const qs = isEdit ? "from=wizard&action=edited" : "from=wizard";

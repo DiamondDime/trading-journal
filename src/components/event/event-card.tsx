@@ -1,0 +1,174 @@
+import Link from "next/link";
+import { ArrowUpRight, ArrowRightLeft, Repeat2, ArrowDown, ArrowUp, Send, Image as ImageIcon, Skull, Asterisk } from "lucide-react";
+import type { MovementEventKind } from "@/types/canonical";
+import { cn } from "@/lib/utils";
+
+export interface EventCardItem {
+  /** event_log.id — drives the detail-page href. */
+  id: string;
+  kind: MovementEventKind;
+  /** Headline label used on the card title. */
+  title: string;
+  /** Short secondary line (e.g. "binance → arbitrum"). */
+  subtitle?: string | null;
+  /** Asset / token symbol. Optional — losses & "other" may not carry one. */
+  asset?: string | null;
+  /** Quantity moved. Decimal string. */
+  amount?: string | null;
+  /** USD value at time of movement. Decimal string. */
+  usdValue?: string | null;
+  /** Network/withdrawal fee in USD. */
+  feeUsd?: string | null;
+  /** ISO timestamp — when the movement happened. */
+  occurredAt: string;
+  /** Optional override for the link target. Defaults to /movement-events/<id>. */
+  href?: string;
+  /** When set, renders an "AS OF" timestamp under the headline. */
+  showAsOf?: boolean;
+  className?: string;
+}
+
+const KIND_LABEL: Record<MovementEventKind, string> = {
+  bridge:     "BRIDGE",
+  convert:    "CONVERT",
+  transfer:   "TRANSFER",
+  deposit:    "DEPOSIT",
+  withdrawal: "WITHDRAW",
+  nft_trade:  "NFT",
+  loss:       "LOSS",
+  other:      "OTHER",
+};
+
+const KIND_ICON: Record<MovementEventKind, React.ComponentType<{ className?: string }>> = {
+  bridge:     ArrowRightLeft,
+  convert:    Repeat2,
+  transfer:   Send,
+  deposit:    ArrowDown,
+  withdrawal: ArrowUp,
+  nft_trade:  ImageIcon,
+  loss:       Skull,
+  other:      Asterisk,
+};
+
+const KIND_TONE: Record<MovementEventKind, "up" | "down" | "neutral"> = {
+  bridge:     "neutral",
+  convert:    "neutral",
+  transfer:   "neutral",
+  deposit:    "up",
+  withdrawal: "down",
+  nft_trade:  "neutral",
+  loss:       "down",
+  other:      "neutral",
+};
+
+function fmtUsd(raw: string | null | undefined, opts: { signed?: boolean } = {}): string {
+  if (raw == null) return "—";
+  const n = Number(raw);
+  if (!Number.isFinite(n)) return "—";
+  if (n === 0) return "$0";
+  const abs = Math.abs(n).toLocaleString("en-US", {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 2,
+  });
+  const sign = opts.signed ? (n >= 0 ? "+" : "−") : n < 0 ? "−" : "";
+  return `${sign}$${abs}`;
+}
+
+function fmtQty(raw: string | null | undefined): string {
+  if (raw == null) return "—";
+  const n = Number(raw);
+  if (!Number.isFinite(n)) return "—";
+  return n.toLocaleString("en-US", { maximumSignificantDigits: 6 });
+}
+
+function fmtDate(iso: string): string {
+  const d = new Date(iso);
+  if (!Number.isFinite(d.getTime())) return iso;
+  return d.toLocaleDateString("en-US", {
+    month: "short",
+    day:   "numeric",
+    year:  "numeric",
+  });
+}
+
+/**
+ * Movement-event card. Visually shaped like SpreadListCard so the user
+ * can scan a mixed feed (although event_log lives separately, it shares
+ * the editorial visual language).
+ *
+ * Headline = USD value. No P&L formula — these are accounting events, not
+ * strategy. The tone hint comes from the *kind* (deposits up, withdrawals
+ * down, losses down) rather than a signed number.
+ */
+export function EventCard({ item }: { item: EventCardItem }) {
+  const href = item.href ?? `/movement-events/${item.id}`;
+  const Icon = KIND_ICON[item.kind];
+  const tone = KIND_TONE[item.kind];
+  const toneClass =
+    tone === "up" ? "text-up" : tone === "down" ? "text-down" : "text-text";
+
+  return (
+    <Link
+      href={href}
+      className={cn(
+        "group flex items-stretch gap-4 rounded-md border border-border bg-surface p-4 transition-all hover:bg-subtle hover:border-border-strong",
+        item.className,
+      )}
+    >
+      <div className="flex flex-1 flex-col gap-2 min-w-0">
+        <div className="flex items-center gap-2 text-[11px] text-text-tertiary">
+          <span className="inline-flex items-center gap-1.5">
+            <Icon className="h-3 w-3" aria-hidden />
+            <span className="uppercase tracking-[0.12em] font-medium">
+              {KIND_LABEL[item.kind]}
+            </span>
+          </span>
+          <span className="font-mono">·</span>
+          <time className="font-mono" dateTime={item.occurredAt}>
+            {fmtDate(item.occurredAt)}
+          </time>
+        </div>
+        <h3 className="font-serif text-[17px] font-medium leading-tight text-text">
+          {item.title}
+        </h3>
+        {(item.subtitle || item.asset) && (
+          <p className="flex items-center gap-1.5 text-[12px] text-text-tertiary truncate">
+            {item.asset && (
+              <span className="font-mono text-text-secondary">{item.asset}</span>
+            )}
+            {item.asset && item.subtitle && <span>·</span>}
+            <span className="truncate">{item.subtitle ?? ""}</span>
+          </p>
+        )}
+        <p className="mt-1 font-mono text-[12px] text-text-secondary truncate">
+          {fmtQty(item.amount)}
+          {item.feeUsd && Number(item.feeUsd) > 0 && (
+            <>
+              {" · "}
+              <span className="text-text-tertiary">
+                fee {fmtUsd(item.feeUsd)}
+              </span>
+            </>
+          )}
+        </p>
+      </div>
+
+      <div className="flex flex-col items-end justify-between">
+        <div className="flex items-center gap-1.5">
+          <span className="font-mono text-[9px] uppercase tracking-[0.16em] text-text-tertiary">
+            EVENT
+          </span>
+          <ArrowUpRight className="h-3.5 w-3.5 text-text-tertiary opacity-0 transition-opacity group-hover:opacity-100" />
+        </div>
+        <div className="text-right">
+          <p className={cn("font-serif text-[26px] leading-none tabular-nums", toneClass)}>
+            {fmtUsd(item.usdValue, { signed: tone !== "neutral" })}
+          </p>
+          <p className="mt-1 font-mono text-[10px] uppercase tracking-[0.14em] text-text-tertiary">
+            USD VALUE
+          </p>
+        </div>
+      </div>
+    </Link>
+  );
+}
