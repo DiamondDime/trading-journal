@@ -1,0 +1,186 @@
+# .github/workflows/release-desktop.yml
+#
+# Builds and publishes the macOS desktop app to GitHub Releases whenever a
+# tag matching `v*.*.*` is pushed (typically by `scripts/release.sh`).
+#
+# Outputs that land in the release:
+#   - Journal-<version>-mac-x64.dmg    (Intel)
+#   - Journal-<version>-mac-arm64.dmg  (Apple Silicon)
+#   - latest-mac.yml                    (consumed by electron-updater)
+#   - corresponding `.blockmap` files   (delta update support)
+#
+# Code signing & notarization are NOT performed yet — see electron/CODESIGNING.md
+# for the env vars to add as repo secrets once a Developer ID cert is available.
+# Until then, builds ship unsigned; users have to right-click → Open the .dmg.
+
+name: Release Desktop
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag to build (e.g. v0.2.0). Must already exist."
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  build-mac:
+    name: Build & publish macOS DMG
+    runs-on: macos-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          # Use the input tag for manual dispatches, default ref otherwise.
+          ref: ${{ inputs.tag || github.ref }}
+          fetch-depth: 0
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - name: Setup Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install deps
+        run: pnpm install --frozen-lockfile
+
+      - name: Typecheck (main project)
+        run: pnpm typecheck
+
+      - name: Typecheck (electron main process)
+        run: pnpm electron:typecheck
+
+      # Builds the universal-ish DMG. electron-builder uses the publish
+      # section in electron-builder.yml to know where to upload.
+      #
+      # Signing/notarization env vars (passed through but not present yet):
+      #   CSC_LINK                — base64-encoded .p12 cert OR file URL
+      #   CSC_KEY_PASSWORD        — password for the .p12
+      #   APPLE_ID                — Apple Developer account email
+      #   APPLE_APP_SPECIFIC_PASSWORD — app-specific password
+      #   APPLE_TEAM_ID           — 10-char team ID
+      #
+      # GITHUB_TOKEN is provided by Actions and lets electron-builder upload
+      # to the release that softprops/action-gh-release creates below.
+      - name: Build electron app
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Code-signing env (will be empty strings until secrets are added —
+          # electron-builder treats empty as "skip signing"):
+          CSC_LINK: ${{ secrets.CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: pnpm electron:build
+
+      - name: List artifacts (debug)
+        run: ls -lh dist-electron || true
+
+      # Upload all the macOS release artifacts to a GitHub Release. The
+      # release is auto-created if missing. `latest-mac.yml` is what
+      # electron-updater fetches at runtime to determine new versions.
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ inputs.tag || github.ref_name }}
+          name: ${{ inputs.tag || github.ref_name }}
+          draft: false
+          prerelease: false
+          fail_on_unmatched_files: true
+          files: |
+            dist-electron/*.dmg
+            dist-electron/*.dmg.blockmap
+            dist-electron/latest-mac.yml
+
+  # ---------------------------------------------------------------------------
+  # Windows job — mirrors build-mac on windows-latest.
+  #
+  # UNSIGNED. We don't buy an EV/OV code-signing cert, so the produced .exe
+  # will trigger SmartScreen on first run. Users bypass via right-click →
+  # "Run anyway". This is documented in ELECTRON.md.
+  #
+  # Outputs that land in the (shared) release:
+  #   - Journal-<version>-win-x64.exe   (NSIS installer)
+  #   - Journal-<version>-win-x64.exe.blockmap
+  #   - latest.yml                       (consumed by electron-updater on Win)
+  #
+  # softprops/action-gh-release appends to the release the build-mac job
+  # already created — concurrent uploads merge into the same release.
+  # ---------------------------------------------------------------------------
+  build-win:
+    name: Build & publish Windows NSIS
+    runs-on: windows-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag || github.ref }}
+          fetch-depth: 0
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - name: Setup Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install deps
+        run: pnpm install --frozen-lockfile
+
+      - name: Typecheck (main project)
+        run: pnpm typecheck
+
+      - name: Typecheck (electron main process)
+        run: pnpm electron:typecheck
+
+      # No signing env passed — electron-builder produces an unsigned .exe.
+      # GH_TOKEN is still useful so electron-builder can detect existing
+      # releases when --publish is invoked manually.
+      - name: Build electron app (Windows)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: pnpm electron:build:win
+
+      - name: List artifacts (debug)
+        run: dir dist-electron
+        shell: cmd
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ inputs.tag || github.ref_name }}
+          name: ${{ inputs.tag || github.ref_name }}
+          draft: false
+          prerelease: false
+          fail_on_unmatched_files: true
+          files: |
+            dist-electron/*.exe
+            dist-electron/*.exe.blockmap
+            dist-electron/latest.yml
+
+# ---------------------------------------------------------------------------
+# TODO when adding Linux builds:
+#   - Add `build-linux` on `ubuntu-latest`, target AppImage + deb.
+#   - The `softprops/action-gh-release` step in each job uploads to the same
+#     release — they merge automatically.
+# ---------------------------------------------------------------------------

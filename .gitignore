@@ -32,7 +32,6 @@ coverage/
 .claude/
 CLAUDE.md
 AGENTS.md
-.github/workflows/
 
 # Logs
 *.log
