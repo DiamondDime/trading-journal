@@ -219,6 +219,7 @@ export const ru: MessageDict = {
     closed: 'Закрыто',
     pending: 'В ожидании',
     vesting: 'В вестинге',
+    vested: 'Заклеймлен',
     claimed: 'Заклеймлен',
     winding_down: 'Сворачивается',
     unwinding: 'Закрывается',
@@ -3368,6 +3369,14 @@ export const ru: MessageDict = {
   spreadDetail: {
     editAria: 'Редактировать спред',
     manualVenue: 'Вручную',
+    spreadType: {
+      cash_carry: 'Кэш-энд-кэрри',
+      funding_capture: 'Захват фандинга',
+      cross_exchange_perp_arb: 'Меж-биржевой',
+      calendar: 'Календарный',
+      dex_cex_arb: 'DEX-CEX',
+      custom: 'Свой',
+    },
     heldSuffix: 'держал {duration}',
     backLink: '← к спредам',
     footerSerial: 'спред {serial} · csj',
@@ -3529,6 +3538,30 @@ export const ru: MessageDict = {
       netPnl: 'Чистый P&L',
       mtmMultiplier: 'MTM ×',
     },
+  },
+  spreadListCard: {
+    activityBadge: {
+      spread: 'СПРЕД',
+      trade: 'СДЕЛКА',
+      sale: 'ПРОДАЖА',
+      airdrop: 'ЭИРДРОП',
+      yield_position: 'ДОХОД',
+      option: 'ОПЦИОН',
+    },
+  },
+  optionCard: {
+    kindBadge: 'ОПЦИОН',
+    heroPnl: 'P&L',
+    heroNetPremium: 'Чистая премия',
+    singleLeg: 'Одна нога',
+    legsCount: {
+      one: '{count} нога',
+      few: '{count} ноги',
+      many: '{count} ног',
+      other: '{count} ног',
+    } as PluralLeaf,
+    expired: 'истёк',
+    dte: '{dte}д DTE',
   },
   optionDetail: {
     editAria: 'Редактировать опцион',

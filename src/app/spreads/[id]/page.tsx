@@ -40,13 +40,13 @@ import {
 
 export const dynamic = "force-dynamic";
 
-const SPREAD_TYPE_LABELS: Record<string, string> = {
-  cash_carry: "Cash-and-carry",
-  funding_capture: "Funding capture",
-  cross_exchange_perp_arb: "Cross-exchange",
-  calendar: "Calendar",
-  dex_cex_arb: "DEX-CEX",
-  custom: "Custom",
+const SPREAD_TYPE_KEY: Record<string, string> = {
+  cash_carry: "spreadDetail.spreadType.cash_carry",
+  funding_capture: "spreadDetail.spreadType.funding_capture",
+  cross_exchange_perp_arb: "spreadDetail.spreadType.cross_exchange_perp_arb",
+  calendar: "spreadDetail.spreadType.calendar",
+  dex_cex_arb: "spreadDetail.spreadType.dex_cex_arb",
+  custom: "spreadDetail.spreadType.custom",
 };
 
 interface DerivedLegs {
@@ -169,10 +169,13 @@ export default async function SpreadDetailPage({
   const legs = deriveLegs(s.spreadType, s.exchanges, s.primaryBase, manualLabel);
   const apr = fmtAprPct(s.apr);
   const headlineTone = apr.tone === "up" ? "text-up" : "text-down";
-  // Spread type label — pulled from the local SPREAD_TYPE_LABELS constant
-  // (English-only). i18n of the 6 spread-type strings is a separate scope
-  // touching the wizard, archive, dashboard, and worker mirrors.
-  const typeLabel = SPREAD_TYPE_LABELS[s.spreadType] ?? s.spreadType;
+  // Spread type label — resolved through the dict so the detail page reads
+  // in the user's locale. Falls back to the raw enum if a new type lands
+  // before the dict catches up.
+  const typeKey = SPREAD_TYPE_KEY[s.spreadType];
+  const typeLabel = typeKey
+    ? t(typeKey as Parameters<typeof t>[0])
+    : s.spreadType;
   const netPnl = Number(activity.netPnlUsd ?? 0);
   const capital = Number(activity.capitalDeployedUsd ?? 0);
   const daysLabel = fmtDaysLabel(activity.openedAt, activity.closedAt, t);

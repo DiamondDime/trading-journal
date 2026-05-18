@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { ArrowUpRight } from "lucide-react";
 import { ExchangeVenuesChips } from "@/components/settings/exchange-logo";
+import { getT } from "@/lib/i18n/server";
 
 type Status = "open" | "winding_down" | "orphaned" | "closed" | "expired" | "claimed" | "vested";
 
@@ -30,27 +31,27 @@ export type SpreadListItem = {
   venues?: string;
 };
 
-const STATUS_STYLES: Record<Status, { dot: string; label: string }> = {
-  open:         { dot: "bg-up",         label: "Open" },
-  winding_down: { dot: "bg-warn",       label: "Winding down" },
-  orphaned:     { dot: "bg-down",       label: "Orphaned" },
-  closed:       { dot: "bg-text-tertiary", label: "Closed" },
-  expired:      { dot: "bg-text-tertiary", label: "Expired" },
-  claimed:      { dot: "bg-text-tertiary", label: "Claimed" },
-  vested:       { dot: "bg-text-tertiary", label: "Vested" },
+const STATUS_DOT: Record<Status, string> = {
+  open:         "bg-up",
+  winding_down: "bg-warn",
+  orphaned:     "bg-down",
+  closed:       "bg-text-tertiary",
+  expired:      "bg-text-tertiary",
+  claimed:      "bg-text-tertiary",
+  vested:       "bg-text-tertiary",
 };
 
-const ACTIVITY_BADGE_LABEL: Record<ActivityType, string> = {
-  spread: "SPREAD",
-  trade: "TRADE",
-  sale: "SALE",
-  airdrop: "AIRDROP",
-  yield_position: "YIELD",
-  option: "OPTION",
-};
+function statusKey(s: Status): `status.${Status}` {
+  return `status.${s}` as const;
+}
 
-export function SpreadListCard({ item }: { item: SpreadListItem }) {
-  const status = STATUS_STYLES[item.status];
+function activityBadgeKey(a: ActivityType): `spreadListCard.activityBadge.${ActivityType}` {
+  return `spreadListCard.activityBadge.${a}` as const;
+}
+
+export async function SpreadListCard({ item }: { item: SpreadListItem }) {
+  const t = await getT();
+  const dot = STATUS_DOT[item.status];
   const isOrphaned = item.status === "orphaned";
   const toneClass =
     item.tone === "up"
@@ -70,8 +71,10 @@ export function SpreadListCard({ item }: { item: SpreadListItem }) {
       <div className="flex flex-1 flex-col gap-2 min-w-0">
         <div className="flex items-center gap-2 text-[11px]">
           <span className="inline-flex items-center gap-1.5 text-text-tertiary">
-            <span className={"h-1.5 w-1.5 rounded-full " + status.dot} />
-            <span className="uppercase tracking-[0.12em] font-medium">{status.label}</span>
+            <span className={"h-1.5 w-1.5 rounded-full " + dot} />
+            <span className="uppercase tracking-[0.12em] font-medium">
+              {t(statusKey(item.status))}
+            </span>
           </span>
           <span className="font-mono text-text-tertiary">·</span>
           <span className="font-mono text-text-tertiary">{item.serial}</span>
@@ -94,7 +97,7 @@ export function SpreadListCard({ item }: { item: SpreadListItem }) {
         <div className="flex items-center gap-1.5">
           {item.activityType && (
             <span className="font-mono text-[9px] uppercase tracking-[0.16em] text-text-tertiary">
-              {ACTIVITY_BADGE_LABEL[item.activityType]}
+              {t(activityBadgeKey(item.activityType))}
             </span>
           )}
           <ArrowUpRight className="h-3.5 w-3.5 text-text-tertiary opacity-0 transition-opacity group-hover:opacity-100" />

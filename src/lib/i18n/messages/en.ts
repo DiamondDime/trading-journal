@@ -217,6 +217,7 @@ export const en = {
     closed: 'Closed',
     pending: 'Pending',
     vesting: 'Vesting',
+    vested: 'Vested',
     claimed: 'Claimed',
     winding_down: 'Winding down',
     unwinding: 'Unwinding',
@@ -3419,6 +3420,14 @@ export const en = {
   spreadDetail: {
     editAria: 'Edit spread',
     manualVenue: 'Manual',
+    spreadType: {
+      cash_carry: 'Cash-and-carry',
+      funding_capture: 'Funding capture',
+      cross_exchange_perp_arb: 'Cross-exchange',
+      calendar: 'Calendar',
+      dex_cex_arb: 'DEX-CEX',
+      custom: 'Custom',
+    },
     heldSuffix: '{duration} held',
     backLink: '← back to spreads',
     footerSerial: 'spread {serial} · csj',
@@ -3580,6 +3589,28 @@ export const en = {
       netPnl: 'Net P&L',
       mtmMultiplier: 'MTM ×',
     },
+  },
+  spreadListCard: {
+    activityBadge: {
+      spread: 'SPREAD',
+      trade: 'TRADE',
+      sale: 'SALE',
+      airdrop: 'AIRDROP',
+      yield_position: 'YIELD',
+      option: 'OPTION',
+    },
+  },
+  optionCard: {
+    kindBadge: 'OPTION',
+    heroPnl: 'P&L',
+    heroNetPremium: 'Net premium',
+    singleLeg: 'Single leg',
+    legsCount: {
+      one: '{count} leg',
+      other: '{count} legs',
+    } as PluralLeaf,
+    expired: 'expired',
+    dte: '{dte}d DTE',
   },
   optionDetail: {
     editAria: 'Edit option',

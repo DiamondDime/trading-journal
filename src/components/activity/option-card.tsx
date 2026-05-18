@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { cn } from "@/lib/utils";
 import type { ActivityStatus } from "@/types/canonical";
+import { getT, getLocale } from "@/lib/i18n/server";
 
 export interface OptionCardProps {
   /** Activity supertype id — drives the detail href. */
@@ -42,21 +43,12 @@ const STATUS_DOT: Record<ActivityStatus, string> = {
   liquidated: "bg-down",
 };
 
-const STATUS_LABEL: Record<ActivityStatus, string> = {
-  open: "Open",
-  winding_down: "Winding down",
-  unwinding: "Unwinding",
-  orphaned: "Orphaned",
-  closed: "Closed",
-  expired: "Expired",
-  claimed: "Claimed",
-  vesting: "Vesting",
-  pending: "Pending",
-  liquidated: "Liquidated",
-};
+function statusKey(s: ActivityStatus): `status.${ActivityStatus}` {
+  return `status.${s}` as const;
+}
 
-function fmtUsd(n: number, signed = true): string {
-  const abs = Math.abs(n).toLocaleString("en-US", {
+function fmtUsd(n: number, intlLocale: string, signed = true): string {
+  const abs = Math.abs(n).toLocaleString(intlLocale, {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   });
@@ -82,7 +74,7 @@ function daysUntil(iso: string | null): number | null {
  *
  * Pure server component, no JS. Links to /options/[id].
  */
-export function OptionCard({
+export async function OptionCard({
   id,
   name,
   status,
@@ -96,11 +88,16 @@ export function OptionCard({
   serial,
   className,
 }: OptionCardProps) {
+  const t = await getT();
+  const locale = await getLocale();
+  const intlLocale = locale === "ru" ? "ru-RU" : "en-US";
   const isClosed = status === "closed" || status === "expired";
   const heroValue = isClosed
     ? realizedPnlUsd
     : netPremiumUsd ?? realizedPnlUsd;
-  const heroLabel = isClosed ? "P&L" : "Net premium";
+  const heroLabel = isClosed
+    ? t("optionCard.heroPnl")
+    : t("optionCard.heroNetPremium");
   const dte = daysUntil(earliestExpiry);
 
   const heroTone =
@@ -115,8 +112,8 @@ export function OptionCard({
   // Subtitle: "Vertical · 4 legs" / "Single leg" — mirrors v_activity_feed.card_subtitle.
   const subtitle =
     subtype === "option_spread" && spreadStyle
-      ? `${spreadStyle.replace(/_/g, " ")} · ${legCount} legs`
-      : "Single leg";
+      ? `${spreadStyle.replace(/_/g, " ")} · ${t.plural("optionCard.legsCount", legCount)}`
+      : t("optionCard.singleLeg");
 
   return (
     <Link
@@ -133,7 +130,7 @@ export function OptionCard({
           <span className="inline-flex items-center gap-1.5 text-text-tertiary">
             <span className={cn("h-1.5 w-1.5 rounded-full", STATUS_DOT[status])} />
             <span className="font-medium uppercase tracking-[0.12em]">
-              {STATUS_LABEL[status]}
+              {t(statusKey(status))}
             </span>
           </span>
           {serial && (
@@ -151,7 +148,9 @@ export function OptionCard({
                   dte < 0 ? "text-text-tertiary" : dte <= 7 ? "text-warn" : "text-text-tertiary",
                 )}
               >
-                {dte < 0 ? "expired" : `${dte}d DTE`}
+                {dte < 0
+                  ? t("optionCard.expired")
+                  : t("optionCard.dte", { dte })}
               </span>
             </>
           )}
@@ -168,7 +167,7 @@ export function OptionCard({
 
       <div className="flex flex-col items-end justify-between">
         <span className="font-mono text-[9px] uppercase tracking-[0.16em] text-text-tertiary">
-          OPTION
+          {t("optionCard.kindBadge")}
         </span>
         <div className="text-right">
           <p
@@ -177,7 +176,7 @@ export function OptionCard({
               heroTone,
             )}
           >
-            {heroValue === null ? "—" : fmtUsd(heroValue)}
+            {heroValue === null ? "—" : fmtUsd(heroValue, intlLocale)}
           </p>
           <p className="mt-1 font-mono text-[10px] uppercase tracking-[0.14em] text-text-tertiary">
             {heroLabel}
