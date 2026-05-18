@@ -2937,7 +2937,6 @@ export const ru: MessageDict = {
       },
     },
     option: {
-      title: 'Записать опцион',
       required: 'обязательное',
       stepLabels: {
         kind: 'Тип',
@@ -2985,19 +2984,12 @@ export const ru: MessageDict = {
         exitPlanDefault: 'Закрыть на 50% от max profit или перекатить при просадке 1.5x.',
         underlying: { label: 'Базовый актив', placeholder: 'BTC', helper: 'Спот-тикер (BTC, ETH)' },
         exchange: { label: 'Биржа', placeholder: 'deribit', helper: 'Где торгуется опцион' },
-        totalPremiumUsd: { label: 'Полная премия', placeholder: '4500', helper: 'Сумма премии по всем ногам' },
-        netPremiumUsd: { label: 'Чистая премия', placeholder: '-1500', helper: 'Лонг минус шорт. Отрицательная = кредит.' },
-        realizedPnlUsd: { label: 'Реализованный P&L', placeholder: '850', helper: 'Чистый P&L после раскрутки / экспирации' },
-        maxProfit: { label: 'Max profit USD', placeholder: '3000', helper: 'Переопределить выведенный max' },
-        maxLoss: { label: 'Max loss USD', placeholder: '2000', helper: 'Переопределить max loss' },
-        maxProfitUsd: { label: 'Макс. прибыль', placeholder: '2000', helper: 'Теоретический максимум на экспирации' },
-        maxLossUsd: { label: 'Макс. убыток', placeholder: '3000', helper: 'Теоретический максимум убытка' },
-        breakevenLower: { label: 'Нижняя точка безубытка', placeholder: '63000', helper: 'Нижний breakeven по цене' },
-        breakevenUpper: { label: 'Верхняя точка безубытка', placeholder: '70000', helper: 'Верхний breakeven по цене' },
+        maxProfit: { label: 'Max profit USD', helper: 'Переопределить выведенный max' },
+        maxLoss: { label: 'Max loss USD', helper: 'Переопределить max loss' },
         ivAtOpen: { label: 'IV на момент входа', placeholder: '0.62', helper: 'Подразумеваемая волатильность на входе' },
-        targetIvChangeBps: { label: 'Целевое IV (bps)', placeholder: '500', helper: 'Целевое движение IV' },
-        expectedHoldingDays: { label: 'Ожидаемые дни', placeholder: '14', helper: 'Сколько держать позицию' },
-        openedAt: { label: 'Открыто', placeholder: '', helper: 'Время открытия' },
+        targetIvChangeBps: { label: 'Целевое IV (bps)', helper: 'Целевое движение IV' },
+        expectedHoldingDays: { label: 'Ожидаемые дни', helper: 'Сколько держать позицию' },
+        openedAt: { label: 'Открыто', helper: 'Время открытия' },
         entryThesis: { label: 'Идея входа', placeholder: 'IV-краш после CPI', helper: 'Зачем эта структура здесь' },
         exitPlan: { label: 'План выхода', placeholder: 'Держим до 50% макс. прибыли', helper: 'Заранее зафиксированное правило выхода' },
         targetPrice: { label: 'Цель по базовому', placeholder: '67000', helper: 'Где структура даст макс.' },
@@ -3007,7 +2999,6 @@ export const ru: MessageDict = {
         regimeTags: { label: 'Метки режима', placeholder: 'high-iv, post-fed', helper: 'Через запятую' },
         taxTaxable: {
           label: 'Налоговое событие',
-          placeholder: '',
           helper: 'Помеить как генерирующее налоговое событие',
           checkboxLabel: 'Создаёт налоговое событие',
         },
@@ -3072,7 +3063,6 @@ export const ru: MessageDict = {
       },
     },
     movement: {
-      title: 'Записать движение',
       stepLabels: {
         kind: 'Тип',
         fields: 'Поля',
@@ -3161,10 +3151,6 @@ export const ru: MessageDict = {
           logMovement: 'Записать движение',
         },
       },
-    },
-    partners: {
-      kindCex: 'CEX',
-      kindDex: 'DEX',
     },
   },
   spreadDetail: {
@@ -3297,12 +3283,6 @@ export const ru: MessageDict = {
       premarket: 'Премаркет',
       otc: 'OTC',
     },
-    status: {
-      open: 'Открыта',
-      closed: 'Закрыта',
-      pending: 'В ожидании',
-      vesting: 'В вестинге',
-    },
   },
   airdropDetail: {
     editAria: 'Изменить эирдроп',
@@ -3325,11 +3305,6 @@ export const ru: MessageDict = {
     edit: 'Изменить',
     backLink: '← к эирдропам',
     footerLabel: 'эирдроп {serial} · csj',
-    status: {
-      pending: 'Ожидание',
-      claimed: 'Заклеймлен',
-      closed: 'Закрыт',
-    },
     table: {
       value: 'Значение',
       protocol: 'Протокол',
@@ -3400,7 +3375,6 @@ export const ru: MessageDict = {
   },
   numbers: {
     notEnoughData: 'Пока недостаточно данных',
-    placeholder: '—',
   },
   plurals: {
     activities: {
@@ -3408,12 +3382,6 @@ export const ru: MessageDict = {
       few: '{count} активности',
       many: '{count} активностей',
       other: '{count} активностей',
-    },
-    trades: {
-      one: '{count} сделка',
-      few: '{count} сделки',
-      many: '{count} сделок',
-      other: '{count} сделок',
     },
     spreads: {
       one: '{count} спред',
@@ -3432,18 +3400,6 @@ export const ru: MessageDict = {
       few: '{count} вида',
       many: '{count} видов',
       other: '{count} видов',
-    },
-    days: {
-      one: '{count} день',
-      few: '{count} дня',
-      many: '{count} дней',
-      other: '{count} дней',
-    },
-    daysAgo: {
-      one: '{count} день назад',
-      few: '{count} дня назад',
-      many: '{count} дней назад',
-      other: '{count} дней назад',
     },
   },
   balances: {
@@ -3581,7 +3537,6 @@ export const ru: MessageDict = {
         screenshots: 'Прикрепи скриншот позиции, дашборда валидатора или наград.',
       },
       columns: {
-        empty: ' ',
         value: 'Значение',
         field: 'Поле',
       },
@@ -3658,7 +3613,6 @@ export const ru: MessageDict = {
       deadline_overdue: 'Просрочено',
       drift_warning: 'Дрейф баланса',
     },
-    viewActivity: 'Открыть',
     dismiss: 'Закрыть',
   },
 };

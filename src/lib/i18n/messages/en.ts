@@ -2960,7 +2960,6 @@ export const en = {
       },
     },
     option: {
-      title: 'Log an option',
       required: 'required',
       stepLabels: {
         kind: 'Kind',
@@ -3032,19 +3031,12 @@ export const en = {
         exitPlanDefault: 'Close at 50% of max profit, or roll if down 1.5x.',
         underlying: { label: 'Underlying', placeholder: 'BTC', helper: 'Spot ticker (e.g. BTC, ETH)' },
         exchange: { label: 'Exchange', placeholder: 'deribit', helper: 'Where the option trades' },
-        totalPremiumUsd: { label: 'Total premium', placeholder: '4500', helper: 'Sum of premium across legs' },
-        netPremiumUsd: { label: 'Net premium', placeholder: '-1500', helper: 'Long minus Short. Negative = credit received.' },
-        realizedPnlUsd: { label: 'Realized P&L', placeholder: '850', helper: 'Net P&L after unwind / expiry' },
-        maxProfit: { label: 'Max profit USD', placeholder: '3000', helper: 'Override the derived max - leave blank to use the payoff curve' },
-        maxLoss: { label: 'Max loss USD', placeholder: '2000', helper: 'Override the derived max loss - leave blank to use the payoff curve' },
-        maxProfitUsd: { label: 'Max profit', placeholder: '2000', helper: 'Theoretical maximum at expiration' },
-        maxLossUsd: { label: 'Max loss', placeholder: '3000', helper: 'Theoretical maximum loss at expiration' },
-        breakevenLower: { label: 'Breakeven lower', placeholder: '63000', helper: 'Lower breakeven price' },
-        breakevenUpper: { label: 'Breakeven upper', placeholder: '70000', helper: 'Upper breakeven price' },
+        maxProfit: { label: 'Max profit USD', helper: 'Override the derived max - leave blank to use the payoff curve' },
+        maxLoss: { label: 'Max loss USD', helper: 'Override the derived max loss - leave blank to use the payoff curve' },
         ivAtOpen: { label: 'IV at open', placeholder: '0.62', helper: 'Implied vol when you opened' },
-        targetIvChangeBps: { label: 'Target IV change (bps)', placeholder: '500', helper: "IV move you're targeting - flips the trade sign" },
-        expectedHoldingDays: { label: 'Expected holding days', placeholder: '14', helper: 'Days you expect to be in the position' },
-        openedAt: { label: 'Opened at', placeholder: '', helper: 'When the position went on (local time)' },
+        targetIvChangeBps: { label: 'Target IV change (bps)', helper: "IV move you're targeting - flips the trade sign" },
+        expectedHoldingDays: { label: 'Expected holding days', helper: 'Days you expect to be in the position' },
+        openedAt: { label: 'Opened at', helper: 'When the position went on (local time)' },
         entryThesis: { label: 'Entry thesis', placeholder: 'IV-crush after CPI', helper: 'Why this structure here' },
         exitPlan: { label: 'Exit plan', placeholder: 'Hold to 50% max profit', helper: 'Pre-committed exit rule' },
         targetPrice: { label: 'Target underlying price', placeholder: '67000', helper: 'Where the structure pays max' },
@@ -3054,7 +3046,6 @@ export const en = {
         regimeTags: { label: 'Regime tags', placeholder: 'high-iv, post-fed, weekly', helper: 'Comma-separated regime labels' },
         taxTaxable: {
           label: 'Tax-event flag',
-          placeholder: '',
           helper: 'Flag this activity as taxable in your jurisdiction',
           checkboxLabel: 'Generates a taxable event',
         },
@@ -3119,7 +3110,6 @@ export const en = {
       },
     },
     movement: {
-      title: 'Log a movement',
       stepLabels: {
         kind: 'Kind',
         fields: 'Fields',
@@ -3232,10 +3222,6 @@ export const en = {
           logMovement: 'Log movement',
         },
       },
-    },
-    partners: {
-      kindCex: 'CEX',
-      kindDex: 'DEX',
     },
   },
   spreadDetail: {
@@ -3368,12 +3354,6 @@ export const en = {
       premarket: 'Premarket',
       otc: 'OTC',
     },
-    status: {
-      open: 'Open',
-      closed: 'Closed',
-      pending: 'Pending',
-      vesting: 'Vesting',
-    },
   },
   airdropDetail: {
     editAria: 'Edit airdrop',
@@ -3396,11 +3376,6 @@ export const en = {
     edit: 'Edit',
     backLink: '← back to airdrops',
     footerLabel: 'airdrop {serial} · csj',
-    status: {
-      pending: 'Pending',
-      claimed: 'Claimed',
-      closed: 'Closed',
-    },
     table: {
       value: 'Value',
       protocol: 'Protocol',
@@ -3471,16 +3446,11 @@ export const en = {
   },
   numbers: {
     notEnoughData: 'Not enough data yet',
-    placeholder: '—',
   },
   plurals: {
     activities: {
       one: '{count} activity',
       other: '{count} activities',
-    } as PluralLeaf,
-    trades: {
-      one: '{count} trade',
-      other: '{count} trades',
     } as PluralLeaf,
     spreads: {
       one: '{count} spread',
@@ -3493,14 +3463,6 @@ export const en = {
     views: {
       one: '{count} view',
       other: '{count} views',
-    } as PluralLeaf,
-    days: {
-      one: '{count} day',
-      other: '{count} days',
-    } as PluralLeaf,
-    daysAgo: {
-      one: '{count} day ago',
-      other: '{count} days ago',
     } as PluralLeaf,
   },
   balances: {
@@ -3636,7 +3598,6 @@ export const en = {
         screenshots: 'Drop a screenshot of the position, validator dashboard, or rewards.',
       },
       columns: {
-        empty: ' ',
         value: 'Value',
         field: 'Field',
       },
@@ -3713,7 +3674,6 @@ export const en = {
       deadline_overdue: 'Overdue',
       drift_warning: 'Balance drift',
     },
-    viewActivity: 'Open',
     dismiss: 'Dismiss',
   },
 } as const;

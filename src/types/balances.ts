@@ -206,18 +206,3 @@ export function isStableAsset(asset: string): boolean {
   return STABLECOINS.has(asset.toUpperCase());
 }
 
-/**
- * Display label for a wallet type. Centralized so the dashboard,
- * drill-down page, and any future surface stays consistent.
- */
-export function walletTypeLabel(wt: WalletType): string {
-  switch (wt) {
-    case "spot":            return "Spot";
-    case "margin":          return "Margin";
-    case "cross_margin":    return "Cross margin";
-    case "isolated_margin": return "Isolated margin";
-    case "futures":         return "Futures";
-    case "earn":            return "Earn";
-    case "funding":         return "Funding";
-  }
-}

@@ -15,9 +15,35 @@ import {
   type ExchangeBalanceDetail,
 } from "@/lib/db/balances";
 import { ExchangeLogo } from "@/components/settings/exchange-logo";
-import { walletTypeLabel } from "@/types/balances";
+import type { WalletType } from "@/types/balances";
 import type { UserId } from "@/types/canonical";
 import { getT, getLocale } from "@/lib/i18n/server";
+
+/**
+ * Snake-case wallet types ↔ camelCase i18n keys. The dict couldn't have
+ * snake-case keys (TS literal-types complain about underscores in some
+ * lookups), so we bridge here.
+ */
+function walletTypeKey(
+  wt: WalletType,
+):
+  | "balances.walletTypes.spot"
+  | "balances.walletTypes.margin"
+  | "balances.walletTypes.crossMargin"
+  | "balances.walletTypes.isolatedMargin"
+  | "balances.walletTypes.futures"
+  | "balances.walletTypes.earn"
+  | "balances.walletTypes.funding" {
+  switch (wt) {
+    case "cross_margin":    return "balances.walletTypes.crossMargin";
+    case "isolated_margin": return "balances.walletTypes.isolatedMargin";
+    case "spot":            return "balances.walletTypes.spot";
+    case "margin":          return "balances.walletTypes.margin";
+    case "futures":         return "balances.walletTypes.futures";
+    case "earn":            return "balances.walletTypes.earn";
+    case "funding":         return "balances.walletTypes.funding";
+  }
+}
 
 export const dynamic = "force-dynamic";
 
@@ -141,7 +167,7 @@ function ConnectionCard({
           <div key={w.walletType} className="px-6 py-5">
             <div className="mb-3 flex items-baseline justify-between">
               <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-text-tertiary">
-                {walletTypeLabel(w.walletType)}
+                {t(walletTypeKey(w.walletType))}
               </p>
               <p className="font-mono text-[13px] tabular-nums text-text-secondary">
                 {fmtUsd(w.totalUsd, intlLocale)}
