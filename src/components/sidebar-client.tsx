@@ -440,9 +440,6 @@ function SidebarFooter({ displayName, initials }: { displayName: string; initial
             <span className="text-[12px] text-text font-medium">
               {displayName}
             </span>
-            <span className="font-mono text-[10px] text-text-tertiary">
-              {t("sidebar.role")}
-            </span>
           </div>
         </div>
         <div className="flex items-center gap-1">

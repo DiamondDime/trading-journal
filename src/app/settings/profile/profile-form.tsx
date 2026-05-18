@@ -4,15 +4,15 @@ import { useActionState } from "react";
 import { useFormStatus } from "react-dom";
 import { useT } from "@/lib/i18n/client";
 import { cn } from "@/lib/utils";
+import { updateProfile } from "./actions";
 import {
   ALLOWED_CURRENCIES,
   ALLOWED_TIMEZONES,
   INITIAL_PROFILE_STATE,
-  updateProfile,
   type AllowedCurrency,
   type AllowedTimezone,
   type ProfileFormState,
-} from "./actions";
+} from "./constants";
 
 export interface ProfileFormProps {
   /** Pre-loaded values from the profiles row. */

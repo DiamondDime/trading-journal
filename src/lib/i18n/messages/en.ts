@@ -64,7 +64,6 @@ export const en = {
     },
     search: 'Search spreads, notes…',
     searchAria: 'Search spreads and notes',
-    role: 'admin',
   },
   header: {
     primaryNavAria: 'Primary',

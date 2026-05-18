@@ -66,7 +66,6 @@ export const ru: MessageDict = {
     },
     search: 'Поиск спредов, заметок…',
     searchAria: 'Поиск спредов и заметок',
-    role: 'админ',
   },
   header: {
     primaryNavAria: 'Основное',
