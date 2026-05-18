@@ -164,6 +164,29 @@ export const en = {
     en: 'EN',
     ru: 'RU',
   },
+  boundary: {
+    loading: {
+      title: 'Loading',
+      body: 'Pulling fresh data from your journal.',
+    },
+    error: {
+      title: 'Something broke on this page',
+      body: "It's not your fault. We hit an unexpected error while loading this section. Try again, or jump back home and come back.",
+      retry: 'Try again',
+      home: 'Back to dashboard',
+      digest: 'Error ID',
+    },
+    notFound: {
+      title: 'Page not found',
+      body: "We couldn't find what you were looking for. Maybe a stale link, or maybe the activity was deleted.",
+      home: 'Back to dashboard',
+    },
+    globalError: {
+      title: 'The app crashed',
+      body: 'A critical error stopped the app from rendering. Refresh the page or restart the app.',
+      retry: 'Refresh',
+    },
+  },
   fields: {
     asset: 'Asset',
     amount: 'Amount',
