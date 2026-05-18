@@ -477,14 +477,18 @@ function CalendarCell({ cell, chips, total, locale }: CalendarCellProps) {
     );
   }
 
+  // Empty cells render as a non-interactive <div>. Wrapping them in <Link>
+  // earlier had the cell pretending to drill into the archive even though
+  // there was nothing to drill into; clicking a blank day silently dumped
+  // the user on the unfiltered archive. Lighter affordance, less surprise.
   return (
-    <Link
-      href={href}
+    <div
+      role="presentation"
       aria-label={t("calendar.ariaCellEmpty", { date: fmtTooltipDate(cell.ymd, locale) })}
-      className="block focus:outline-none focus-visible:ring-2 focus-visible:ring-text rounded-md"
+      className="block rounded-md"
     >
       {inner}
-    </Link>
+    </div>
   );
 }
 
