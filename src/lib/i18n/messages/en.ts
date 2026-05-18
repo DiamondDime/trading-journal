@@ -3316,7 +3316,13 @@ export const en = {
     pageTitle: 'Balances',
     pageSubtitle: 'Live multi-asset portfolio across every connected exchange.',
     updatedAgo: 'updated {label}',
-    refresh: 'Refresh',
+    refresh: {
+      idle: 'Refresh',
+      loading: 'Refreshing',
+      ok: '{successful}/{total} refreshed',
+      retry: 'Retry',
+      networkError: 'Network error',
+    },
     hero: {
       total: 'Total portfolio',
       stable: 'Stable',
@@ -3326,6 +3332,8 @@ export const en = {
     history: {
       title: 'Portfolio history',
       caption: 'Total USD over time',
+      rangeNavAria: 'Range',
+      svgAriaLabel: 'Portfolio history',
       ranges: {
         h24: '24h',
         d7:  '7d',
@@ -3340,6 +3348,8 @@ export const en = {
       title: 'Allocation',
       topHolding: 'top holding',
       noData: 'No allocation data',
+      otherLabel: 'Other ({n})',
+      ariaLabel: 'Portfolio allocation pie',
     },
     byAsset: {
       title: 'By asset',

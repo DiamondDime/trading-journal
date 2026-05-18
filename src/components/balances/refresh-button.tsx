@@ -23,6 +23,7 @@ import * as React from "react";
 import { useRouter } from "next/navigation";
 import { Loader2, RefreshCw } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useT } from "@/lib/i18n/client";
 
 interface RefreshResult {
   ok: boolean;
@@ -42,6 +43,7 @@ type Phase =
 
 export function RefreshButton() {
   const router = useRouter();
+  const t = useT();
   const [phase, setPhase] = React.useState<Phase>({ kind: "idle" });
 
   // Clear the success message after 2s so the button doesn't permanently
@@ -73,12 +75,12 @@ export function RefreshButton() {
       router.refresh();
     } catch (e) {
       const err = e as Error;
-      setPhase({ kind: "error", message: err.message || "Network error" });
+      setPhase({ kind: "error", message: err.message || t("balances.refresh.networkError") });
     }
-  }, [router]);
+  }, [router, t]);
 
   const isLoading = phase.kind === "loading";
-  const label = renderLabel(phase);
+  const label = renderLabel(phase, t);
   const tone = renderTone(phase);
 
   return (
@@ -113,16 +115,16 @@ export function RefreshButton() {
   );
 }
 
-function renderLabel(phase: Phase): string {
+function renderLabel(phase: Phase, t: ReturnType<typeof useT>): string {
   switch (phase.kind) {
-    case "idle":    return "Refresh";
-    case "loading": return "Refreshing";
+    case "idle":    return t("balances.refresh.idle");
+    case "loading": return t("balances.refresh.loading");
     case "ok": {
       const { connections, errors } = phase.result;
       const successful = Math.max(0, connections - errors);
-      return `${successful}/${connections} refreshed`;
+      return t("balances.refresh.ok", { successful, total: connections });
     }
-    case "error":   return "Retry";
+    case "error":   return t("balances.refresh.retry");
   }
 }
 

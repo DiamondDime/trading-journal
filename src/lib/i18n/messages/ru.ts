@@ -3259,7 +3259,13 @@ export const ru: MessageDict = {
     pageTitle: 'Балансы',
     pageSubtitle: 'Живой мульти-ассетный портфель по всем подключённым биржам.',
     updatedAgo: 'обновлено {label}',
-    refresh: 'Обновить',
+    refresh: {
+      idle: 'Обновить',
+      loading: 'Обновляем',
+      ok: '{successful}/{total} обновлено',
+      retry: 'Повторить',
+      networkError: 'Ошибка сети',
+    },
     hero: {
       total: 'Весь портфель',
       stable: 'Стейблы',
@@ -3269,6 +3275,8 @@ export const ru: MessageDict = {
     history: {
       title: 'История портфеля',
       caption: 'USD во времени',
+      rangeNavAria: 'Период',
+      svgAriaLabel: 'История портфеля',
       ranges: {
         h24: '24ч',
         d7:  '7д',
@@ -3283,6 +3291,8 @@ export const ru: MessageDict = {
       title: 'Распределение',
       topHolding: 'топ-актив',
       noData: 'Данных по распределению нет',
+      otherLabel: 'Прочее ({n})',
+      ariaLabel: 'Диаграмма распределения портфеля',
     },
     byAsset: {
       title: 'По активам',

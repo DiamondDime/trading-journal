@@ -9,6 +9,7 @@
  * on the biggest holding.
  */
 import type { BalanceByAsset } from "@/types/balances";
+import { getT } from "@/lib/i18n/server";
 
 interface Props {
   assets: BalanceByAsset[];
@@ -37,7 +38,8 @@ interface Slice {
   fill: string;
 }
 
-export function AllocationPie({ assets, size = 240, topN = 5 }: Props) {
+export async function AllocationPie({ assets, size = 240, topN = 5 }: Props) {
+  const t = await getT();
   const pricedAssets = assets.filter(
     (a) => a.totalUsd != null && Number(a.totalUsd) > 0,
   );
@@ -48,7 +50,7 @@ export function AllocationPie({ assets, size = 240, topN = 5 }: Props) {
         style={{ width: size, height: size }}
       >
         <span className="font-serif text-xs italic text-text-tertiary">
-          No allocation data
+          {t("balances.allocation.noData")}
         </span>
       </div>
     );
@@ -71,7 +73,7 @@ export function AllocationPie({ assets, size = 240, topN = 5 }: Props) {
   if (rest.length > 0) {
     const restUsd = rest.reduce((s, a) => s + Number(a.totalUsd ?? 0), 0);
     slices.push({
-      asset: `Other (${rest.length})`,
+      asset: t("balances.allocation.otherLabel", { n: rest.length }),
       usd: restUsd,
       pct: restUsd / total,
       fill: OTHER_FILL,
@@ -111,7 +113,7 @@ export function AllocationPie({ assets, size = 240, topN = 5 }: Props) {
         width={size}
         height={size}
         role="img"
-        aria-label="Portfolio allocation pie"
+        aria-label={t("balances.allocation.ariaLabel")}
       >
         {paths.map((p, i) => (
           <path key={p.asset + i} d={p.d} fill={p.fill} />
@@ -129,7 +131,7 @@ export function AllocationPie({ assets, size = 240, topN = 5 }: Props) {
             fontSize: 11,
           }}
         >
-          top holding
+          {t("balances.allocation.topHolding")}
         </text>
         <text
           x={cx}

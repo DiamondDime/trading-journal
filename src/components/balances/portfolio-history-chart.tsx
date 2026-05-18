@@ -14,6 +14,7 @@
  */
 import Link from "next/link";
 import type { SnapshotPoint } from "@/types/balances";
+import { getT, getLocale } from "@/lib/i18n/server";
 
 interface Props {
   points: SnapshotPoint[];
@@ -26,11 +27,11 @@ interface Props {
 }
 
 const RANGES = [
-  { key: "24h", label: "24h" },
-  { key: "7d",  label: "7d" },
-  { key: "30d", label: "30d" },
-  { key: "90d", label: "90d" },
-  { key: "all", label: "All" },
+  { key: "24h", labelKey: "balances.history.ranges.h24" },
+  { key: "7d",  labelKey: "balances.history.ranges.d7" },
+  { key: "30d", labelKey: "balances.history.ranges.d30" },
+  { key: "90d", labelKey: "balances.history.ranges.d90" },
+  { key: "all", labelKey: "balances.history.ranges.all" },
 ] as const;
 
 function fmtUsdShort(v: number): string {
@@ -42,13 +43,16 @@ function fmtUsdShort(v: number): string {
   return `${sign}$${abs.toFixed(0)}`;
 }
 
-export function PortfolioHistoryChart({
+export async function PortfolioHistoryChart({
   points,
   range,
   baseHref = "/balances",
   width = 1000,
   height = 280,
 }: Props) {
+  const t = await getT();
+  const locale = await getLocale();
+  const intlLocale = locale === "ru" ? "ru-RU" : "en-US";
   const padding = { top: 16, right: 56, bottom: 22, left: 12 };
   const innerW = width - padding.left - padding.right;
   const innerH = height - padding.top - padding.bottom;
@@ -58,13 +62,13 @@ export function PortfolioHistoryChart({
       <div className="mb-4 flex items-baseline justify-between">
         <div>
           <h3 className="font-serif text-[12px] font-semibold uppercase tracking-[0.16em] text-text">
-            Portfolio history
+            {t("balances.history.title")}
           </h3>
           <p className="mt-1 font-serif text-[12px] italic text-text-tertiary">
-            Total USD over time
+            {t("balances.history.caption")}
           </p>
         </div>
-        <nav className="flex items-center gap-1" aria-label="Range">
+        <nav className="flex items-center gap-1" aria-label={t("balances.history.rangeNavAria")}>
           {RANGES.map((r) => {
             const active = r.key === range;
             return (
@@ -78,7 +82,7 @@ export function PortfolioHistoryChart({
                     : "text-text-tertiary hover:text-text")
                 }
               >
-                {r.label}
+                {t(r.labelKey)}
               </Link>
             );
           })}
@@ -89,8 +93,8 @@ export function PortfolioHistoryChart({
         <div className="flex h-[260px] w-full items-center justify-center rounded-md border border-dashed border-border">
           <p className="font-serif text-sm italic text-text-tertiary">
             {points.length === 0
-              ? "Portfolio history will appear after the first snapshot."
-              : "Waiting for more snapshots to build a curve."}
+              ? t("balances.history.emptyZero")
+              : t("balances.history.emptyOne")}
           </p>
         </div>
       ) : (
@@ -100,6 +104,8 @@ export function PortfolioHistoryChart({
           height={height}
           inner={{ w: innerW, h: innerH, pad: padding }}
           fmtUsdShort={fmtUsdShort}
+          intlLocale={intlLocale}
+          ariaLabel={t("balances.history.svgAriaLabel")}
         />
       )}
     </div>
@@ -112,6 +118,8 @@ function ChartSvg({
   height,
   inner,
   fmtUsdShort,
+  intlLocale,
+  ariaLabel,
 }: {
   points: SnapshotPoint[];
   width: number;
@@ -122,6 +130,8 @@ function ChartSvg({
     pad: { top: number; right: number; bottom: number; left: number };
   };
   fmtUsdShort: (v: number) => string;
+  intlLocale: string;
+  ariaLabel: string;
 }) {
   const values = points.map((p) => Number(p.totalUsd));
   const ts = points.map((p) => new Date(p.snapshotAt).getTime());
@@ -175,7 +185,7 @@ function ChartSvg({
       height={height}
       preserveAspectRatio="none"
       role="img"
-      aria-label="Portfolio history"
+      aria-label={ariaLabel}
     >
       <defs>
         <linearGradient id="balance-area" x1="0" y1="0" x2="0" y2="1">
@@ -222,7 +232,7 @@ function ChartSvg({
             className="fill-text-tertiary"
             style={{ fontFamily: "var(--font-jetbrains)", fontSize: 10 }}
           >
-            {new Date(points[i].snapshotAt).toLocaleDateString("en-US", {
+            {new Date(points[i].snapshotAt).toLocaleDateString(intlLocale, {
               month: "short",
               day: "numeric",
             })}

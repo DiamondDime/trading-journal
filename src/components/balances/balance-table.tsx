@@ -16,31 +16,32 @@
  */
 import { ExchangeChip } from "@/components/settings/exchange-logo";
 import type { BalanceByAsset } from "@/types/balances";
+import { getT, getLocale } from "@/lib/i18n/server";
 
 interface Props {
   assets: BalanceByAsset[];
   totalUsd: string;
 }
 
-function fmtUsd(value: string | null | undefined, signed = false): string {
+function fmtUsd(value: string | null | undefined, locale: string): string {
   if (value == null) return "—";
   const n = Number(value);
   if (!Number.isFinite(n)) return "—";
-  const sign = signed && n > 0 ? "+" : n < 0 ? "−" : "";
+  const sign = n < 0 ? "−" : "";
   const abs = Math.abs(n);
-  return `${sign}$${abs.toLocaleString("en-US", {
+  return `${sign}$${abs.toLocaleString(locale, {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   })}`;
 }
 
-function fmtQty(qty: string): string {
+function fmtQty(qty: string, locale: string): string {
   const n = Number(qty);
   if (!Number.isFinite(n)) return "—";
   // Heuristic: keep 8dp for sub-$1 quantities (BTC, ETH), 4dp for the
   // mid-range, 2dp for the long tail (stables, alts).
   const dp = Math.abs(n) >= 100 ? 2 : Math.abs(n) >= 1 ? 4 : 8;
-  return n.toLocaleString("en-US", { maximumFractionDigits: dp });
+  return n.toLocaleString(locale, { maximumFractionDigits: dp });
 }
 
 function fmtPct(asset: BalanceByAsset, total: number): string {
@@ -50,14 +51,17 @@ function fmtPct(asset: BalanceByAsset, total: number): string {
   return `${pct.toFixed(1)}%`;
 }
 
-export function BalanceTable({ assets, totalUsd }: Props) {
+export async function BalanceTable({ assets, totalUsd }: Props) {
+  const t = await getT();
+  const locale = await getLocale();
+  const intlLocale = locale === "ru" ? "ru-RU" : "en-US";
   const total = Number(totalUsd);
 
   if (assets.length === 0) {
     return (
       <div className="rounded-md border border-dashed border-border bg-surface px-6 py-10 text-center">
         <p className="font-serif text-sm italic text-text-tertiary">
-          No assets yet. Connect an exchange in Settings to start tracking.
+          {t("balances.byAsset.empty")}
         </p>
       </div>
     );
@@ -68,12 +72,12 @@ export function BalanceTable({ assets, totalUsd }: Props) {
       <table className="w-full border-collapse">
         <thead className="border-b border-border bg-subtle">
           <tr className="text-left font-mono text-[10px] uppercase tracking-[0.16em] text-text-tertiary">
-            <th className="px-4 py-3 font-medium">Asset</th>
-            <th className="px-4 py-3 font-medium text-right">Qty</th>
-            <th className="px-4 py-3 font-medium text-right">USD price</th>
-            <th className="px-4 py-3 font-medium text-right">USD value</th>
-            <th className="px-4 py-3 font-medium text-right">% port</th>
-            <th className="px-4 py-3 font-medium">Exchanges</th>
+            <th className="px-4 py-3 font-medium">{t("balances.byAsset.columns.asset")}</th>
+            <th className="px-4 py-3 font-medium text-right">{t("balances.byAsset.columns.qty")}</th>
+            <th className="px-4 py-3 font-medium text-right">{t("balances.byAsset.columns.usdPrice")}</th>
+            <th className="px-4 py-3 font-medium text-right">{t("balances.byAsset.columns.usdValue")}</th>
+            <th className="px-4 py-3 font-medium text-right">{t("balances.byAsset.columns.pctPort")}</th>
+            <th className="px-4 py-3 font-medium">{t("balances.byAsset.columns.exchanges")}</th>
           </tr>
         </thead>
         <tbody>
@@ -89,16 +93,16 @@ export function BalanceTable({ assets, totalUsd }: Props) {
                   </span>
                   {a.isStable && (
                     <span className="rounded-sm bg-subtle px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-[0.16em] text-text-tertiary">
-                      stable
+                      {t("balances.byAsset.stableBadge")}
                     </span>
                   )}
                 </div>
               </td>
               <td className="px-4 py-3 text-right align-middle font-mono text-[12px] tabular-nums text-text-secondary">
-                {fmtQty(a.totalQty)}
+                {fmtQty(a.totalQty, intlLocale)}
               </td>
               <td className="px-4 py-3 text-right align-middle font-mono text-[12px] tabular-nums text-text-secondary">
-                {fmtUsd(a.usdPrice)}
+                {fmtUsd(a.usdPrice, intlLocale)}
               </td>
               <td
                 className={
@@ -106,7 +110,7 @@ export function BalanceTable({ assets, totalUsd }: Props) {
                   (i === 0 ? "text-signature" : "text-text")
                 }
               >
-                {fmtUsd(a.totalUsd)}
+                {fmtUsd(a.totalUsd, intlLocale)}
               </td>
               <td className="px-4 py-3 text-right align-middle font-mono text-[11px] tabular-nums text-text-tertiary">
                 {fmtPct(a, total)}

@@ -17,6 +17,7 @@ import {
 import { ExchangeLogo } from "@/components/settings/exchange-logo";
 import { walletTypeLabel } from "@/types/balances";
 import type { UserId } from "@/types/canonical";
+import { getT, getLocale } from "@/lib/i18n/server";
 
 export const dynamic = "force-dynamic";
 
@@ -24,26 +25,29 @@ interface PageProps {
   params: Promise<{ exchange: string }>;
 }
 
-function fmtUsd(value: string | null | undefined): string {
+function fmtUsd(value: string | null | undefined, locale: string): string {
   if (value == null) return "—";
   const n = Number(value);
   if (!Number.isFinite(n)) return "—";
-  return `$${n.toLocaleString("en-US", {
+  return `$${n.toLocaleString(locale, {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   })}`;
 }
 
-function fmtQty(value: string): string {
+function fmtQty(value: string, locale: string): string {
   const n = Number(value);
   if (!Number.isFinite(n)) return "—";
   const dp = Math.abs(n) >= 100 ? 2 : Math.abs(n) >= 1 ? 4 : 8;
-  return n.toLocaleString("en-US", { maximumFractionDigits: dp });
+  return n.toLocaleString(locale, { maximumFractionDigits: dp });
 }
 
 export default async function ExchangeBalancePage({ params }: PageProps) {
   const { id: userId } = await requireUser();
   const { exchange } = await params;
+  const t = await getT();
+  const locale = await getLocale();
+  const intlLocale = locale === "ru" ? "ru-RU" : "en-US";
 
   const details = await getExchangeBalanceDetail(
     userId as UserId,
@@ -68,7 +72,7 @@ export default async function ExchangeBalancePage({ params }: PageProps) {
           className="inline-flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-[0.18em] text-text-tertiary hover:text-text"
         >
           <ArrowLeft className="h-3 w-3" />
-          Balances
+          {t("balances.drilldown.backToList")}
         </Link>
         <div className="mt-3 flex items-center gap-4">
           <ExchangeLogo
@@ -82,8 +86,15 @@ export default async function ExchangeBalancePage({ params }: PageProps) {
               {exchangeName}
             </h1>
             <p className="mt-1 font-mono text-[12px] tabular-nums text-text-tertiary">
-              {fmtUsd(String(totalAcrossConns))} across {details.length} sub-account
-              {details.length === 1 ? "" : "s"}
+              {details.length === 1
+                ? t("balances.drilldown.totalSubAccountsOne", {
+                    total: fmtUsd(String(totalAcrossConns), intlLocale),
+                    n: details.length,
+                  })
+                : t("balances.drilldown.totalSubAccounts", {
+                    total: fmtUsd(String(totalAcrossConns), intlLocale),
+                    n: details.length,
+                  })}
             </p>
           </div>
         </div>
@@ -91,14 +102,22 @@ export default async function ExchangeBalancePage({ params }: PageProps) {
 
       <div className="space-y-6 px-8 py-8 lg:px-12">
         {details.map((d) => (
-          <ConnectionCard key={d.connectionId} detail={d} />
+          <ConnectionCard key={d.connectionId} detail={d} t={t} intlLocale={intlLocale} />
         ))}
       </div>
     </div>
   );
 }
 
-function ConnectionCard({ detail }: { detail: ExchangeBalanceDetail }) {
+function ConnectionCard({
+  detail,
+  t,
+  intlLocale,
+}: {
+  detail: ExchangeBalanceDetail;
+  t: Awaited<ReturnType<typeof getT>>;
+  intlLocale: string;
+}) {
   return (
     <section className="overflow-hidden rounded-md border border-border bg-surface">
       <header className="flex items-center justify-between border-b border-border px-6 py-4">
@@ -107,12 +126,13 @@ function ConnectionCard({ detail }: { detail: ExchangeBalanceDetail }) {
             {detail.label}
           </p>
           <p className="mt-0.5 font-mono text-[10px] uppercase tracking-[0.18em] text-text-tertiary">
-            {detail.wallets.length} wallet
-            {detail.wallets.length === 1 ? "" : "s"}
+            {detail.wallets.length === 1
+              ? t("balances.drilldown.walletLabelOne", { n: detail.wallets.length })
+              : t("balances.drilldown.walletLabel", { n: detail.wallets.length })}
           </p>
         </div>
         <p className="font-mono text-[18px] font-medium tabular-nums text-text">
-          {fmtUsd(detail.totalUsd)}
+          {fmtUsd(detail.totalUsd, intlLocale)}
         </p>
       </header>
 
@@ -124,17 +144,17 @@ function ConnectionCard({ detail }: { detail: ExchangeBalanceDetail }) {
                 {walletTypeLabel(w.walletType)}
               </p>
               <p className="font-mono text-[13px] tabular-nums text-text-secondary">
-                {fmtUsd(w.totalUsd)}
+                {fmtUsd(w.totalUsd, intlLocale)}
               </p>
             </div>
             <table className="w-full border-collapse">
               <thead>
                 <tr className="text-left font-mono text-[10px] uppercase tracking-[0.16em] text-text-tertiary">
-                  <th className="py-1 font-medium">Asset</th>
-                  <th className="py-1 font-medium text-right">Total</th>
-                  <th className="py-1 font-medium text-right">Available</th>
-                  <th className="py-1 font-medium text-right">Locked</th>
-                  <th className="py-1 font-medium text-right">USD</th>
+                  <th className="py-1 font-medium">{t("balances.drilldown.columns.asset")}</th>
+                  <th className="py-1 font-medium text-right">{t("balances.drilldown.columns.total")}</th>
+                  <th className="py-1 font-medium text-right">{t("balances.drilldown.columns.available")}</th>
+                  <th className="py-1 font-medium text-right">{t("balances.drilldown.columns.locked")}</th>
+                  <th className="py-1 font-medium text-right">{t("balances.drilldown.columns.usd")}</th>
                 </tr>
               </thead>
               <tbody>
@@ -149,16 +169,16 @@ function ConnectionCard({ detail }: { detail: ExchangeBalanceDetail }) {
                       )}
                     </td>
                     <td className="py-1 text-right font-mono text-[12px] tabular-nums text-text-secondary">
-                      {fmtQty(r.total)}
+                      {fmtQty(r.total, intlLocale)}
                     </td>
                     <td className="py-1 text-right font-mono text-[12px] tabular-nums text-text-tertiary">
-                      {fmtQty(r.available)}
+                      {fmtQty(r.available, intlLocale)}
                     </td>
                     <td className="py-1 text-right font-mono text-[12px] tabular-nums text-text-tertiary">
-                      {fmtQty(r.locked)}
+                      {fmtQty(r.locked, intlLocale)}
                     </td>
                     <td className="py-1 text-right font-mono text-[12px] tabular-nums text-text">
-                      {fmtUsd(r.usdValue)}
+                      {fmtUsd(r.usdValue, intlLocale)}
                     </td>
                   </tr>
                 ))}
