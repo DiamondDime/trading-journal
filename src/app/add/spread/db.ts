@@ -45,6 +45,18 @@ export interface SpreadLegInput {
   intendedPrice?: string | null;
 }
 
+/** Per-leg input for the manual-entry path (no linked position row). */
+export interface ManualSpreadLegInput {
+  symbol: string;
+  exchangeLabel: string;
+  side: 'long' | 'short';
+  qty: string | null;
+  entryPrice: string | null;
+  exitPrice: string | null;
+  feesUsd: string | null;
+  instrumentType: 'spot' | 'perp' | 'dated_future' | string;
+}
+
 /** Common open-intent payload. All optional — gated by spread type in the UI. */
 export interface SpreadOpenIntent {
   targetAprAtOpen?: string | null;        // decimal, e.g. "0.178" = 17.8%
@@ -81,6 +93,8 @@ export interface CreateSpreadInput {
   openIntent: SpreadOpenIntent;
   // legs (zero or more — v1 keyboard-input flow can submit without positions)
   legs: SpreadLegInput[];
+  // manual-entry legs (position_id = NULL in DB — requires 20260519100000 migration)
+  manualLegs?: ManualSpreadLegInput[];
 }
 
 /** Per-leg patch shape used by update + edit-mode pre-fill. */
@@ -299,10 +313,9 @@ export async function createSpreadV2(
       )
     `;
 
-    // Per-leg rows: spread_legs FK is to positions(id), so legs only land
-    // when the wizard passes real position UUIDs. Manual-numbers spreads
-    // (no position rows yet) skip this block and leg_count reflects the
-    // user's intent rather than a row count.
+    // Per-leg rows — position-linked path.
+    // spread_legs.position_id FK to positions(id). Only lands when wizard
+    // passes real position UUIDs (auto / picker path).
     for (let i = 0; i < input.legs.length; i++) {
       const leg = input.legs[i];
       if (!UUID_RE.test(leg.positionId)) continue;
@@ -315,6 +328,31 @@ export async function createSpreadV2(
           ${leg.positionId}::uuid, ${leg.role}, ${i},
           ${leg.intendedPrice ?? null},
           ${leg.intendedPrice ? sql`now()` : null}
+        )
+      `;
+    }
+
+    // Manual-entry legs — no linked position row.
+    // Requires migration 20260519100000 (position_id nullable + manual columns).
+    for (let i = 0; i < (input.manualLegs?.length ?? 0); i++) {
+      const leg = input.manualLegs![i];
+      if (!leg.symbol?.trim()) continue; // skip incomplete rows
+      await tx`
+        INSERT INTO public.spread_legs (
+          activity_id, user_id, leg_index, role,
+          symbol, exchange_label, side, qty,
+          entry_price, exit_price, fees_usd, instrument_type
+        ) VALUES (
+          ${activity.id}::uuid, ${userId}::uuid, ${i},
+          ${leg.side},
+          ${leg.symbol.trim()},
+          ${leg.exchangeLabel?.trim() ?? null},
+          ${leg.side},
+          ${leg.qty ? Number(leg.qty) : null},
+          ${leg.entryPrice ? Number(leg.entryPrice) : null},
+          ${leg.exitPrice ? Number(leg.exitPrice) : null},
+          ${leg.feesUsd ? Number(leg.feesUsd) : null},
+          ${leg.instrumentType ?? null}
         )
       `;
     }

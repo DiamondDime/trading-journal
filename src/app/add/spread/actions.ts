@@ -11,6 +11,7 @@ import {
   type UpdateSpreadInput,
   type SpreadOpenIntent,
   type SpreadLegInput,
+  type ManualSpreadLegInput,
 } from "./db";
 import type { ActivityStatus, SpreadType, SpreadVariant } from "@/types/canonical";
 
@@ -136,6 +137,45 @@ interface DecodedLeg {
   intendedPrice: string | null;
 }
 
+/** Raw shape coming out of ManualLegBuilder's JSON serialisation. */
+interface RawManualLeg {
+  symbol?: string;
+  exchange?: string;
+  side?: string;
+  qty?: string;
+  entryPrice?: string;
+  exitPrice?: string;
+  feesUsd?: string;
+  instrumentType?: string;
+}
+
+function decodeManualLegs(raw: Record<string, string>): ManualSpreadLegInput[] {
+  const json = (raw.manualLegsJson ?? "").trim();
+  if (!json) return [];
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(json);
+  } catch {
+    return [];
+  }
+  if (!Array.isArray(parsed)) return [];
+  return (parsed as RawManualLeg[])
+    .map((l): ManualSpreadLegInput => ({
+      symbol: (l.symbol ?? "").trim(),
+      exchangeLabel: (l.exchange ?? "").trim(),
+      side: l.side === "short" ? "short" : "long",
+      qty: parseDecOrNull(l.qty ?? ""),
+      entryPrice: parseDecOrNull(l.entryPrice ?? ""),
+      exitPrice: parseDecOrNull(l.exitPrice ?? ""),
+      feesUsd: parseDecOrNull(l.feesUsd ?? ""),
+      instrumentType:
+        l.instrumentType === "spot" || l.instrumentType === "dated_future"
+          ? l.instrumentType
+          : "perp",
+    }))
+    .filter((l) => l.symbol.length > 0);
+}
+
 /**
  * Decode the per-leg metadata embedded in the FormData. The /review page
  * emits one row per leg via repeated `legPositionId`, `legRole`,
@@ -184,8 +224,10 @@ interface DecodedPayload {
   strategyTag: string | null;
   openIntent: SpreadOpenIntent;
   legs: DecodedLeg[];
+  manualLegs: ManualSpreadLegInput[];
   primaryBase: string;
   matcher: string;
+  source: string;
 }
 
 function decodePayload(raw: Record<string, string>, form: FormData): DecodedPayload {
@@ -255,8 +297,10 @@ function decodePayload(raw: Record<string, string>, form: FormData): DecodedPayl
     strategyTag,
     openIntent,
     legs: decodeLegs(form),
+    manualLegs: decodeManualLegs(raw),
     primaryBase,
     matcher: (raw.matcher ?? "").trim(),
+    source: (raw.source ?? "").trim(),
   };
 }
 
@@ -344,13 +388,13 @@ export async function logSpread(formData: FormData): Promise<void> {
       throw new Error(validation[0]);
     }
 
+    const isManualSource = payload.source === "manual";
     const legCount =
-      payload.legs.length > 0
-        ? payload.legs.length
-        : Math.max(
-            0,
-            Number.parseInt(cleanedRaw.legCount ?? "", 10) || 0,
-          );
+      isManualSource
+        ? payload.manualLegs.length
+        : payload.legs.length > 0
+          ? payload.legs.length
+          : Math.max(0, Number.parseInt(cleanedRaw.legCount ?? "", 10) || 0);
 
     if (editId) {
       isEdit = true;
@@ -395,11 +439,14 @@ export async function logSpread(formData: FormData): Promise<void> {
         source: "user",
         legCount,
         openIntent: payload.openIntent,
-        legs: payload.legs.map<SpreadLegInput>((l) => ({
-          positionId: l.positionId,
-          role: l.role,
-          intendedPrice: l.intendedPrice,
-        })),
+        legs: isManualSource
+          ? []
+          : payload.legs.map<SpreadLegInput>((l) => ({
+              positionId: l.positionId,
+              role: l.role,
+              intendedPrice: l.intendedPrice,
+            })),
+        manualLegs: isManualSource ? payload.manualLegs : [],
       };
       const result = await createSpreadV2(userId, input);
       activityId = result.id;

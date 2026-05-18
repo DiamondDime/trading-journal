@@ -387,7 +387,6 @@ export const en = {
       expectancy: 'Expectancy',
       maxDrawdown: 'Max drawdown',
       lossStreak: 'Loss streak',
-      sharpe: 'Sharpe',
     },
     deltas: {
       acrossActivities: 'across {count} activities',
@@ -404,8 +403,6 @@ export const en = {
       streakNow: 'now: {count} in a row',
       streakNowWins: 'now: {count} wins',
       streakNoStreak: 'now: no streak',
-      sharpeReady: '{days} active days · ann. {factor}d',
-      sharpeNeeds: 'needs ≥7 active days ({days} so far)',
     },
     captions: {
       profitFactor: 'Gross wins divided by gross losses. >1.5 is healthy.',
@@ -413,7 +410,6 @@ export const en = {
       expectancy: 'Average dollar P&L per activity, all-in.',
       maxDrawdown: 'Worst peak-to-trough drop on equity.',
       lossStreak: 'Longest run of consecutive losing activities.',
-      sharpe: 'Risk-adjusted return, annualized. >1 is good.',
     },
     sections: {
       dailyPnl: 'Daily realized P&L · last {weeks} weeks',
@@ -900,7 +896,7 @@ export const en = {
   movementEvents: {
     eyebrow: 'journal · movements',
     title: 'Movement events',
-    subtitle: 'Bridges, conversions, transfers, deposits, withdrawals, NFT trades, and losses — your accounting ledger alongside strategy.',
+    subtitle: 'Losses, write-offs, and manual book adjustments — things that touch your P&L but aren\'t a trade.',
     logMovement: 'Log movement',
     filterAria: 'Filter movements by kind',
     all: 'All',
@@ -1072,6 +1068,8 @@ export const en = {
     } as PluralLeaf,
     honestyTitle: 'Why these links?',
     honestyBody: 'The journal is free and open-source. When you sign up via the links below we get a small kickback from the exchange — at no cost to you. That kickback is what pays for hosting and ongoing development. Use any exchange you want; these are the ones we have referral arrangements with.',
+    persuasionTitle: 'Why most traders do this',
+    persuasionBody: 'Most active spread traders route through referral rebates to cut their fees — same math as a VIP tier, no minimum required. For typical volumes that’s thousands of dollars a year recovered. Some desks save that much per month.',
     upTo: 'Up to {pct}% fee rebate',
     signupCta: 'Sign up · {exchange}',
     signupShort: 'Sign up',
@@ -1428,8 +1426,8 @@ export const en = {
         },
         movement: {
           caption: 'Movement',
-          title: 'Bridge / transfer / loss',
-          description: 'Accounting event — bridges, conversions, transfers, deposits, withdrawals, NFT trades, losses. Not a strategy.',
+          title: 'Loss or other event',
+          description: 'Things that touch your book but aren\'t a trade — hacks, lost wallets, dust written off, manual adjustments.',
         },
       },
       spread: 'A spread',
@@ -1697,6 +1695,29 @@ export const en = {
           dexCex: 'DEX-CEX',
         },
         nameSuggestFallback: 'spread',
+        manualLegs: {
+          label: 'Legs',
+          addLeg: 'Add leg',
+          removeLeg: 'Remove',
+          legN: 'Leg',
+          computedPnl: 'P&L',
+          totalPnl: 'Total P&L',
+          totalCapital: 'Capital',
+          atLeastOne: 'Enter at least one leg with a symbol to continue.',
+          leg: {
+            symbol: 'Symbol',
+            exchange: 'Exchange',
+            sideLong: 'Long',
+            sideShort: 'Short',
+            qty: 'Qty',
+            entryPrice: 'Entry price',
+            exitPrice: 'Exit price',
+            feesUsd: 'Fees (USD)',
+            instrumentSpot: 'Spot',
+            instrumentPerp: 'Perp',
+            instrumentDatedFuture: 'Future',
+          },
+        },
       },
       review: {
         titleNew: 'Look it over',
@@ -1839,7 +1860,6 @@ export const en = {
         review: 'Review',
         convertToSpread: 'Actually, this is part of a spread →',
         sections: {
-          status: 'Status',
           venue: 'Venue',
           shape: 'Shape',
           numbers: 'Numbers',
@@ -1851,8 +1871,11 @@ export const en = {
           thesisTags: 'Thesis & tags',
           rollups: 'Strategy & tax',
         },
+        liquidated: {
+          label: 'This position was liquidated',
+          helper: 'Check this if the exchange forcibly closed the position. Defaults to closed.',
+        },
         labels: {
-          status: 'Status',
           exchange: 'Exchange',
           symbol: 'Symbol',
           instrument: 'Instrument',
@@ -1929,11 +1952,6 @@ export const en = {
         side: {
           long: 'long',
           short: 'short',
-        },
-        status: {
-          open: 'open',
-          closed: 'closed',
-          liquidated: 'liquidated',
         },
         marginMode: {
           cross: 'cross',
@@ -2605,19 +2623,9 @@ export const en = {
     yield: {
       title: 'Log a yield position',
       stepLabels: {
-        source: 'Source',
         kind: 'Kind',
         fields: 'Fields',
         review: 'Review',
-      },
-      source: {
-        title: "Where's this yield from?",
-        subtitle: 'Tell us how the position got opened so we can pre-fill the right context.',
-        autoTitle: 'From a connected protocol',
-        autoDescription: 'Pre-fills protocol, wallet, amount, and expected APY from the chain RPC. Available for select DeFi protocols.',
-        autoBadge: 'AUTO',
-        manualTitle: 'Manual entry',
-        manualDescription: "Type in what you opened. Works for any protocol — including CEX Earn programs, validators, and miners.",
       },
       kinds: {
         stake: {
@@ -2679,19 +2687,10 @@ export const en = {
       title: 'Log an option',
       required: 'required',
       stepLabels: {
-        source: 'Source',
         kind: 'Kind',
         legs: 'Legs',
         fields: 'Fields',
         review: 'Review',
-      },
-      source: {
-        title: "Where's this option from?",
-        subtitle: 'Pick the venue and whether you want to import from connected fills or type the legs by hand.',
-        autoTitle: 'From a connected exchange',
-        autoDescription: 'Pre-fills strikes, expiries, contracts, and IV from your imported option fills. Available for Deribit / Binance Options / OKX.',
-        manualTitle: 'Manual entry',
-        manualDescription: 'Build the legs by hand. Works for any venue.',
       },
       kind: {
         title: 'Single leg or spread?',

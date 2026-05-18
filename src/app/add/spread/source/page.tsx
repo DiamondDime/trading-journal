@@ -40,7 +40,7 @@ export default async function SpreadSourcePage() {
           caption={t("wizard.spread.source.manualCaption")}
           title={t("wizard.spread.source.manualTitle")}
           description={t("wizard.spread.source.manualDescription")}
-          href="/add/spread/type"
+          href="/add/spread/type?source=manual"
         />
       </div>
 

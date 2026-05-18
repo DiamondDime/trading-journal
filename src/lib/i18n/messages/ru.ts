@@ -395,7 +395,6 @@ export const ru: MessageDict = {
       expectancy: 'Мат. ожидание',
       maxDrawdown: 'Макс. просадка',
       lossStreak: 'Минусовая серия',
-      sharpe: 'Шарп',
     },
     deltas: {
       acrossActivities: 'на {count} активностей',
@@ -412,8 +411,6 @@ export const ru: MessageDict = {
       streakNow: 'сейчас: {count} подряд',
       streakNowWins: 'сейчас: {count} плюсов',
       streakNoStreak: 'сейчас: серии нет',
-      sharpeReady: '{days} активн. дней · аннуал. {factor}д',
-      sharpeNeeds: 'нужно ≥7 активных дней (пока {days})',
     },
     captions: {
       profitFactor: 'Валовая прибыль, делённая на валовой убыток. Выше 1,5 — здорово.',
@@ -421,7 +418,6 @@ export const ru: MessageDict = {
       expectancy: 'Среднее PnL на одну активность.',
       maxDrawdown: 'Худшее падение от пика по эквити.',
       lossStreak: 'Самый длинный подряд из убыточных активностей.',
-      sharpe: 'Доходность с поправкой на риск, аннуализированная. Больше 1 — хорошо.',
     },
     sections: {
       dailyPnl: 'Дневной PnL · последние {weeks} недель',
@@ -911,7 +907,7 @@ export const ru: MessageDict = {
   movementEvents: {
     eyebrow: 'журнал · движения',
     title: 'Движения',
-    subtitle: 'Бриджи, конверсии, переводы, депозиты, выводы, NFT-сделки и убытки — учётный журнал рядом со стратегией.',
+    subtitle: 'Убытки, списания и ручные корректировки — события, которые задевают P&L, но не являются сделкой.',
     logMovement: 'Записать движение',
     filterAria: 'Фильтр движений по типу',
     all: 'Все',
@@ -1089,6 +1085,8 @@ export const ru: MessageDict = {
     } as PluralLeaf,
     honestyTitle: 'Зачем эти ссылки?',
     honestyBody: 'Журнал — бесплатный и с открытым кодом. Когда вы регистрируетесь по ссылкам ниже, мы получаем небольшую комиссию от биржи — на вас это никак не отражается. Эта комиссия покрывает хостинг и развитие. Вы можете пользоваться любой биржей; здесь — те, с кем у нас есть партнёрское соглашение.',
+    persuasionTitle: 'Почему так делают почти все',
+    persuasionBody: 'Большинство активных спред-трейдеров регистрируются по реферальным ссылкам, чтобы срезать комиссию — та же математика, что и у VIP-тира, только без минимума по объёму. На обычных объёмах это тысячи долларов в год возврата. У крупных столов столько же — но в месяц.',
     upTo: 'Возврат комиссии до {pct}%',
     signupCta: 'Зарегистрироваться · {exchange}',
     signupShort: 'Регистрация',
@@ -1447,8 +1445,8 @@ export const ru: MessageDict = {
         },
         movement: {
           caption: 'Движение',
-          title: 'Бридж / перевод / убыток',
-          description: 'Учётное событие: бриджи, конверсии, переводы, депозиты, выводы, NFT, убытки. Не стратегия.',
+          title: 'Убыток или другое',
+          description: 'То, что задевает книгу, но не сделка — хаки, потерянные кошельки, списанная пыль, ручные корректировки.',
         },
       },
       spread: 'Спред',
@@ -1724,6 +1722,29 @@ export const ru: MessageDict = {
           dexCex: 'DEX-CEX',
         },
         nameSuggestFallback: 'спред',
+        manualLegs: {
+          label: 'Ноги',
+          addLeg: 'Добавить ногу',
+          removeLeg: 'Убрать',
+          legN: 'Нога',
+          computedPnl: 'P&L',
+          totalPnl: 'Итог P&L',
+          totalCapital: 'Капитал',
+          atLeastOne: 'Введи хотя бы одну ногу с символом, чтобы продолжить.',
+          leg: {
+            symbol: 'Символ',
+            exchange: 'Биржа',
+            sideLong: 'Лонг',
+            sideShort: 'Шорт',
+            qty: 'Объём',
+            entryPrice: 'Цена входа',
+            exitPrice: 'Цена выхода',
+            feesUsd: 'Комиссия (USD)',
+            instrumentSpot: 'Спот',
+            instrumentPerp: 'Перп',
+            instrumentDatedFuture: 'Фьючерс',
+          },
+        },
       },
       review: {
         titleNew: 'Глянь напоследок',
@@ -1866,7 +1887,6 @@ export const ru: MessageDict = {
         review: 'К проверке',
         convertToSpread: 'Вообще-то это нога спреда →',
         sections: {
-          status: 'Статус',
           venue: 'Площадка',
           shape: 'Форма',
           numbers: 'Цифры',
@@ -1878,8 +1898,11 @@ export const ru: MessageDict = {
           thesisTags: 'Идея и теги',
           rollups: 'Стратегия и налоги',
         },
+        liquidated: {
+          label: 'Позиция была ликвидирована',
+          helper: 'Поставь галочку, если биржа принудительно закрыла позицию. По умолчанию — закрыта.',
+        },
         labels: {
-          status: 'Статус',
           exchange: 'Биржа',
           symbol: 'Тикер',
           instrument: 'Инструмент',
@@ -1956,11 +1979,6 @@ export const ru: MessageDict = {
         side: {
           long: 'лонг',
           short: 'шорт',
-        },
-        status: {
-          open: 'открыта',
-          closed: 'закрыта',
-          liquidated: 'ликвидирована',
         },
         marginMode: {
           cross: 'кросс',
@@ -2600,19 +2618,9 @@ export const ru: MessageDict = {
     yield: {
       title: 'Записать доходную позицию',
       stepLabels: {
-        source: 'Источник',
         kind: 'Тип',
         fields: 'Поля',
         review: 'Проверка',
-      },
-      source: {
-        title: 'Откуда эта доходность?',
-        subtitle: 'Расскажи, как позиция открылась — мы подставим подходящий контекст.',
-        autoTitle: 'Из подключённого протокола',
-        autoDescription: 'Авто-подстановка протокола, кошелька, суммы и ожидаемого APY из RPC. Для избранных DeFi-протоколов.',
-        autoBadge: 'АВТО',
-        manualTitle: 'Ввод вручную',
-        manualDescription: 'Заполни сам. Подходит для любого протокола — включая CEX Earn, валидаторов и майнинг.',
       },
       kinds: {
         stake: { title: 'Стейкинг', description: 'Залочить актив, чтобы обеспечить сеть. Один актив, IL обычно нет. Примеры: ETH, SOL, ATOM.' },
@@ -2656,19 +2664,10 @@ export const ru: MessageDict = {
       title: 'Записать опцион',
       required: 'обязательное',
       stepLabels: {
-        source: 'Источник',
         kind: 'Тип',
         legs: 'Ноги',
         fields: 'Поля',
         review: 'Проверка',
-      },
-      source: {
-        title: 'Откуда этот опцион?',
-        subtitle: 'Выбери площадку и способ — импорт из подключённых сделок или ввод ног вручную.',
-        autoTitle: 'С подключённой биржи',
-        autoDescription: 'Подставит страйки, экспирации, контракты и IV из импортированных сделок. Deribit / Binance Options / OKX.',
-        manualTitle: 'Ввод вручную',
-        manualDescription: 'Собери ноги сам. Подходит для любой площадки.',
       },
       kind: {
         title: 'Одна нога или спред?',

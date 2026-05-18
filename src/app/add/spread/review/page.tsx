@@ -19,6 +19,7 @@ import { requireUser } from "@/lib/auth/server";
 import { getPickerOptionsByPositionIds, type PickerOptionRow } from "../db";
 import type { ActivityStatus } from "@/types/canonical";
 import { getT } from "@/lib/i18n/server";
+import type { ManualLegInput } from "@/components/spread/manual-leg-builder";
 
 export const dynamic = "force-dynamic";
 
@@ -50,6 +51,8 @@ const SPREAD_FIELDS = [
   "legs",
   "matcher",
   "spreadType",
+  "source",
+  "manualLegsJson",
   "name",
   "variant",
   "variantCanonical",
@@ -75,6 +78,42 @@ const SPREAD_FIELDS = [
   "slippageToleranceBps",
   "edit",
 ] as const;
+
+// ── Manual-leg helpers (mirrors fields/page.tsx — kept local to avoid coupling) ──
+
+function parseManualLegsReview(json: string): ManualLegInput[] {
+  if (!json) return [];
+  try {
+    const parsed = JSON.parse(json);
+    if (!Array.isArray(parsed)) return [];
+    return (parsed as ManualLegInput[]).map((l) => ({
+      _id: "",
+      symbol: l.symbol ?? "",
+      exchange: l.exchange ?? "",
+      side: l.side === "short" ? "short" : "long",
+      qty: l.qty ?? "",
+      entryPrice: l.entryPrice ?? "",
+      exitPrice: l.exitPrice ?? "",
+      feesUsd: l.feesUsd ?? "",
+      instrumentType:
+        l.instrumentType === "spot" || l.instrumentType === "dated_future"
+          ? l.instrumentType
+          : "perp",
+    }));
+  } catch {
+    return [];
+  }
+}
+
+function manualLegPnlReview(leg: ManualLegInput): number | null {
+  const qty = Number.parseFloat(leg.qty);
+  const entry = Number.parseFloat(leg.entryPrice);
+  const exit = Number.parseFloat(leg.exitPrice);
+  const fees = Number.parseFloat(leg.feesUsd) || 0;
+  if (!Number.isFinite(qty) || !Number.isFinite(entry) || !Number.isFinite(exit)) return null;
+  const dir = leg.side === "long" ? 1 : -1;
+  return (exit - entry) * qty * dir - fees;
+}
 
 type Search = Promise<{ [key: string]: string | string[] | undefined }>;
 
@@ -203,10 +242,19 @@ export default async function SpreadReviewPage(props: { searchParams: Search }) 
     .filter(Boolean);
   const legRoles = getAllStr(sp, "legRole");
   const uniqueLegIds = [...new Set(legPositionIds)];
+  const source = getStr(sp, "source");
+  const isManualSource = source === "manual";
+
   const legRows: PickerOptionRow[] =
-    uniqueLegIds.length > 0
+    !isManualSource && uniqueLegIds.length > 0
       ? await getPickerOptionsByPositionIds(userId, uniqueLegIds)
       : [];
+
+  // Parse manual legs for review display and PnL confirmation.
+  const manualLegsJsonReview = getStr(sp, "manualLegsJson");
+  const manualLegsReview: ManualLegInput[] = isManualSource
+    ? parseManualLegsReview(manualLegsJsonReview)
+    : [];
 
   const v = {
     spreadType: getStr(sp, "spreadType"),
@@ -261,6 +309,14 @@ export default async function SpreadReviewPage(props: { searchParams: Search }) 
     ? MATCHER_TO_DB_TYPE[v.spreadType]
     : null;
   const subtitle = (() => {
+    if (isManualSource) {
+      const venues = [
+        ...new Set(manualLegsReview.map((l) => l.exchange).filter(Boolean)),
+      ].join(" + ");
+      const variantLabel = v.variantCanonical || v.variant;
+      if (venues && variantLabel) return `${variantLabel} · ${venues}`;
+      return venues || variantLabel || "";
+    }
     const venues = [...new Set(legRows.map((l) => l.exchangeCode))].join(" + ");
     const variantLabel = v.variantCanonical || v.variant;
     if (venues && variantLabel) return `${variantLabel} · ${venues}`;
@@ -269,6 +325,9 @@ export default async function SpreadReviewPage(props: { searchParams: Search }) 
   const primaryBase = (() => {
     const fromForm = getStr(sp, "primaryBase");
     if (fromForm) return fromForm.toUpperCase();
+    if (isManualSource && manualLegsReview[0]?.symbol) {
+      return manualLegsReview[0].symbol.split(/[-/]/)[0].toUpperCase();
+    }
     if (legRows[0]?.symbol) return legRows[0].symbol.split(/[-/]/)[0].toUpperCase();
     return v.name?.split(/[\s·-]/)[0]?.toUpperCase() ?? "";
   })();
@@ -381,8 +440,8 @@ export default async function SpreadReviewPage(props: { searchParams: Search }) 
         </div>
       </section>
 
-      {/* ── Legs ──────────────────────────────────────────────────────── */}
-      {legRows.length > 0 && (
+      {/* ── Legs — auto path (from picker) ────────────────────────────── */}
+      {!isManualSource && legRows.length > 0 && (
         <section className="mt-10">
           <h2 className="mb-2 font-serif text-[11px] font-semibold uppercase tracking-[0.18em] text-text-tertiary">
             {t("wizard.spread.review.legsHeading", { count: legRows.length })}
@@ -475,6 +534,121 @@ export default async function SpreadReviewPage(props: { searchParams: Search }) 
                       </TableCell>
                       <TableCell className="text-right font-mono text-[11px] tabular-nums text-text">
                         {intended ? fmtPrice(intended) : "—"}
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+            </Table>
+          </div>
+        </section>
+      )}
+
+      {/* ── Legs — manual path ─────────────────────────────────────────── */}
+      {isManualSource && manualLegsReview.length > 0 && (
+        <section className="mt-10">
+          <h2 className="mb-2 font-serif text-[11px] font-semibold uppercase tracking-[0.18em] text-text-tertiary">
+            {t("wizard.spread.review.legsHeading", { count: manualLegsReview.length })}
+          </h2>
+          <div className="overflow-hidden rounded-md border border-border bg-surface">
+            <Table>
+              <TableHeader>
+                <TableRow className="hover:bg-transparent">
+                  <TableHead
+                    scope="col"
+                    className="font-serif text-[10px] font-semibold uppercase tracking-[0.16em] text-text-tertiary"
+                  >
+                    {t("wizard.spread.review.legsTable.symbol")}
+                  </TableHead>
+                  <TableHead
+                    scope="col"
+                    className="font-serif text-[10px] font-semibold uppercase tracking-[0.16em] text-text-tertiary"
+                  >
+                    {t("wizard.spread.review.legsTable.venue")}
+                  </TableHead>
+                  <TableHead
+                    scope="col"
+                    className="font-serif text-[10px] font-semibold uppercase tracking-[0.16em] text-text-tertiary"
+                  >
+                    {t("wizard.spread.review.legsTable.side")}
+                  </TableHead>
+                  <TableHead
+                    scope="col"
+                    className="text-right font-serif text-[10px] font-semibold uppercase tracking-[0.16em] text-text-tertiary"
+                  >
+                    {t("wizard.spread.review.legsTable.qty")}
+                  </TableHead>
+                  <TableHead
+                    scope="col"
+                    className="text-right font-serif text-[10px] font-semibold uppercase tracking-[0.16em] text-text-tertiary"
+                  >
+                    {t("wizard.spread.review.legsTable.entryExit")}
+                  </TableHead>
+                  <TableHead
+                    scope="col"
+                    className="text-right font-serif text-[10px] font-semibold uppercase tracking-[0.16em] text-text-tertiary"
+                  >
+                    {t("wizard.spread.review.legsTable.netPnl")}
+                  </TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {manualLegsReview.map((l, idx) => {
+                  const pnl = manualLegPnlReview(l);
+                  return (
+                    <TableRow key={idx} className="hover:bg-transparent">
+                      <TableCell>
+                        <div className="flex flex-col gap-0.5">
+                          <span className="font-serif text-[13px] font-medium text-text">
+                            {l.symbol || "—"}
+                          </span>
+                          <span className="font-mono text-[9px] uppercase tracking-[0.12em] text-text-tertiary">
+                            {l.instrumentType}
+                          </span>
+                        </div>
+                      </TableCell>
+                      <TableCell className="font-mono text-[11px] text-text-secondary">
+                        {l.exchange || "—"}
+                      </TableCell>
+                      <TableCell>
+                        <span
+                          className={cn(
+                            "font-mono text-[10px] uppercase tracking-[0.14em]",
+                            l.side === "long" ? "text-up" : "text-down",
+                          )}
+                        >
+                          {l.side}
+                        </span>
+                      </TableCell>
+                      <TableCell className="text-right font-mono text-[11px] tabular-nums text-text-secondary">
+                        {l.qty || "—"}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <span className="font-mono text-[11px] tabular-nums text-text">
+                          {l.entryPrice || "—"}
+                        </span>
+                        {l.exitPrice && (
+                          <>
+                            <span className="mx-1 text-text-tertiary">→</span>
+                            <span className="font-mono text-[11px] tabular-nums text-text-secondary">
+                              {l.exitPrice}
+                            </span>
+                          </>
+                        )}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        {pnl !== null ? (
+                          <span
+                            className={cn(
+                              "font-mono text-[11px] tabular-nums font-medium",
+                              pnl >= 0 ? "text-up" : "text-down",
+                            )}
+                          >
+                            {pnl >= 0 ? "+" : "−"}${Math.abs(pnl).toFixed(2)}
+                          </span>
+                        ) : (
+                          <span className="font-mono text-[11px] text-text-tertiary">—</span>
+                        )}
                       </TableCell>
                     </TableRow>
                   );

@@ -50,6 +50,7 @@ export default async function SpreadTypePage(props: { searchParams: Search }) {
   const t = await getT();
   const legs = parseLegsCsv(sp);
   const matcher = getStr(sp, "matcher"); // "auto" | "manual" | ""
+  const source = getStr(sp, "source");   // "manual" when coming from manual path
   const preSelected = getStr(sp, "spreadType");
   const editId = getStr(sp, "edit");
 
@@ -89,8 +90,9 @@ export default async function SpreadTypePage(props: { searchParams: Search }) {
     },
   ];
 
-  // Back goes back to the picker if we have legs, otherwise to the source step.
-  const backHref = legs ? "/add/spread/pick" : "/add/spread/source";
+  // Back goes back to the picker (auto path), or the source step (manual path).
+  const backHref =
+    source === "manual" ? "/add/spread/source" : legs ? "/add/spread/pick" : "/add/spread/source";
 
   return (
     <WizardShell
@@ -111,9 +113,10 @@ export default async function SpreadTypePage(props: { searchParams: Search }) {
         method="get"
         className="flex flex-col gap-7"
       >
-        {/* Pass-through state from the picker. */}
+        {/* Pass-through state from the picker / source step. */}
         {legs && <input type="hidden" name="legs" value={legs} />}
         {matcher && <input type="hidden" name="matcher" value={matcher} />}
+        {source && <input type="hidden" name="source" value={source} />}
         {editId && <input type="hidden" name="edit" value={editId} />}
 
         <fieldset className="grid grid-cols-1 gap-3 md:grid-cols-2">
