@@ -63,6 +63,7 @@ uploads/
 # Playwright
 test-results/
 playwright-report/
+.playwright-cache/
 
 # Electron build artifacts
 electron/dist/
