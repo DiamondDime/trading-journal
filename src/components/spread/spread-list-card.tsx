@@ -1,7 +1,6 @@
 import Link from "next/link";
 import { ArrowUpRight } from "lucide-react";
 import { ExchangeVenuesChips } from "@/components/settings/exchange-logo";
-import { getT } from "@/lib/i18n/server";
 
 type Status = "open" | "winding_down" | "orphaned" | "closed" | "expired" | "claimed" | "vested";
 
@@ -18,6 +17,11 @@ export type SpreadListItem = {
   name: string;
   typeLabel: string;
   status: Status;
+  /** Pre-localized status label rendered in the card's status row. */
+  statusLabel: string;
+  /** Pre-localized activity-badge label (uppercase) — required when
+   *  activityType is set; ignored otherwise. */
+  activityBadgeLabel?: string;
   headline: string;
   headlineUnit: string;
   tone: "up" | "down" | "neutral";
@@ -41,16 +45,7 @@ const STATUS_DOT: Record<Status, string> = {
   vested:       "bg-text-tertiary",
 };
 
-function statusKey(s: Status): `status.${Status}` {
-  return `status.${s}` as const;
-}
-
-function activityBadgeKey(a: ActivityType): `spreadListCard.activityBadge.${ActivityType}` {
-  return `spreadListCard.activityBadge.${a}` as const;
-}
-
-export async function SpreadListCard({ item }: { item: SpreadListItem }) {
-  const t = await getT();
+export function SpreadListCard({ item }: { item: SpreadListItem }) {
   const dot = STATUS_DOT[item.status];
   const isOrphaned = item.status === "orphaned";
   const toneClass =
@@ -73,7 +68,7 @@ export async function SpreadListCard({ item }: { item: SpreadListItem }) {
           <span className="inline-flex items-center gap-1.5 text-text-tertiary">
             <span className={"h-1.5 w-1.5 rounded-full " + dot} />
             <span className="uppercase tracking-[0.12em] font-medium">
-              {t(statusKey(item.status))}
+              {item.statusLabel}
             </span>
           </span>
           <span className="font-mono text-text-tertiary">·</span>
@@ -95,9 +90,9 @@ export async function SpreadListCard({ item }: { item: SpreadListItem }) {
 
       <div className="flex flex-col items-end justify-between">
         <div className="flex items-center gap-1.5">
-          {item.activityType && (
+          {item.activityType && item.activityBadgeLabel && (
             <span className="font-mono text-[9px] uppercase tracking-[0.16em] text-text-tertiary">
-              {t(activityBadgeKey(item.activityType))}
+              {item.activityBadgeLabel}
             </span>
           )}
           <ArrowUpRight className="h-3.5 w-3.5 text-text-tertiary opacity-0 transition-opacity group-hover:opacity-100" />

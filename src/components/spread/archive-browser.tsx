@@ -100,12 +100,19 @@ function venueOf(r: Activity): string | undefined {
   return undefined;
 }
 
-function rowToListItem(r: Activity, retroDropLabel: string): SpreadListItem {
+function rowToListItem(
+  r: Activity,
+  retroDropLabel: string,
+  statusLabel: string,
+  activityBadgeLabel: string,
+): SpreadListItem {
   return {
     serial: r.serial,
     name: r.name,
     typeLabel: describeActivity(r, retroDropLabel),
     status: r.status,
+    statusLabel,
+    activityBadgeLabel,
     headline: r.headlineLabel,
     headlineUnit: r.headlineKind,
     tone: r.tone,
@@ -687,7 +694,15 @@ export function ArchiveBrowser({ data }: { data: Activity[] }) {
         ) : (
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
             {sorted.map((r) => (
-              <SpreadListCard key={r.id} item={rowToListItem(r, retroDropLabel)} />
+              <SpreadListCard
+                key={r.id}
+                item={rowToListItem(
+                  r,
+                  retroDropLabel,
+                  t(`status.${r.status}` as const),
+                  t(`spreadListCard.activityBadge.${r.type}` as const),
+                )}
+              />
             ))}
           </div>
         )}

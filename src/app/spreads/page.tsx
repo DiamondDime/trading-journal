@@ -424,6 +424,8 @@ export default async function SpreadsPage({ searchParams }: SpreadsPageProps) {
     name: r.name,
     typeLabel: describeActivity(r),
     status: r.status,
+    statusLabel: t(`status.${r.status}` as const),
+    activityBadgeLabel: t(`spreadListCard.activityBadge.${r.type}` as const),
     headline: r.headlineLabel,
     headlineUnit: r.headlineKind,
     tone: r.tone,
