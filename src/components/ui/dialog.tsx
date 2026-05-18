@@ -5,6 +5,7 @@ import { Dialog as DialogPrimitive } from "radix-ui";
 import { X } from "lucide-react";
 
 import { cn } from "@/lib/utils";
+import { useT } from "@/lib/i18n/client";
 
 /**
  * Editorial Dialog primitive — thin wrapper around Radix Dialog.
@@ -51,6 +52,7 @@ function DialogContent({
   hideCloseButton = false,
   ...props
 }: DialogContentProps) {
+  const t = useT();
   return (
     <DialogPortal>
       <DialogOverlay />
@@ -69,7 +71,7 @@ function DialogContent({
         {children}
         {!hideCloseButton && (
           <DialogPrimitive.Close
-            aria-label="Close"
+            aria-label={t("common.close")}
             className={cn(
               "absolute right-4 top-4 inline-flex h-7 w-7 items-center justify-center rounded-md",
               "text-text-tertiary transition-colors",

@@ -5,8 +5,10 @@ import { WizardSummaryRow } from "@/components/wizard/wizard-summary-row";
 import { WizardErrorBanner } from "@/components/wizard/wizard-error-banner";
 import { WizardCardPreview } from "@/components/wizard/wizard-card-preview";
 import { WizardSubmitButton } from "@/components/wizard/wizard-submit-button";
-import { getT } from "@/lib/i18n/server";
+import { getT, getLocale } from "@/lib/i18n/server";
 import { logYieldPosition } from "../actions";
+import type { Locale } from "@/lib/i18n/types";
+import type { TFunction } from "@/lib/i18n/resolve";
 
 export const dynamic = "force-dynamic";
 
@@ -71,8 +73,12 @@ function parseNum(s: string): number {
   return Number.isFinite(n) ? n : 0;
 }
 
-function fmtUsd(n: number, signed = false): string {
-  const abs = Math.abs(n).toLocaleString("en-US", {
+function intlLocale(locale: Locale): string {
+  return locale === "ru" ? "ru-RU" : "en-US";
+}
+
+function fmtUsd(n: number, locale: Locale, signed = false): string {
+  const abs = Math.abs(n).toLocaleString(intlLocale(locale), {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   });
@@ -86,11 +92,11 @@ function fmtPct(n: number, signed = true): string {
   return `${sign}${abs}%`;
 }
 
-function fmtDate(iso: string): string {
+function fmtDate(iso: string, locale: Locale): string {
   if (!iso) return "—";
   const d = new Date(iso);
   if (!Number.isFinite(d.getTime())) return iso;
-  return d.toLocaleDateString("en-US", {
+  return d.toLocaleDateString(intlLocale(locale), {
     month: "short",
     day: "numeric",
     year: "numeric",
@@ -112,6 +118,7 @@ function fmtDate(iso: string): string {
  */
 export default async function YieldReviewPage(props: { searchParams: Search }) {
   const t = await getT();
+  const locale = await getLocale();
   const sp = await props.searchParams;
   const STEP_LABELS = [
     t("wizard.yield.stepLabels.kind"),
@@ -204,7 +211,10 @@ export default async function YieldReviewPage(props: { searchParams: Search }) {
         : "open";
 
   // ── Per-kind detail rows ──────────────────────────────────────────────────
-  const kindRows = renderKindRows(v.kind, v, editAllHref);
+  const kindRows = renderKindRows(v.kind, v, editAllHref, t, locale);
+  const kindLabel = isYieldKindLiteral(v.kind)
+    ? t(`yieldKind.${v.kind}` as const)
+    : v.kind;
 
   return (
     <WizardShell
@@ -212,11 +222,15 @@ export default async function YieldReviewPage(props: { searchParams: Search }) {
       step={3}
       totalSteps={3}
       stepLabels={STEP_LABELS}
-      title={isEditing ? "Confirm changes" : "Confirm yield position"}
+      title={
+        isEditing
+          ? t("wizard.yield.reviewStep.titleEdit")
+          : t("wizard.yield.reviewStep.title")
+      }
       subtitle={
         isEditing
-          ? "Verify the updated state below, then save."
-          : "Review the numbers, status, and tags. Submit to land the row on the activity feed."
+          ? t("wizard.yield.reviewStep.subtitleEdit")
+          : t("wizard.yield.reviewStep.subtitle")
       }
     >
       <WizardErrorBanner error={getStr(sp, "error") || undefined} />
@@ -225,7 +239,9 @@ export default async function YieldReviewPage(props: { searchParams: Search }) {
       <section className="border-y border-border py-10">
         <div className="flex flex-col gap-2">
           <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-text-tertiary">
-            {status === "closed" ? "Realized APY" : "Expected APY"}
+            {status === "closed"
+              ? t("wizard.yield.reviewStep.hero.realizedApy")
+              : t("wizard.yield.reviewStep.hero.expectedApy")}
           </p>
           <div className="flex items-baseline gap-3">
             <span
@@ -235,11 +251,11 @@ export default async function YieldReviewPage(props: { searchParams: Search }) {
               {expectedApy > 0 ? fmtPct(expectedApy, true) : "—"}
             </span>
             <span className="font-serif text-xl font-normal text-text-tertiary">
-              APY
+              {t("wizard.yield.reviewStep.hero.apyUnit")}
             </span>
           </div>
           <p className="mt-2 font-mono text-[13px] text-text-secondary">
-            Expected total yield:{" "}
+            {t("wizard.yield.reviewStep.hero.expectedYieldLabel")}{" "}
             <span
               className={
                 expectedTotalYieldUsd !== null && expectedTotalYieldUsd >= 0
@@ -248,19 +264,19 @@ export default async function YieldReviewPage(props: { searchParams: Search }) {
               }
             >
               {expectedTotalYieldUsd !== null
-                ? fmtUsd(expectedTotalYieldUsd, true)
+                ? fmtUsd(expectedTotalYieldUsd, locale, true)
                 : "—"}
             </span>
             {capital > 0 && (
               <>
                 {" · "}
-                Capital: {fmtUsd(capital)}
+                {t("wizard.yield.reviewStep.hero.capitalLabel")} {fmtUsd(capital, locale)}
               </>
             )}
             {fees > 0 && (
               <>
                 {" · "}
-                Fees: {fmtUsd(fees)}
+                {t("wizard.yield.reviewStep.hero.feesLabel")} {fmtUsd(fees, locale)}
               </>
             )}
           </p>
@@ -270,7 +286,7 @@ export default async function YieldReviewPage(props: { searchParams: Search }) {
       {/* ── Card preview (matches /spreads/archive rendering) ────────────── */}
       <section className="mt-10">
         <p className="mb-3 font-mono text-[10px] uppercase tracking-[0.18em] text-text-tertiary">
-          How it appears on the feed
+          {t("wizard.yield.reviewStep.cardPreview.label")}
         </p>
         <WizardCardPreview
           activityType="yield_position"
@@ -279,7 +295,7 @@ export default async function YieldReviewPage(props: { searchParams: Search }) {
             v.name ||
             (v.asset && v.protocol
               ? `${v.asset.toUpperCase()} · ${v.protocol} · ${v.kind}`
-              : "Untitled yield position")
+              : t("wizard.yield.reviewStep.cardPreview.untitledName"))
           }
           subtype={{
             symbol: v.asset.toUpperCase() || null,
@@ -293,46 +309,46 @@ export default async function YieldReviewPage(props: { searchParams: Search }) {
       {/* ── Field summary ───────────────────────────────────────────────── */}
       <section className="mt-10">
         <h2 className="mb-2 font-serif text-[11px] font-semibold uppercase tracking-[0.18em] text-text-tertiary">
-          Position
+          {t("wizard.yield.reviewStep.sections.position")}
         </h2>
         <div>
           <WizardSummaryRow
-            label="Kind"
-            value={v.kind.charAt(0).toUpperCase() + v.kind.slice(1)}
+            label={t("wizard.yield.reviewStep.rows.kind")}
+            value={kindLabel}
             editHref={`/add/yield/kind?kind=${v.kind}`}
           />
           <WizardSummaryRow
-            label="Protocol"
+            label={t("wizard.yield.reviewStep.rows.protocol")}
             value={v.protocol || "—"}
             editHref={editAllHref}
           />
           {v.venue && (
             <WizardSummaryRow
-              label="Venue"
+              label={t("wizard.yield.reviewStep.rows.venue")}
               value={v.venue}
               editHref={editAllHref}
             />
           )}
           {v.chain && (
             <WizardSummaryRow
-              label="Chain"
+              label={t("wizard.yield.reviewStep.rows.chain")}
               value={v.chain}
               editHref={editAllHref}
             />
           )}
           <WizardSummaryRow
-            label="Asset"
+            label={t("wizard.yield.reviewStep.rows.asset")}
             value={v.asset.toUpperCase() || "—"}
             editHref={editAllHref}
           />
           <WizardSummaryRow
-            label="Amount"
+            label={t("wizard.yield.reviewStep.rows.amount")}
             value={v.amount || "—"}
             editHref={editAllHref}
           />
           <WizardSummaryRow
-            label="Capital (USD)"
-            value={capital > 0 ? fmtUsd(capital) : "—"}
+            label={t("wizard.yield.reviewStep.rows.capitalUsd")}
+            value={capital > 0 ? fmtUsd(capital, locale) : "—"}
             editHref={editAllHref}
           />
         </div>
@@ -340,71 +356,76 @@ export default async function YieldReviewPage(props: { searchParams: Search }) {
         {kindRows && (
           <>
             <h2 className="mb-2 mt-8 font-serif text-[11px] font-semibold uppercase tracking-[0.18em] text-text-tertiary">
-              {v.kind.charAt(0).toUpperCase() + v.kind.slice(1)} details
+              {t("wizard.yield.reviewStep.sections.kindDetailsHeading", {
+                kind: kindLabel,
+              })}
             </h2>
             <div>{kindRows}</div>
           </>
         )}
 
         <h2 className="mb-2 mt-8 font-serif text-[11px] font-semibold uppercase tracking-[0.18em] text-text-tertiary">
-          Yield economics
+          {t("wizard.yield.reviewStep.sections.economics")}
         </h2>
         <div>
           <WizardSummaryRow
-            label="Expected APY"
+            label={t("wizard.yield.reviewStep.rows.expectedApy")}
             value={expectedApy > 0 ? fmtPct(expectedApy, false) : "—"}
             tone={expectedApy > 0 ? "signature" : "neutral"}
             editHref={editAllHref}
           />
           {expectedTotalYieldUsd !== null && (
             <WizardSummaryRow
-              label="Expected yield (USD)"
-              value={fmtUsd(expectedTotalYieldUsd, true)}
+              label={t("wizard.yield.reviewStep.rows.expectedYieldUsd")}
+              value={fmtUsd(expectedTotalYieldUsd, locale, true)}
               tone={expectedTotalYieldUsd >= 0 ? "up" : "down"}
             />
           )}
           {v.rewardsToken && (
             <WizardSummaryRow
-              label="Reward token"
+              label={t("wizard.yield.reviewStep.rows.rewardToken")}
               value={v.rewardsToken.toUpperCase()}
               editHref={editAllHref}
             />
           )}
           <WizardSummaryRow
-            label="Protocol fees"
-            value={fmtUsd(feesProtocol)}
+            label={t("wizard.yield.reviewStep.rows.protocolFees")}
+            value={fmtUsd(feesProtocol, locale)}
             editHref={editAllHref}
           />
           <WizardSummaryRow
-            label="Gas fees"
-            value={fmtUsd(feesGas)}
+            label={t("wizard.yield.reviewStep.rows.gasFees")}
+            value={fmtUsd(feesGas, locale)}
             editHref={editAllHref}
           />
         </div>
 
         <h2 className="mb-2 mt-8 font-serif text-[11px] font-semibold uppercase tracking-[0.18em] text-text-tertiary">
-          Lifecycle
+          {t("wizard.yield.reviewStep.sections.lifecycle")}
         </h2>
         <div>
           <WizardSummaryRow
-            label="Status"
-            value={status}
+            label={t("wizard.yield.reviewStep.rows.status")}
+            value={t(`status.${status}` as const)}
             editHref={editAllHref}
           />
           <WizardSummaryRow
-            label="Opened at"
-            value={fmtDate(v.openedAt)}
+            label={t("wizard.yield.reviewStep.rows.openedAt")}
+            value={fmtDate(v.openedAt, locale)}
             editHref={editAllHref}
           />
           {v.closedAt && (
             <WizardSummaryRow
-              label="Closed at"
-              value={fmtDate(v.closedAt)}
+              label={t("wizard.yield.reviewStep.rows.closedAt")}
+              value={fmtDate(v.closedAt, locale)}
               editHref={editAllHref}
             />
           )}
           {daysHeld !== null && (
-            <WizardSummaryRow label="Days held" value={String(daysHeld)} />
+            <WizardSummaryRow
+              label={t("wizard.yield.reviewStep.rows.daysHeld")}
+              value={String(daysHeld)}
+            />
           )}
         </div>
 
@@ -414,31 +435,31 @@ export default async function YieldReviewPage(props: { searchParams: Search }) {
           v.regimeTags) && (
           <>
             <h2 className="mb-2 mt-8 font-serif text-[11px] font-semibold uppercase tracking-[0.18em] text-text-tertiary">
-              Strategy, tax, tags
+              {t("wizard.yield.reviewStep.sections.strategy")}
             </h2>
             <div>
               {v.strategyTag && (
                 <WizardSummaryRow
-                  label="Strategy"
+                  label={t("wizard.yield.reviewStep.rows.strategy")}
                   value={v.strategyTag}
                   editHref={editAllHref}
                 />
               )}
               <WizardSummaryRow
-                label="Taxable"
-                value={v.taxTaxable === "true" ? "Yes" : "No"}
+                label={t("wizard.yield.reviewStep.rows.taxable")}
+                value={v.taxTaxable === "true" ? t("common.yes") : t("common.no")}
                 editHref={editAllHref}
               />
               {v.taxJurisdiction && (
                 <WizardSummaryRow
-                  label="Jurisdiction"
+                  label={t("wizard.yield.reviewStep.rows.jurisdiction")}
                   value={v.taxJurisdiction}
                   editHref={editAllHref}
                 />
               )}
               {v.regimeTags && (
                 <WizardSummaryRow
-                  label="Regime tags"
+                  label={t("wizard.yield.reviewStep.rows.regimeTags")}
                   value={v.regimeTags}
                   editHref={editAllHref}
                 />
@@ -463,10 +484,12 @@ export default async function YieldReviewPage(props: { searchParams: Search }) {
             className="inline-flex items-center gap-1.5 font-mono text-[11px] uppercase tracking-[0.16em] text-text-tertiary transition-colors hover:text-text"
           >
             <ArrowLeft className="h-3 w-3" />
-            Back
+            {t("wizard.yield.nav.back")}
           </Link>
           <WizardSubmitButton>
-            {isEditing ? "Save changes" : "Log yield position"}
+            {isEditing
+              ? t("wizard.yield.reviewStep.submit.save")
+              : t("wizard.yield.reviewStep.submit.create")}
           </WizardSubmitButton>
         </div>
       </form>
@@ -475,6 +498,13 @@ export default async function YieldReviewPage(props: { searchParams: Search }) {
 }
 
 // ── Sub-components ──────────────────────────────────────────────────────────
+
+const YIELD_KIND_LITERALS = ["stake", "lend", "farm", "lp", "validator", "mining"] as const;
+type YieldKindLiteral = (typeof YIELD_KIND_LITERALS)[number];
+
+function isYieldKindLiteral(s: string): s is YieldKindLiteral {
+  return (YIELD_KIND_LITERALS as readonly string[]).includes(s);
+}
 
 /**
  * Render the kind-specific WizardSummaryRows. Returns null when no
@@ -485,6 +515,8 @@ function renderKindRows(
   kind: string,
   v: Record<string, string>,
   editHref: string,
+  t: TFunction,
+  locale: Locale,
 ): React.ReactNode | null {
   switch (kind) {
     case "stake":
@@ -493,14 +525,14 @@ function renderKindRows(
         <>
           {v.validatorAddress && (
             <WizardSummaryRow
-              label="Validator address"
+              label={t("wizard.yield.reviewStep.rows.validatorAddress")}
               value={v.validatorAddress}
               editHref={editHref}
             />
           )}
           {v.operator && (
             <WizardSummaryRow
-              label="Operator"
+              label={t("wizard.yield.reviewStep.rows.operator")}
               value={v.operator}
               editHref={editHref}
             />
@@ -513,14 +545,20 @@ function renderKindRows(
         <>
           {v.rateKind && (
             <WizardSummaryRow
-              label="Rate kind"
-              value={v.rateKind}
+              label={t("wizard.yield.reviewStep.rows.rateKind")}
+              value={
+                v.rateKind === "fixed"
+                  ? t("wizard.yield.fields.rateKind.fixed")
+                  : v.rateKind === "variable"
+                    ? t("wizard.yield.fields.rateKind.variable")
+                    : v.rateKind
+              }
               editHref={editHref}
             />
           )}
           {v.ltv && (
             <WizardSummaryRow
-              label="LTV %"
+              label={t("wizard.yield.reviewStep.rows.ltvPct")}
               value={`${v.ltv}%`}
               editHref={editHref}
             />
@@ -533,28 +571,28 @@ function renderKindRows(
         <>
           {v.pairA && (
             <WizardSummaryRow
-              label="Pair A"
+              label={t("wizard.yield.reviewStep.rows.pairA")}
               value={`${v.amountA || "?"} ${v.pairA.toUpperCase()}`}
               editHref={editHref}
             />
           )}
           {v.pairB && (
             <WizardSummaryRow
-              label="Pair B"
+              label={t("wizard.yield.reviewStep.rows.pairB")}
               value={`${v.amountB || "?"} ${v.pairB.toUpperCase()}`}
               editHref={editHref}
             />
           )}
           {v.poolFeeTier && (
             <WizardSummaryRow
-              label="Pool fee"
+              label={t("wizard.yield.reviewStep.rows.poolFee")}
               value={v.poolFeeTier}
               editHref={editHref}
             />
           )}
           {v.rewardToken && (
             <WizardSummaryRow
-              label="Reward token"
+              label={t("wizard.yield.reviewStep.rows.rewardToken")}
               value={v.rewardToken.toUpperCase()}
               editHref={editHref}
             />
@@ -567,38 +605,42 @@ function renderKindRows(
         <>
           {v.pairA && (
             <WizardSummaryRow
-              label="Pair A"
+              label={t("wizard.yield.reviewStep.rows.pairA")}
               value={`${v.amountA || "?"} ${v.pairA.toUpperCase()}`}
               editHref={editHref}
             />
           )}
           {v.pairB && (
             <WizardSummaryRow
-              label="Pair B"
+              label={t("wizard.yield.reviewStep.rows.pairB")}
               value={`${v.amountB || "?"} ${v.pairB.toUpperCase()}`}
               editHref={editHref}
             />
           )}
           <WizardSummaryRow
-            label="Pool fee tier"
+            label={t("wizard.yield.reviewStep.rows.poolFeeTier")}
             value={v.poolFeeTier || "—"}
             editHref={editHref}
           />
           <WizardSummaryRow
-            label="Concentrated?"
-            value={v.concentrated === "true" ? "Yes (v3)" : "No (v2)"}
+            label={t("wizard.yield.reviewStep.rows.concentrated")}
+            value={
+              v.concentrated === "true"
+                ? t("wizard.yield.reviewStep.rows.concentratedYes")
+                : t("wizard.yield.reviewStep.rows.concentratedNo")
+            }
             editHref={editHref}
           />
           {v.rangeLower && (
             <WizardSummaryRow
-              label="Range lower"
+              label={t("wizard.yield.reviewStep.rows.rangeLower")}
               value={v.rangeLower}
               editHref={editHref}
             />
           )}
           {v.rangeUpper && (
             <WizardSummaryRow
-              label="Range upper"
+              label={t("wizard.yield.reviewStep.rows.rangeUpper")}
               value={v.rangeUpper}
               editHref={editHref}
             />
@@ -610,12 +652,12 @@ function renderKindRows(
       return (
         <>
           <WizardSummaryRow
-            label="Validator"
+            label={t("wizard.yield.reviewStep.rows.validator")}
             value={v.validatorAddress || "—"}
             editHref={editHref}
           />
           <WizardSummaryRow
-            label="Commission"
+            label={t("wizard.yield.reviewStep.rows.commission")}
             value={v.commissionPct ? `${v.commissionPct}%` : "—"}
             editHref={editHref}
           />
@@ -626,12 +668,12 @@ function renderKindRows(
       return (
         <>
           <WizardSummaryRow
-            label="Hashrate"
+            label={t("wizard.yield.reviewStep.rows.hashrate")}
             value={v.hashrateThs ? `${v.hashrateThs} TH/s` : "—"}
             editHref={editHref}
           />
           <WizardSummaryRow
-            label="Electricity"
+            label={t("wizard.yield.reviewStep.rows.electricity")}
             value={
               v.electricityCostUsdKwh
                 ? `$${v.electricityCostUsdKwh}/kWh`
@@ -640,15 +682,15 @@ function renderKindRows(
             editHref={editHref}
           />
           <WizardSummaryRow
-            label="Pool"
+            label={t("wizard.yield.reviewStep.rows.pool")}
             value={v.pool || "—"}
             editHref={editHref}
           />
           <WizardSummaryRow
-            label="Expected revenue / day"
+            label={t("wizard.yield.reviewStep.rows.expectedRevenuePerDay")}
             value={
               v.expectedDailyRevenueUsd
-                ? fmtUsd(parseNum(v.expectedDailyRevenueUsd))
+                ? fmtUsd(parseNum(v.expectedDailyRevenueUsd), locale)
                 : "—"
             }
             editHref={editHref}

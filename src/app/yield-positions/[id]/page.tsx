@@ -32,11 +32,19 @@ import {
 import { WizardSubmitButton } from "@/components/wizard/wizard-submit-button";
 import { WizardInput } from "@/components/wizard/wizard-field";
 import { DeleteButton } from "@/components/activity/delete-button";
+import { getT, getLocale } from "@/lib/i18n/server";
+import type { Locale } from "@/lib/i18n/types";
+import type { TFunction } from "@/lib/i18n/resolve";
+import type { YieldKind } from "@/types/canonical";
 
 export const dynamic = "force-dynamic";
 
-function fmtUsd(n: number, signed = false): string {
-  const abs = Math.abs(n).toLocaleString("en-US", {
+function intlLocale(locale: Locale): string {
+  return locale === "ru" ? "ru-RU" : "en-US";
+}
+
+function fmtUsd(n: number, locale: Locale, signed = false): string {
+  const abs = Math.abs(n).toLocaleString(intlLocale(locale), {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   });
@@ -50,21 +58,27 @@ function fmtPct(n: number, signed = true): string {
   return `${sign}${abs}%`;
 }
 
-function fmtDate(iso: string | null | undefined): string {
+function fmtDate(iso: string | null | undefined, locale: Locale): string {
   if (!iso) return "—";
   const d = new Date(iso);
   if (!Number.isFinite(d.getTime())) return "—";
-  return d.toLocaleDateString("en-US", {
+  return d.toLocaleDateString(intlLocale(locale), {
     month: "short",
     day: "numeric",
     year: "numeric",
   });
 }
 
-function fmtAmount(s: string): string {
+function fmtAmount(s: string, locale: Locale): string {
   const n = Number(s);
   if (!Number.isFinite(n)) return s;
-  return n.toLocaleString("en-US", { maximumSignificantDigits: 6 });
+  return n.toLocaleString(intlLocale(locale), { maximumSignificantDigits: 6 });
+}
+
+const YIELD_KIND_LITERALS = ["stake", "lend", "farm", "lp", "validator", "mining"] as const;
+
+function isYieldKindLiteral(s: string): s is YieldKind {
+  return (YIELD_KIND_LITERALS as readonly string[]).includes(s);
 }
 
 /**
@@ -93,6 +107,8 @@ export default async function YieldPositionDetailPage({
   const { id } = await params;
   const sp = await searchParams;
   const { id: userId } = await requireUser();
+  const t = await getT();
+  const locale = await getLocale();
 
   const row = await getYieldPositionForEdit(userId, id);
   if (!row) notFound();
@@ -144,10 +160,10 @@ export default async function YieldPositionDetailPage({
                   }`}
                 />
                 <span className="text-[10px] font-semibold uppercase tracking-[0.12em]">
-                  {row.status}
+                  {t(`status.${row.status}` as const)}
                 </span>
               </span>
-              <span>{fmtDate(row.openedAt)}</span>
+              <span>{fmtDate(row.openedAt, locale)}</span>
             </span>
           </div>
 
@@ -158,19 +174,31 @@ export default async function YieldPositionDetailPage({
               </h1>
               <Link
                 href={`/add/yield/fields?edit=${row.id}`}
-                aria-label="Edit yield position"
+                aria-label={t("yieldPositions.detail.editAria")}
                 className="mt-2 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-border bg-surface text-text-tertiary transition-colors hover:border-border-strong hover:text-text"
               >
                 <Pencil className="h-3.5 w-3.5" />
               </Link>
             </div>
             <p className="mt-3 text-base text-text-secondary">
-              {row.asset.toUpperCase()} · {row.protocol} · {row.kind}
+              {row.asset.toUpperCase()} · {row.protocol} ·{" "}
+              {isYieldKindLiteral(row.kind)
+                ? t(`yieldKind.${row.kind}` as const)
+                : row.kind}
               {row.chain && <> · {row.chain}</>}
             </p>
             <p className="mt-1 font-mono text-sm text-text-tertiary">
-              {daysHeld} day{daysHeld === 1 ? "" : "s"} held
-              {row.closedAt && <> · closed {fmtDate(row.closedAt)}</>}
+              {t.plural("yieldPositions.detail.daysHeld", daysHeld, {
+                count: daysHeld,
+              })}
+              {row.closedAt && (
+                <>
+                  {" · "}
+                  {t("yieldPositions.detail.closedSuffix", {
+                    date: fmtDate(row.closedAt, locale),
+                  })}
+                </>
+              )}
             </p>
             <div className="mt-5">
               <SatisfactionToggle
@@ -202,7 +230,7 @@ export default async function YieldPositionDetailPage({
           {/* ── Position summary ───────────────────────────────────────── */}
           <section className="mt-14">
             <h2 className="font-serif text-xs font-semibold uppercase tracking-[0.18em] text-text-tertiary">
-              Position summary
+              {t("yieldPositions.detail.sections.summary")}
             </h2>
             <div className="mt-6 overflow-hidden rounded-md border border-border bg-surface">
               <Table>
@@ -210,32 +238,48 @@ export default async function YieldPositionDetailPage({
                   <TableRow className="hover:bg-transparent">
                     <TableHead className="text-text-tertiary">&nbsp;</TableHead>
                     <TableHead className="text-right text-text-secondary">
-                      Value
+                      {t("yieldPositions.detail.columns.value")}
                     </TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  <ExecRow label="Protocol" value={row.protocol} mono />
-                  {row.venue && <ExecRow label="Venue" value={row.venue} mono />}
-                  {row.chain && <ExecRow label="Chain" value={row.chain} mono />}
                   <ExecRow
-                    label="Asset deployed"
-                    value={`${fmtAmount(row.amount)} ${row.asset.toUpperCase()}`}
+                    label={t("yieldPositions.detail.rows.protocol")}
+                    value={row.protocol}
+                    mono
+                  />
+                  {row.venue && (
+                    <ExecRow
+                      label={t("yieldPositions.detail.rows.venue")}
+                      value={row.venue}
+                      mono
+                    />
+                  )}
+                  {row.chain && (
+                    <ExecRow
+                      label={t("yieldPositions.detail.rows.chain")}
+                      value={row.chain}
+                      mono
+                    />
+                  )}
+                  <ExecRow
+                    label={t("yieldPositions.detail.rows.assetDeployed")}
+                    value={`${fmtAmount(row.amount, locale)} ${row.asset.toUpperCase()}`}
                     mono
                   />
                   <ExecRow
-                    label="Capital (USD)"
-                    value={capital > 0 ? fmtUsd(capital) : "—"}
+                    label={t("yieldPositions.detail.rows.capitalUsd")}
+                    value={capital > 0 ? fmtUsd(capital, locale) : "—"}
                     mono
                   />
                   <ExecRow
-                    label="Expected APY"
+                    label={t("yieldPositions.detail.rows.expectedApy")}
                     value={expectedApy !== null ? fmtPct(expectedApy, false) : "—"}
                     mono
                   />
                   {realizedApy !== null && (
                     <ExecRow
-                      label="Realized APY"
+                      label={t("yieldPositions.detail.rows.realizedApy")}
                       value={
                         <span
                           className={
@@ -252,25 +296,33 @@ export default async function YieldPositionDetailPage({
                   )}
                   {row.rewardsToken && (
                     <ExecRow
-                      label="Reward token"
+                      label={t("yieldPositions.detail.rows.rewardToken")}
                       value={row.rewardsToken.toUpperCase()}
                       mono
                     />
                   )}
                   <ExecRow
-                    label="Rewards (USD)"
-                    value={rewardsUsd > 0 ? fmtUsd(rewardsUsd) : "—"}
+                    label={t("yieldPositions.detail.rows.rewardsUsd")}
+                    value={rewardsUsd > 0 ? fmtUsd(rewardsUsd, locale) : "—"}
                     mono
                   />
                   <ExecRow
-                    label="Protocol fees"
-                    value={fmtUsd(feesProtocol)}
+                    label={t("yieldPositions.detail.rows.protocolFees")}
+                    value={fmtUsd(feesProtocol, locale)}
                     mono
                   />
-                  <ExecRow label="Gas fees" value={fmtUsd(feesGas)} mono />
-                  <ExecRow label="Total fees" value={fmtUsd(totalFees)} mono />
                   <ExecRow
-                    label="Realized P&L"
+                    label={t("yieldPositions.detail.rows.gasFees")}
+                    value={fmtUsd(feesGas, locale)}
+                    mono
+                  />
+                  <ExecRow
+                    label={t("yieldPositions.detail.rows.totalFees")}
+                    value={fmtUsd(totalFees, locale)}
+                    mono
+                  />
+                  <ExecRow
+                    label={t("yieldPositions.detail.rows.realizedPnl")}
                     value={
                       <span
                         className={
@@ -279,13 +331,13 @@ export default async function YieldPositionDetailPage({
                             : "text-down font-medium"
                         }
                       >
-                        {fmtUsd(realizedPnl, true)}
+                        {fmtUsd(realizedPnl, locale, true)}
                       </span>
                     }
                     mono
                   />
                   <ExecRow
-                    label="Net P&L"
+                    label={t("yieldPositions.detail.rows.netPnl")}
                     value={
                       <span
                         className={
@@ -294,7 +346,7 @@ export default async function YieldPositionDetailPage({
                             : "text-down font-medium"
                         }
                       >
-                        {fmtUsd(netPnl, true)}
+                        {fmtUsd(netPnl, locale, true)}
                       </span>
                     }
                     mono
@@ -305,50 +357,53 @@ export default async function YieldPositionDetailPage({
           </section>
 
           {/* ── Kind-specific card ─────────────────────────────────────── */}
-          {row.kindMeta && <KindMetaCard meta={row.kindMeta} kind={row.kind} />}
+          {row.kindMeta && (
+            <KindMetaCard meta={row.kindMeta} kind={row.kind} t={t} locale={locale} />
+          )}
 
           {/* ── Rewards snapshot history (manual log) ──────────────────── */}
           <section className="mt-14">
             <h2 className="font-serif text-xs font-semibold uppercase tracking-[0.18em] text-text-tertiary">
-              Rewards snapshots
+              {t("yieldPositions.detail.sections.rewardsSnapshots")}
             </h2>
             <p className="mt-2 font-serif text-[12px] italic text-text-tertiary">
-              v5 stores the latest snapshot; per-snapshot history lands when the
-              worker cycle table ships in v6.
+              {t("yieldPositions.detail.hints.rewardsSnapshots")}
             </p>
             <div className="mt-4 overflow-hidden rounded-md border border-border bg-surface">
               <Table>
                 <TableHeader>
                   <TableRow className="hover:bg-transparent">
-                    <TableHead className="text-text-tertiary">Field</TableHead>
+                    <TableHead className="text-text-tertiary">
+                      {t("yieldPositions.detail.columns.field")}
+                    </TableHead>
                     <TableHead className="text-right text-text-secondary">
-                      Value
+                      {t("yieldPositions.detail.columns.value")}
                     </TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   <ExecRow
-                    label="Rewards accrued"
-                    value={`${fmtAmount(row.rewardsAccrued)} ${
+                    label={t("yieldPositions.detail.rows.rewardsAccrued")}
+                    value={`${fmtAmount(row.rewardsAccrued, locale)} ${
                       (row.rewardsToken ?? row.asset).toUpperCase()
                     }`}
                     mono
                   />
                   <ExecRow
-                    label="Rewards claimed"
-                    value={`${fmtAmount(row.rewardsClaimed)} ${
+                    label={t("yieldPositions.detail.rows.rewardsClaimed")}
+                    value={`${fmtAmount(row.rewardsClaimed, locale)} ${
                       (row.rewardsToken ?? row.asset).toUpperCase()
                     }`}
                     mono
                   />
                   <ExecRow
-                    label="Snapshot USD"
-                    value={rewardsUsd > 0 ? fmtUsd(rewardsUsd) : "—"}
+                    label={t("yieldPositions.detail.rows.snapshotUsd")}
+                    value={rewardsUsd > 0 ? fmtUsd(rewardsUsd, locale) : "—"}
                     mono
                   />
                   <ExecRow
-                    label="Snapshot taken at"
-                    value={fmtDate(row.currentPriceAt)}
+                    label={t("yieldPositions.detail.rows.snapshotTakenAt")}
+                    value={fmtDate(row.currentPriceAt, locale)}
                     mono
                   />
                 </TableBody>
@@ -364,7 +419,7 @@ export default async function YieldPositionDetailPage({
                   htmlFor="snapshot-qty"
                   className="block font-mono text-[10px] uppercase tracking-[0.16em] text-text-tertiary"
                 >
-                  Reward qty earned since last snapshot
+                  {t("yieldPositions.detail.snapshotForm.qtyLabel")}
                 </label>
                 <WizardInput
                   id="snapshot-qty"
@@ -382,7 +437,7 @@ export default async function YieldPositionDetailPage({
                   htmlFor="snapshot-usd"
                   className="block font-mono text-[10px] uppercase tracking-[0.16em] text-text-tertiary"
                 >
-                  Total reward value (USD)
+                  {t("yieldPositions.detail.snapshotForm.usdLabel")}
                 </label>
                 <WizardInput
                   id="snapshot-usd"
@@ -395,7 +450,9 @@ export default async function YieldPositionDetailPage({
                   className="mt-1.5"
                 />
               </div>
-              <WizardSubmitButton>Snapshot rewards</WizardSubmitButton>
+              <WizardSubmitButton>
+                {t("yieldPositions.detail.snapshotForm.submit")}
+              </WizardSubmitButton>
             </form>
           </section>
 
@@ -403,7 +460,7 @@ export default async function YieldPositionDetailPage({
           {row.regimeTags.length > 0 && (
             <section className="mt-14">
               <h2 className="font-serif text-xs font-semibold uppercase tracking-[0.18em] text-text-tertiary">
-                Regime tags
+                {t("yieldPositions.detail.sections.regimeTags")}
               </h2>
               <div className="mt-4 flex flex-wrap gap-2">
                 {row.regimeTags.map((tag) => (
@@ -421,10 +478,10 @@ export default async function YieldPositionDetailPage({
           {/* ── Notes ──────────────────────────────────────────────────── */}
           <section className="mt-14">
             <h2 className="font-serif text-xs font-semibold uppercase tracking-[0.18em] text-text-tertiary">
-              Notes
+              {t("yieldPositions.detail.sections.notes")}
             </h2>
             <p className="mt-2 font-serif text-[12px] italic text-text-tertiary">
-              Capture what you learned from this position. Edit anytime.
+              {t("yieldPositions.detail.hints.notes")}
             </p>
             <div className="mt-4">
               <NotesEditor
@@ -439,10 +496,10 @@ export default async function YieldPositionDetailPage({
           {/* ── Custom tags ────────────────────────────────────────────── */}
           <section className="mt-14">
             <h2 className="font-serif text-xs font-semibold uppercase tracking-[0.18em] text-text-tertiary">
-              Custom tags
+              {t("yieldPositions.detail.sections.customTags")}
             </h2>
             <p className="mt-2 font-serif text-[12px] italic text-text-tertiary">
-              Free-form tags for grouping in saved views.
+              {t("yieldPositions.detail.hints.customTags")}
             </p>
             <div className="mt-4">
               <TagEditor activityId={row.id} initialTags={initialTags} />
@@ -452,10 +509,10 @@ export default async function YieldPositionDetailPage({
           {/* ── Screenshots ────────────────────────────────────────────── */}
           <section className="mt-14">
             <h2 className="font-serif text-xs font-semibold uppercase tracking-[0.18em] text-text-tertiary">
-              Screenshots
+              {t("yieldPositions.detail.sections.screenshots")}
             </h2>
             <p className="mt-2 font-serif text-[12px] italic text-text-tertiary">
-              Drop a screenshot of the position, validator dashboard, or rewards.
+              {t("yieldPositions.detail.hints.screenshots")}
             </p>
             <div className="mt-4">
               <ScreenshotsSection
@@ -468,7 +525,7 @@ export default async function YieldPositionDetailPage({
           {/* ── Actions ────────────────────────────────────────────────── */}
           <section className="mt-14">
             <h2 className="font-serif text-xs font-semibold uppercase tracking-[0.18em] text-text-tertiary">
-              Actions
+              {t("yieldPositions.detail.sections.actions")}
             </h2>
             <div className="mt-4 flex flex-wrap items-center gap-2">
               <Link
@@ -476,7 +533,7 @@ export default async function YieldPositionDetailPage({
                 className="inline-flex items-center gap-1.5 rounded-md border border-border bg-surface px-3 py-1.5 font-mono text-[10px] uppercase tracking-[0.16em] text-text-secondary transition-colors hover:border-border-strong hover:text-text"
               >
                 <Pencil className="h-3 w-3" />
-                Edit
+                {t("yieldPositions.detail.actions.edit")}
               </Link>
               {row.status === "open" && (
                 <form action={markUnwindingYieldPosition} className="inline">
@@ -485,7 +542,7 @@ export default async function YieldPositionDetailPage({
                     type="submit"
                     className="inline-flex items-center gap-1.5 rounded-md border border-border bg-surface px-3 py-1.5 font-mono text-[10px] uppercase tracking-[0.16em] text-text-secondary transition-colors hover:border-warn hover:text-warn"
                   >
-                    Mark unwinding
+                    {t("yieldPositions.detail.actions.markUnwinding")}
                   </button>
                 </form>
               )}
@@ -496,7 +553,7 @@ export default async function YieldPositionDetailPage({
                     type="submit"
                     className="inline-flex items-center gap-1.5 rounded-md border border-border bg-surface px-3 py-1.5 font-mono text-[10px] uppercase tracking-[0.16em] text-text-secondary transition-colors hover:border-border-strong hover:text-text"
                   >
-                    Close position
+                    {t("yieldPositions.detail.actions.closePosition")}
                   </button>
                 </form>
               )}
@@ -514,7 +571,7 @@ export default async function YieldPositionDetailPage({
                 href="/spreads/archive?activity=yield_position"
                 className="hover:text-text"
               >
-                ← Back to yield positions
+                {t("yieldPositions.detail.footer.back")}
               </Link>
               <span>{serial.toLowerCase()}</span>
             </div>
@@ -556,14 +613,23 @@ function ExecRow({
 function KindMetaCard({
   meta,
   kind,
+  t,
+  locale,
 }: {
   meta: NonNullable<
     Awaited<ReturnType<typeof getYieldPositionForEdit>>
   >["kindMeta"];
   kind: string;
+  t: TFunction;
+  locale: Locale;
 }) {
   if (!meta) return null;
-  const heading = `${kind.charAt(0).toUpperCase()}${kind.slice(1)} details`;
+  const kindLabel = isYieldKindLiteral(kind)
+    ? t(`yieldKind.${kind}` as const)
+    : kind;
+  const heading = t("yieldPositions.detail.kindDetailsHeading", {
+    kind: kindLabel,
+  });
   return (
     <section className="mt-14">
       <h2 className="font-serif text-xs font-semibold uppercase tracking-[0.18em] text-text-tertiary">
@@ -573,9 +639,11 @@ function KindMetaCard({
         <Table>
           <TableHeader>
             <TableRow className="hover:bg-transparent">
-              <TableHead className="text-text-tertiary">Field</TableHead>
+              <TableHead className="text-text-tertiary">
+                {t("yieldPositions.detail.columns.field")}
+              </TableHead>
               <TableHead className="text-right text-text-secondary">
-                Value
+                {t("yieldPositions.detail.columns.value")}
               </TableHead>
             </TableRow>
           </TableHeader>
@@ -584,41 +652,63 @@ function KindMetaCard({
               <>
                 {meta.validatorAddress && (
                   <ExecRow
-                    label="Validator address"
+                    label={t("yieldPositions.detail.rows.validatorAddress")}
                     value={meta.validatorAddress}
                     mono
                   />
                 )}
                 {meta.operator && (
-                  <ExecRow label="Operator" value={meta.operator} mono />
+                  <ExecRow
+                    label={t("yieldPositions.detail.rows.operator")}
+                    value={meta.operator}
+                    mono
+                  />
                 )}
               </>
             )}
             {meta.kind === "lend" && (
               <>
-                <ExecRow label="Rate kind" value={meta.rateKind} mono />
+                <ExecRow
+                  label={t("yieldPositions.detail.rows.rateKind")}
+                  value={
+                    meta.rateKind === "fixed"
+                      ? t("wizard.yield.fields.rateKind.fixed")
+                      : meta.rateKind === "variable"
+                        ? t("wizard.yield.fields.rateKind.variable")
+                        : meta.rateKind
+                  }
+                  mono
+                />
                 {meta.ltv != null && (
-                  <ExecRow label="LTV" value={`${meta.ltv}%`} mono />
+                  <ExecRow
+                    label={t("yieldPositions.detail.rows.ltv")}
+                    value={`${meta.ltv}%`}
+                    mono
+                  />
                 )}
               </>
             )}
             {meta.kind === "farm" && (
               <>
                 <ExecRow
-                  label="Pair A"
-                  value={`${fmtAmount(meta.amountA)} ${meta.pairA.toUpperCase()}`}
+                  label={t("yieldPositions.detail.rows.pairA")}
+                  value={`${fmtAmount(meta.amountA, locale)} ${meta.pairA.toUpperCase()}`}
                   mono
                 />
                 <ExecRow
-                  label="Pair B"
-                  value={`${fmtAmount(meta.amountB)} ${meta.pairB.toUpperCase()}`}
+                  label={t("yieldPositions.detail.rows.pairB")}
+                  value={`${fmtAmount(meta.amountB, locale)} ${meta.pairB.toUpperCase()}`}
                   mono
                 />
                 {meta.poolFeeTier && (
-                  <ExecRow label="Pool fee" value={meta.poolFeeTier} mono />
+                  <ExecRow
+                    label={t("yieldPositions.detail.rows.poolFee")}
+                    value={meta.poolFeeTier}
+                    mono
+                  />
                 )}
                 <ExecRow
-                  label="Reward token"
+                  label={t("yieldPositions.detail.rows.rewardToken")}
                   value={meta.rewardToken.toUpperCase()}
                   mono
                 />
@@ -627,32 +717,40 @@ function KindMetaCard({
             {meta.kind === "lp" && (
               <>
                 <ExecRow
-                  label="Pair A"
-                  value={`${fmtAmount(meta.amountA)} ${meta.pairA.toUpperCase()}`}
+                  label={t("yieldPositions.detail.rows.pairA")}
+                  value={`${fmtAmount(meta.amountA, locale)} ${meta.pairA.toUpperCase()}`}
                   mono
                 />
                 <ExecRow
-                  label="Pair B"
-                  value={`${fmtAmount(meta.amountB)} ${meta.pairB.toUpperCase()}`}
+                  label={t("yieldPositions.detail.rows.pairB")}
+                  value={`${fmtAmount(meta.amountB, locale)} ${meta.pairB.toUpperCase()}`}
                   mono
                 />
-                <ExecRow label="Pool fee tier" value={meta.poolFeeTier} mono />
                 <ExecRow
-                  label="Concentrated?"
-                  value={meta.concentrated ? "Yes (v3)" : "No (v2)"}
+                  label={t("yieldPositions.detail.rows.poolFeeTier")}
+                  value={meta.poolFeeTier}
+                  mono
+                />
+                <ExecRow
+                  label={t("yieldPositions.detail.rows.concentrated")}
+                  value={
+                    meta.concentrated
+                      ? t("yieldPositions.detail.rows.concentratedYes")
+                      : t("yieldPositions.detail.rows.concentratedNo")
+                  }
                   mono
                 />
                 {meta.rangeLower && (
                   <ExecRow
-                    label="Range lower"
-                    value={fmtAmount(meta.rangeLower)}
+                    label={t("yieldPositions.detail.rows.rangeLower")}
+                    value={fmtAmount(meta.rangeLower, locale)}
                     mono
                   />
                 )}
                 {meta.rangeUpper && (
                   <ExecRow
-                    label="Range upper"
-                    value={fmtAmount(meta.rangeUpper)}
+                    label={t("yieldPositions.detail.rows.rangeUpper")}
+                    value={fmtAmount(meta.rangeUpper, locale)}
                     mono
                   />
                 )}
@@ -661,12 +759,12 @@ function KindMetaCard({
             {meta.kind === "validator" && (
               <>
                 <ExecRow
-                  label="Validator address"
+                  label={t("yieldPositions.detail.rows.validatorAddress")}
                   value={meta.validatorAddress}
                   mono
                 />
                 <ExecRow
-                  label="Commission"
+                  label={t("yieldPositions.detail.rows.commission")}
                   value={`${meta.commissionPct}%`}
                   mono
                 />
@@ -675,19 +773,23 @@ function KindMetaCard({
             {meta.kind === "mining" && (
               <>
                 <ExecRow
-                  label="Hashrate"
+                  label={t("yieldPositions.detail.rows.hashrate")}
                   value={`${meta.hashrateThs} TH/s`}
                   mono
                 />
                 <ExecRow
-                  label="Electricity"
+                  label={t("yieldPositions.detail.rows.electricity")}
                   value={`$${meta.electricityCostUsdKwh}/kWh`}
                   mono
                 />
-                <ExecRow label="Pool" value={meta.pool} mono />
                 <ExecRow
-                  label="Expected revenue / day"
-                  value={fmtUsd(meta.expectedDailyRevenueUsd)}
+                  label={t("yieldPositions.detail.rows.pool")}
+                  value={meta.pool}
+                  mono
+                />
+                <ExecRow
+                  label={t("yieldPositions.detail.rows.expectedRevenuePerDay")}
+                  value={fmtUsd(meta.expectedDailyRevenueUsd, locale)}
                   mono
                 />
               </>

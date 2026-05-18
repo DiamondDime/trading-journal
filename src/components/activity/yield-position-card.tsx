@@ -1,6 +1,8 @@
 import { Lock } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { ActivityStatus, YieldKind } from "@/types/canonical";
+import { getT, getLocale } from "@/lib/i18n/server";
+import type { Locale } from "@/lib/i18n/types";
 
 export interface YieldPositionCardProps {
   /** Title — usually activity.name. */
@@ -43,14 +45,9 @@ const STATUS_DOT: Record<
   closed: "bg-text-tertiary",
 };
 
-const STATUS_LABEL: Record<
-  Extract<ActivityStatus, "open" | "unwinding" | "closed">,
-  string
-> = {
-  open: "Open",
-  unwinding: "Unwinding",
-  closed: "Closed",
-};
+function intlLocale(locale: Locale): string {
+  return locale === "ru" ? "ru-RU" : "en-US";
+}
 
 function fmtPct(n: number, signed = true): string {
   const abs = Math.abs(n).toFixed(2);
@@ -58,8 +55,8 @@ function fmtPct(n: number, signed = true): string {
   return `${sign}${abs}%`;
 }
 
-function fmtUsd(n: number): string {
-  return `$${n.toLocaleString("en-US", { maximumFractionDigits: 0 })}`;
+function fmtUsd(n: number, locale: Locale): string {
+  return `$${n.toLocaleString(intlLocale(locale), { maximumFractionDigits: 0 })}`;
 }
 
 function daysSince(iso: string): number {
@@ -96,7 +93,7 @@ function computeLiveApy(
  * Lockup countdown surfaces only when the trader stamped a lockupDays
  * value at open and the window is still active.
  */
-export function YieldPositionCard({
+export async function YieldPositionCard({
   name,
   status,
   serial,
@@ -112,10 +109,14 @@ export function YieldPositionCard({
   lockupDays,
   className,
 }: YieldPositionCardProps) {
+  const t = await getT();
+  const locale = await getLocale();
   const liveApy = realizedApyPct ?? computeLiveApy(rewardsUsd, capitalUsd, openedAt, closedAt);
   const hasRealized = liveApy !== null;
   const headlineApy = hasRealized ? liveApy : expectedApyPct;
-  const headlineLabel = hasRealized ? "Realized APY" : "Expected APY";
+  const headlineLabel = hasRealized
+    ? t("yieldPositions.detail.rows.realizedApy")
+    : t("yieldPositions.detail.rows.expectedApy");
   const headlineTone =
     headlineApy === null
       ? "text-text"
@@ -145,18 +146,18 @@ export function YieldPositionCard({
         <span className="inline-flex items-center gap-1.5 text-text-tertiary">
           <span className={cn("h-1.5 w-1.5 rounded-full", STATUS_DOT[status])} />
           <span className="font-mono uppercase tracking-[0.16em]">
-            {STATUS_LABEL[status]}
+            {t(`status.${status}` as const)}
           </span>
         </span>
         <div className="flex items-center gap-3 font-mono text-text-tertiary">
           {lockupRemaining > 0 && (
             <span
               className="inline-flex items-center gap-1.5"
-              title="Lockup remaining"
+              title={t("yieldPositions.detail.lockupAria")}
             >
               <Lock className="h-2.5 w-2.5" />
               <span className="text-[10px] uppercase tracking-[0.12em]">
-                {lockupRemaining}d lockup
+                {t("yieldPositions.detail.lockupSuffix", { n: lockupRemaining })}
               </span>
             </span>
           )}
@@ -170,7 +171,7 @@ export function YieldPositionCard({
           {name}
         </h2>
         <p className="font-mono text-[12px] text-text-tertiary">
-          {asset.toUpperCase()} · {protocol} · {kind}
+          {asset.toUpperCase()} · {protocol} · {t(`yieldKind.${kind}` as const)}
         </p>
       </div>
 
@@ -189,32 +190,38 @@ export function YieldPositionCard({
             {headlineApy !== null ? fmtPct(headlineApy, true) : "—"}
           </span>
           <span className="font-serif text-lg font-normal text-text-tertiary">
-            APY
+            {t("wizard.yield.reviewStep.hero.apyUnit")}
           </span>
         </div>
 
         {ratio !== null && (
           <p className="font-mono text-[11px] text-text-secondary">
-            {hasRealized ? "Realized" : "Live"}: {fmtPct(liveApy ?? 0, false)}
+            {hasRealized
+              ? t("yieldPositions.detail.card.realizedLabel")
+              : t("yieldPositions.detail.card.liveLabel")}
+            : {fmtPct(liveApy ?? 0, false)}
             {" · "}
-            Expected: {fmtPct(expectedApyPct ?? 0, false)}
+            {t("yieldPositions.detail.card.expectedLabel")}:{" "}
+            {fmtPct(expectedApyPct ?? 0, false)}
             {" · "}
             <span
               className={
                 ratio >= 1 ? "text-up font-medium" : "text-down font-medium"
               }
             >
-              ratio {ratio.toFixed(2)}×
+              {t("yieldPositions.detail.card.ratioLabel")} {ratio.toFixed(2)}×
             </span>
           </p>
         )}
 
         <p className="mt-1 font-mono text-[11px] text-text-tertiary">
-          Capital: {capitalUsd ? fmtUsd(capitalUsd) : "—"}
+          {t("yieldPositions.detail.card.capitalLabel")}:{" "}
+          {capitalUsd ? fmtUsd(capitalUsd, locale) : "—"}
           {rewardsUsd != null && (
             <>
               {" · "}
-              Rewards: <span className="text-up">{fmtUsd(rewardsUsd)}</span>
+              {t("yieldPositions.detail.card.rewardsLabel")}:{" "}
+              <span className="text-up">{fmtUsd(rewardsUsd, locale)}</span>
             </>
           )}
         </p>

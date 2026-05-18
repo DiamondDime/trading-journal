@@ -41,8 +41,8 @@ export default async function YieldKindPage(props: { searchParams: Search }) {
       step={1}
       totalSteps={3}
       stepLabels={STEP_LABELS}
-      title="What kind of yield?"
-      subtitle="Each kind unlocks the right fields on the next step. Pick the one that matches your position — you can edit later."
+      title={t("wizard.yield.kindStep.title")}
+      subtitle={t("wizard.yield.kindStep.subtitle")}
     >
       <form
         id="yield-kind-form"
@@ -55,8 +55,8 @@ export default async function YieldKindPage(props: { searchParams: Search }) {
           defaultValue={defaultKind}
           required
           variant="cards"
-          legend="Yield kind"
-          requiredCue="· required"
+          legend={t("wizard.yield.kindStep.legend")}
+          requiredCue={t("wizard.yield.kindStep.requiredCue")}
           options={[
             {
               value: "stake",
@@ -103,13 +103,13 @@ export default async function YieldKindPage(props: { searchParams: Search }) {
             className="inline-flex items-center gap-1.5 font-mono text-[11px] uppercase tracking-[0.16em] text-text-tertiary transition-colors hover:text-text"
           >
             <ArrowLeft className="h-3 w-3" />
-            Back
+            {t("wizard.yield.nav.back")}
           </Link>
           <button
             type="submit"
             className="inline-flex items-center gap-2 rounded-md border border-text bg-text px-4 py-2 font-mono text-[11px] uppercase tracking-[0.16em] text-app transition-colors hover:bg-text-secondary"
           >
-            Continue
+            {t("wizard.yield.nav.continue")}
             <ArrowRight className="h-3 w-3" />
           </button>
         </div>

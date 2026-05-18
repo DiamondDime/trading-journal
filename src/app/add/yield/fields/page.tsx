@@ -231,11 +231,15 @@ export default async function YieldFieldsPage(props: { searchParams: Search }) {
       step={2}
       totalSteps={3}
       stepLabels={STEP_LABELS}
-      title={editValid ? "Edit yield details" : "Yield details"}
+      title={
+        editValid
+          ? t("wizard.yield.fieldsStep.titleEdit")
+          : t("wizard.yield.fieldsStep.title")
+      }
       subtitle={
         editValid
-          ? "Update any field. Status changes propagate to the activity feed."
-          : "Fill in the position. Kind-specific fields appear at the top; everything below is common to all yield kinds."
+          ? t("wizard.yield.fieldsStep.subtitleEdit")
+          : t("wizard.yield.fieldsStep.subtitle")
       }
     >
       {editValid && (
@@ -244,11 +248,13 @@ export default async function YieldFieldsPage(props: { searchParams: Search }) {
           role="status"
         >
           <span className="font-semibold uppercase tracking-[0.14em] text-[10px]">
-            Editing
+            {t("wizard.yield.editBanner.label")}
           </span>
           {" — "}
           <span className="font-serif italic">
-            updating yield position #{editId.slice(0, 4).toUpperCase()}
+            {t("wizard.yield.editBanner.body", {
+              serial: editId.slice(0, 4).toUpperCase(),
+            })}
           </span>
         </aside>
       )}
@@ -267,12 +273,14 @@ export default async function YieldFieldsPage(props: { searchParams: Search }) {
 
         {/* ── Kind-specific block ────────────────────────────────────────── */}
         <SectionLabel>
-          {effectiveKind.charAt(0).toUpperCase() + effectiveKind.slice(1)} details
+          {t("wizard.yield.fieldsStep.kindDetailsHeading", {
+            kind: t(`yieldKind.${effectiveKind}` as const),
+          })}
         </SectionLabel>
         <KindFields kind={effectiveKind} defaults={defaults} t={t} />
 
         {/* ── Position (common) ──────────────────────────────────────────── */}
-        <SectionLabel>Position</SectionLabel>
+        <SectionLabel>{t("wizard.yield.fieldsStep.sections.position")}</SectionLabel>
         <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
           <WizardField
             label={t("wizard.yield.fields.protocol.label")}
@@ -368,7 +376,7 @@ export default async function YieldFieldsPage(props: { searchParams: Search }) {
         </div>
 
         {/* ── Yield economics ────────────────────────────────────────────── */}
-        <SectionLabel>Yield economics</SectionLabel>
+        <SectionLabel>{t("wizard.yield.fieldsStep.sections.economics")}</SectionLabel>
         <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
           <WizardField
             label={t("wizard.yield.fields.expectedApyPct.label")}
@@ -435,9 +443,13 @@ export default async function YieldFieldsPage(props: { searchParams: Search }) {
         </div>
 
         {/* ── Lifecycle ──────────────────────────────────────────────────── */}
-        <SectionLabel>Lifecycle</SectionLabel>
+        <SectionLabel>{t("wizard.yield.fieldsStep.sections.lifecycle")}</SectionLabel>
         <div className="grid grid-cols-1 gap-5 md:grid-cols-3">
-          <WizardField label="Opened at" htmlFor="openedAt" required>
+          <WizardField
+            label={t("wizard.yield.fields.openedAt.label")}
+            htmlFor="openedAt"
+            required
+          >
             <WizardInput
               id="openedAt"
               name="openedAt"
@@ -447,24 +459,24 @@ export default async function YieldFieldsPage(props: { searchParams: Search }) {
             />
           </WizardField>
           <WizardField
-            label="Status"
+            label={t("wizard.yield.fields.status.label")}
             htmlFor="status"
-            helper="Pick 'open' for a live position, 'unwinding' if you've started withdrawing but haven't fully exited, 'closed' if done."
+            helper={t("wizard.yield.fields.status.helper")}
           >
             <WizardSelect
               id="status"
               name="status"
               defaultValue={defaults.status}
             >
-              <option value="open">Open</option>
-              <option value="unwinding">Unwinding</option>
-              <option value="closed">Closed</option>
+              <option value="open">{t("status.open")}</option>
+              <option value="unwinding">{t("status.unwinding")}</option>
+              <option value="closed">{t("status.closed")}</option>
             </WizardSelect>
           </WizardField>
           <WizardField
-            label="Closed at"
+            label={t("wizard.yield.fields.closedAt.label")}
             htmlFor="closedAt"
-            helper="Only if status = closed"
+            helper={t("wizard.yield.fields.closedAt.helper")}
           >
             <WizardInput
               id="closedAt"
@@ -476,12 +488,12 @@ export default async function YieldFieldsPage(props: { searchParams: Search }) {
         </div>
 
         {/* ── Strategy + tax + tags ──────────────────────────────────────── */}
-        <SectionLabel>Strategy, tax, tags</SectionLabel>
+        <SectionLabel>{t("wizard.yield.fieldsStep.sections.strategy")}</SectionLabel>
         <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
           <WizardField
-            label="Strategy tag"
+            label={t("wizard.yield.fields.strategyTag.label")}
             htmlFor="strategyTag"
-            helper="Roll-up grouping (e.g. ETH basis carry Q1)"
+            helper={t("wizard.yield.fields.strategyTag.helper")}
           >
             <WizardInput
               id="strategyTag"
@@ -491,23 +503,23 @@ export default async function YieldFieldsPage(props: { searchParams: Search }) {
             />
           </WizardField>
           <WizardField
-            label="Taxable?"
+            label={t("wizard.yield.fields.taxTaxable.label")}
             htmlFor="taxTaxable"
-            helper="Flag if this generates a taxable event in your jurisdiction"
+            helper={t("wizard.yield.fields.taxTaxable.helper")}
           >
             <WizardSelect
               id="taxTaxable"
               name="taxTaxable"
               defaultValue={defaults.taxTaxable}
             >
-              <option value="false">No</option>
-              <option value="true">Yes</option>
+              <option value="false">{t("common.no")}</option>
+              <option value="true">{t("common.yes")}</option>
             </WizardSelect>
           </WizardField>
           <WizardField
-            label="Tax jurisdiction"
+            label={t("wizard.yield.fields.taxJurisdiction.label")}
             htmlFor="taxJurisdiction"
-            helper="Free-form (e.g. US, EU/DE, AE)"
+            helper={t("wizard.yield.fields.taxJurisdiction.helper")}
           >
             <WizardInput
               id="taxJurisdiction"
@@ -517,31 +529,31 @@ export default async function YieldFieldsPage(props: { searchParams: Search }) {
             />
           </WizardField>
           <WizardField
-            label="Regime tags"
+            label={t("wizard.yield.fields.regimeTags.label")}
             htmlFor="regimeTags"
-            helper="Comma-separated (e.g. bull-market, post-merge)"
+            helper={t("wizard.yield.fields.regimeTags.helper")}
           >
             <WizardInput
               id="regimeTags"
               name="regimeTags"
               defaultValue={defaults.regimeTags}
-              placeholder="post-merge"
+              placeholder={t("wizard.yield.fields.regimeTags.placeholder")}
               autoComplete="off"
             />
           </WizardField>
         </div>
 
         <WizardField
-          label="Position name"
+          label={t("wizard.yield.fields.name.label")}
           htmlFor="name"
-          helper="Optional — we derive one from asset/protocol/kind if blank"
+          helper={t("wizard.yield.fields.name.helper")}
         >
           <WizardTextarea
             id="name"
             name="name"
             rows={2}
             defaultValue={defaults.name}
-            placeholder="ETH · Lido · stake"
+            placeholder={t("wizard.yield.fields.name.placeholder")}
           />
         </WizardField>
 
@@ -552,13 +564,13 @@ export default async function YieldFieldsPage(props: { searchParams: Search }) {
             className="inline-flex items-center gap-1.5 font-mono text-[11px] uppercase tracking-[0.16em] text-text-tertiary transition-colors hover:text-text"
           >
             <ArrowLeft className="h-3 w-3" />
-            Back
+            {t("wizard.yield.nav.back")}
           </Link>
           <button
             type="submit"
             className="inline-flex items-center gap-2 rounded-md border border-text bg-text px-4 py-2 font-mono text-[11px] uppercase tracking-[0.16em] text-app transition-colors hover:bg-text-secondary"
           >
-            Review
+            {t("wizard.yield.nav.review")}
             <ArrowRight className="h-3 w-3" />
           </button>
         </div>
@@ -637,8 +649,12 @@ function KindFields({ kind, defaults, t }: KindFieldsProps) {
               defaultValue={defaults.rateKind}
               required
             >
-              <option value="variable">Variable</option>
-              <option value="fixed">Fixed</option>
+              <option value="variable">
+                {t("wizard.yield.fields.rateKind.variable")}
+              </option>
+              <option value="fixed">
+                {t("wizard.yield.fields.rateKind.fixed")}
+              </option>
             </WizardSelect>
           </WizardField>
           <WizardField
@@ -748,16 +764,16 @@ function KindFields({ kind, defaults, t }: KindFieldsProps) {
               unique vs the position-level rewardsToken (singular) so the
               server action picks up the right slot. */}
           <WizardField
-            label="Reward token (farm)"
+            label={t("wizard.yield.fields.rewardToken.label")}
             htmlFor="rewardToken"
-            helper="Token the farm pays out"
+            helper={t("wizard.yield.fields.rewardToken.helper")}
             required
           >
             <WizardInput
               id="rewardToken"
               name="rewardToken"
               defaultValue={defaults.rewardToken ?? defaults.rewardsToken ?? ""}
-              placeholder="CRV"
+              placeholder={t("wizard.yield.fields.rewardToken.placeholder")}
               required
               autoComplete="off"
               style={{ textTransform: "uppercase" }}
@@ -861,8 +877,12 @@ function KindFields({ kind, defaults, t }: KindFieldsProps) {
               name="concentrated"
               defaultValue={defaults.concentrated}
             >
-              <option value="false">Full-range (v2)</option>
-              <option value="true">Concentrated (v3)</option>
+              <option value="false">
+                {t("wizard.yield.fields.concentrated.fullRange")}
+              </option>
+              <option value="true">
+                {t("wizard.yield.fields.concentrated.concentrated")}
+              </option>
             </WizardSelect>
           </WizardField>
           <WizardField
