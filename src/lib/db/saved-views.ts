@@ -374,8 +374,16 @@ export interface CountSavedViewInput {
 
 const ACTIVITIES_COUNT_CAP = 200;
 
+type SavedViewActivityType =
+  | 'spread'
+  | 'trade'
+  | 'sale'
+  | 'airdrop'
+  | 'yield_position'
+  | 'option';
+
 interface ParsedActivityFilters {
-  types: ('spread' | 'trade' | 'sale' | 'airdrop')[];
+  types: SavedViewActivityType[];
   outcome: 'winners' | 'losers' | null;
   spreadTypes: string[];
 }
@@ -383,7 +391,7 @@ interface ParsedActivityFilters {
 /**
  * Parse the subset of archive URL parameters we can answer at the DB level.
  * Wave 13C accepts:
- *   - activity=spread,trade,sale,airdrop
+ *   - activity=spread,trade,sale,airdrop,yield_position,option
  *   - outcome=winners|losers
  *   - type=cash_carry,cross_exchange,funding,calendar,dex_cex (spread subtype)
  *
@@ -398,7 +406,9 @@ function parseActivityFiltersFromQuery(qs: string): ParsedActivityFilters {
     search = '';
   }
   const params = new URLSearchParams(search);
-  const VALID_TYPES = new Set(['spread', 'trade', 'sale', 'airdrop']);
+  const VALID_TYPES = new Set<SavedViewActivityType>([
+    'spread', 'trade', 'sale', 'airdrop', 'yield_position', 'option',
+  ]);
   const VALID_SPREAD_TYPES = new Set([
     'cash_carry', 'cross_exchange', 'funding', 'calendar', 'dex_cex',
   ]);
@@ -413,8 +423,8 @@ function parseActivityFiltersFromQuery(qs: string): ParsedActivityFilters {
   const activity = (params.get('activity') ?? '')
     .split(',')
     .map((s) => s.trim())
-    .filter((s): s is 'spread' | 'trade' | 'sale' | 'airdrop' =>
-      VALID_TYPES.has(s),
+    .filter((s): s is SavedViewActivityType =>
+      VALID_TYPES.has(s as SavedViewActivityType),
     );
 
   const outcomeRaw = params.get('outcome');
