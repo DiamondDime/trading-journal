@@ -24,7 +24,7 @@
  */
 import { app } from 'electron';
 import { createServer } from 'node:net';
-import { existsSync } from 'node:fs';
+import { existsSync, mkdirSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 
 export interface DesktopDbHandle {
@@ -83,6 +83,10 @@ export function bootDesktopDb(opts: {
       import('@electric-sql/pglite-socket'),
       import('./sql-split'),
     ]);
+
+    // PGlite requires the parent dir to exist. On first launch, userData
+    // exists but `data/pglite` does not — create it recursively.
+    mkdirSync(dataDir, { recursive: true });
 
     console.log(`[desktop-db] opening PGlite at ${dataDir}`);
     const db = await PGlite.create({
