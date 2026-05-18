@@ -127,6 +127,11 @@ export const ru: MessageDict = {
       restarting: 'Перезапуск…',
     },
   },
+  eventCard: {
+    tag: 'СОБЫТИЕ',
+    usdValueCaption: 'СТОИМОСТЬ (USD)',
+    feePrefix: 'комиссия',
+  },
   common: {
     save: 'Сохранить',
     cancel: 'Отмена',

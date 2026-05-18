@@ -869,8 +869,22 @@ export function getActivityById(id: string): Activity | undefined {
 
 // ─── Formatting helpers ────────────────────────────────────────────────────────
 
-export function fmtUsd(n: number, signed = false, fractionDigits = 2): string {
-  const abs = Math.abs(n).toLocaleString("en-US", {
+/**
+ * Format a USD amount. Optional `locale` argument controls grouping/decimal
+ * conventions (so RU users get "1 234,56 $" semantics for the digit part);
+ * the `$` glyph stays explicit because the journal is dollar-anchored and
+ * users have asked us not to render it differently per locale.
+ *
+ * Defaults to `'en-US'` so legacy callers stay 1:1; new callers should
+ * thread the resolved IETF locale ("en-US"/"ru-RU") through.
+ */
+export function fmtUsd(
+  n: number,
+  signed = false,
+  fractionDigits = 2,
+  locale: string = "en-US",
+): string {
+  const abs = Math.abs(n).toLocaleString(locale, {
     minimumFractionDigits: fractionDigits,
     maximumFractionDigits: fractionDigits,
   });
@@ -878,8 +892,8 @@ export function fmtUsd(n: number, signed = false, fractionDigits = 2): string {
   return `${sign}$${abs}`;
 }
 
-export function fmtCapital(n: number): string {
-  return `$${n.toLocaleString("en-US", { maximumFractionDigits: 0 })}`;
+export function fmtCapital(n: number, locale: string = "en-US"): string {
+  return `$${n.toLocaleString(locale, { maximumFractionDigits: 0 })}`;
 }
 
 // ─── Derived queries ───────────────────────────────────────────────────────────

@@ -457,7 +457,7 @@ async function PageHero({
       </p>
       <AnalyticsHeadline
         label={t("analytics.trackRecord.heroLabel")}
-        value={fmtUsd(cumulativeNet, true)}
+        value={fmtUsd(cumulativeNet, true, 2, locale === "ru" ? "ru-RU" : "en-US")}
         subtitle={subtitle}
         tone={cumulativeNet < 0 ? "down" : "signature"}
       />

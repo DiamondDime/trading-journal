@@ -255,13 +255,6 @@ export default async function TradeFieldsPage(props: { searchParams: Search }) {
   // fields a spread-leg cares about) to the spread wizard's fields step. The
   // spread wizard reads these prefilled legs and inserts them into its leg
   // list. Plain GET keeps it free of client JS.
-  const convertParams = new URLSearchParams();
-  if (defaults.exchange) convertParams.set("legExchange", defaults.exchange);
-  if (defaults.symbol) convertParams.set("legSymbol", defaults.symbol);
-  if (defaults.side) convertParams.set("legSide", defaults.side);
-  if (defaults.qty) convertParams.set("legQty", defaults.qty);
-  if (defaults.entryPrice) convertParams.set("legEntryPrice", defaults.entryPrice);
-  if (defaults.instrument) convertParams.set("legInstrument", defaults.instrument);
 
   return (
     <WizardShell
@@ -884,16 +877,8 @@ export default async function TradeFieldsPage(props: { searchParams: Search }) {
           </span>
         </label>
 
-        {/* ── Footer: convert-to-spread + nav ────────────────────────── */}
+        {/* ── Footer: nav ────────────────────────────────────────────── */}
         <div className="mt-6 border-t border-border pt-6">
-          <p className="mb-4 text-center font-mono text-[10px] uppercase tracking-[0.18em] text-text-tertiary">
-            <Link
-              href={`/add/spread/fields?${convertParams.toString()}`}
-              className="underline-offset-4 hover:text-text hover:underline"
-            >
-              {t("wizard.trade.fields.convertToSpread")}
-            </Link>
-          </p>
           <div className="flex items-center justify-between">
             <Link
               href={backHref}

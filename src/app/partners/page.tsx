@@ -23,6 +23,7 @@ import {
   getPartnerCatalog,
 } from "@/lib/db/exchanges";
 import { PartnerCard } from "@/components/partners/partner-card";
+import { SavingsCalculator } from "@/components/partners/savings-calculator";
 
 // Catalog reads are fast (single SELECT, <5ms locally) but referral copy can
 // move between releases; force-dynamic keeps the page honest after the
@@ -99,6 +100,32 @@ export default async function PartnersPage() {
             </p>
           </section>
         )}
+
+        {/* ── savings calculator (the page's amber moment) ─────────────── */}
+        {partners.length > 0 && (() => {
+          // Average rebate fraction across referral-eligible partners with a
+          // non-null `rebatePct`. The Settings rail's catalog stores rebate
+          // shares as percentages (e.g. 30 means 30%); the calculator
+          // component wants a 0-1 fraction.
+          const eligible = partners.filter(
+            (p): p is typeof p & { rebatePct: number } =>
+              typeof p.rebatePct === "number",
+          );
+          const averageRebateFraction =
+            eligible.length > 0
+              ? eligible.reduce((sum, p) => sum + p.rebatePct, 0) /
+                eligible.length /
+                100
+              : 0;
+          return (
+            <section className="mb-12">
+              <SavingsCalculator
+                averageRebateFraction={averageRebateFraction}
+                locale={locale}
+              />
+            </section>
+          );
+        })()}
 
         {/* ── persuasion callout ────────────────────────────────────────── */}
         {/* Mirrors the honesty card chrome so the page reads as two matched */}

@@ -2,6 +2,7 @@ import Link from "next/link";
 import { ArrowUpRight, ArrowRightLeft, Repeat2, ArrowDown, ArrowUp, Send, Image as ImageIcon, Skull, Asterisk } from "lucide-react";
 import type { MovementEventKind } from "@/types/canonical";
 import { cn } from "@/lib/utils";
+import { getT, getLocale } from "@/lib/i18n/server";
 
 export interface EventCardItem {
   /** event_log.id — drives the detail-page href. */
@@ -28,16 +29,26 @@ export interface EventCardItem {
   className?: string;
 }
 
-const KIND_LABEL: Record<MovementEventKind, string> = {
-  bridge:     "BRIDGE",
-  convert:    "CONVERT",
-  transfer:   "TRANSFER",
-  deposit:    "DEPOSIT",
-  withdrawal: "WITHDRAW",
-  nft_trade:  "NFT",
-  loss:       "LOSS",
-  other:      "OTHER",
-};
+/** Read the localized title for a movement kind via the wizard dictionary. */
+function kindTitleKey(kind: MovementEventKind): "wizard.movement.kinds.bridge.title"
+  | "wizard.movement.kinds.convert.title"
+  | "wizard.movement.kinds.transfer.title"
+  | "wizard.movement.kinds.deposit.title"
+  | "wizard.movement.kinds.withdrawal.title"
+  | "wizard.movement.kinds.nftTrade.title"
+  | "wizard.movement.kinds.loss.title"
+  | "wizard.movement.kinds.other.title" {
+  switch (kind) {
+    case "bridge":     return "wizard.movement.kinds.bridge.title";
+    case "convert":    return "wizard.movement.kinds.convert.title";
+    case "transfer":   return "wizard.movement.kinds.transfer.title";
+    case "deposit":    return "wizard.movement.kinds.deposit.title";
+    case "withdrawal": return "wizard.movement.kinds.withdrawal.title";
+    case "nft_trade":  return "wizard.movement.kinds.nftTrade.title";
+    case "loss":       return "wizard.movement.kinds.loss.title";
+    case "other":      return "wizard.movement.kinds.other.title";
+  }
+}
 
 const KIND_ICON: Record<MovementEventKind, React.ComponentType<{ className?: string }>> = {
   bridge:     ArrowRightLeft,
@@ -61,12 +72,16 @@ const KIND_TONE: Record<MovementEventKind, "up" | "down" | "neutral"> = {
   other:      "neutral",
 };
 
-function fmtUsd(raw: string | null | undefined, opts: { signed?: boolean } = {}): string {
+function fmtUsd(
+  raw: string | null | undefined,
+  locale: string,
+  opts: { signed?: boolean } = {},
+): string {
   if (raw == null) return "—";
   const n = Number(raw);
   if (!Number.isFinite(n)) return "—";
   if (n === 0) return "$0";
-  const abs = Math.abs(n).toLocaleString("en-US", {
+  const abs = Math.abs(n).toLocaleString(locale, {
     minimumFractionDigits: 0,
     maximumFractionDigits: 2,
   });
@@ -74,17 +89,17 @@ function fmtUsd(raw: string | null | undefined, opts: { signed?: boolean } = {})
   return `${sign}$${abs}`;
 }
 
-function fmtQty(raw: string | null | undefined): string {
+function fmtQty(raw: string | null | undefined, locale: string): string {
   if (raw == null) return "—";
   const n = Number(raw);
   if (!Number.isFinite(n)) return "—";
-  return n.toLocaleString("en-US", { maximumSignificantDigits: 6 });
+  return n.toLocaleString(locale, { maximumSignificantDigits: 6 });
 }
 
-function fmtDate(iso: string): string {
+function fmtDate(iso: string, locale: string): string {
   const d = new Date(iso);
   if (!Number.isFinite(d.getTime())) return iso;
-  return d.toLocaleDateString("en-US", {
+  return d.toLocaleDateString(locale, {
     month: "short",
     day:   "numeric",
     year:  "numeric",
@@ -100,12 +115,16 @@ function fmtDate(iso: string): string {
  * strategy. The tone hint comes from the *kind* (deposits up, withdrawals
  * down, losses down) rather than a signed number.
  */
-export function EventCard({ item }: { item: EventCardItem }) {
+export async function EventCard({ item }: { item: EventCardItem }) {
+  const t = await getT();
+  const locale = await getLocale();
+  const intlLocale = locale === "ru" ? "ru-RU" : "en-US";
   const href = item.href ?? `/movement-events/${item.id}`;
   const Icon = KIND_ICON[item.kind];
   const tone = KIND_TONE[item.kind];
   const toneClass =
     tone === "up" ? "text-up" : tone === "down" ? "text-down" : "text-text";
+  const kindLabel = t(kindTitleKey(item.kind)).toLocaleUpperCase(intlLocale);
 
   return (
     <Link
@@ -120,12 +139,12 @@ export function EventCard({ item }: { item: EventCardItem }) {
           <span className="inline-flex items-center gap-1.5">
             <Icon className="h-3 w-3" aria-hidden />
             <span className="uppercase tracking-[0.12em] font-medium">
-              {KIND_LABEL[item.kind]}
+              {kindLabel}
             </span>
           </span>
           <span className="font-mono">·</span>
           <time className="font-mono" dateTime={item.occurredAt}>
-            {fmtDate(item.occurredAt)}
+            {fmtDate(item.occurredAt, intlLocale)}
           </time>
         </div>
         <h3 className="font-serif text-[17px] font-medium leading-tight text-text">
@@ -141,12 +160,12 @@ export function EventCard({ item }: { item: EventCardItem }) {
           </p>
         )}
         <p className="mt-1 font-mono text-[12px] text-text-secondary truncate">
-          {fmtQty(item.amount)}
+          {fmtQty(item.amount, intlLocale)}
           {item.feeUsd && Number(item.feeUsd) > 0 && (
             <>
               {" · "}
               <span className="text-text-tertiary">
-                fee {fmtUsd(item.feeUsd)}
+                {t("eventCard.feePrefix")} {fmtUsd(item.feeUsd, intlLocale)}
               </span>
             </>
           )}
@@ -156,16 +175,16 @@ export function EventCard({ item }: { item: EventCardItem }) {
       <div className="flex flex-col items-end justify-between">
         <div className="flex items-center gap-1.5">
           <span className="font-mono text-[9px] uppercase tracking-[0.16em] text-text-tertiary">
-            EVENT
+            {t("eventCard.tag")}
           </span>
           <ArrowUpRight className="h-3.5 w-3.5 text-text-tertiary opacity-0 transition-opacity group-hover:opacity-100" />
         </div>
         <div className="text-right">
           <p className={cn("font-serif text-[26px] leading-none tabular-nums", toneClass)}>
-            {fmtUsd(item.usdValue, { signed: tone !== "neutral" })}
+            {fmtUsd(item.usdValue, intlLocale, { signed: tone !== "neutral" })}
           </p>
           <p className="mt-1 font-mono text-[10px] uppercase tracking-[0.14em] text-text-tertiary">
-            USD VALUE
+            {t("eventCard.usdValueCaption")}
           </p>
         </div>
       </div>

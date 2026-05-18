@@ -125,6 +125,11 @@ export const en = {
       restarting: 'Restarting…',
     },
   },
+  eventCard: {
+    tag: 'EVENT',
+    usdValueCaption: 'USD VALUE',
+    feePrefix: 'fee',
+  },
   common: {
     save: 'Save',
     cancel: 'Cancel',

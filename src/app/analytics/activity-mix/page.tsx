@@ -1,5 +1,5 @@
 import { requireUser } from "@/lib/auth/server";
-import { getT } from "@/lib/i18n/server";
+import { getT, getLocale } from "@/lib/i18n/server";
 import type { MessageKey } from "@/lib/i18n/resolve";
 import {
   getActivityTypeAggregations,
@@ -96,6 +96,7 @@ function fmtUsdCompact(v: number): string {
 export default async function ActivityMixPage() {
   const { id: userId } = await requireUser();
   const t = await getT();
+  const locale = await getLocale();
 
   const [
     totals,
@@ -135,7 +136,7 @@ export default async function ActivityMixPage() {
   if (totals.count < MIN_FOR_ANALYTICS) {
     return (
       <div className="px-8 py-10 lg:px-12">
-        <PageHero totalNet={totals.net} count={totals.count} />
+        <PageHero totalNet={totals.net} count={totals.count} locale={locale} />
         <div className="mt-8">
           <AnalyticsEmptyState
             headline={t("analytics.activityMix.empty.headline")}
@@ -264,7 +265,7 @@ export default async function ActivityMixPage() {
 
   return (
     <div className="px-8 py-10 lg:px-12">
-      <PageHero totalNet={totals.net} count={totals.count} />
+      <PageHero totalNet={totals.net} count={totals.count} locale={locale} />
 
       <div className="mt-10 flex flex-col gap-8">
         {/* 1. P&L by activity type — donut + table side by side */}
@@ -352,7 +353,15 @@ export default async function ActivityMixPage() {
   );
 }
 
-async function PageHero({ totalNet, count }: { totalNet: number; count: number }) {
+async function PageHero({
+  totalNet,
+  count,
+  locale,
+}: {
+  totalNet: number;
+  count: number;
+  locale: "en" | "ru";
+}) {
   const t = await getT();
   return (
     <header className="flex flex-col gap-2 border-b border-border pb-8">
@@ -361,7 +370,7 @@ async function PageHero({ totalNet, count }: { totalNet: number; count: number }
       </p>
       <AnalyticsHeadline
         label={t("analytics.activityMix.heroLabel")}
-        value={fmtUsd(totalNet, true)}
+        value={fmtUsd(totalNet, true, 2, locale === "ru" ? "ru-RU" : "en-US")}
         tone={totalNet < 0 ? "down" : "signature"}
         subtitle={
           count === 1
