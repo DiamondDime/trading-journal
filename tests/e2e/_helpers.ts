@@ -144,16 +144,6 @@ const IGNORABLE_PATTERNS: readonly RegExp[] = [
   /favicon\.ico/,
   // React DevTools self-promotion in dev.
   /Download the React DevTools/i,
-  // KNOWN ISSUE — React 19 / Next 16 hydration mismatch on the calendar
-  // heatmap component. Server renders shorthand `grid-column-start` but
-  // client expects `gridColumn`. Pre-existing UI bug, NOT introduced by
-  // this test suite. Filter so the smoke suite stays useful for other
-  // regressions until the heatmap is patched.
-  //
-  // To find the failing component re-run with this filter removed and
-  // inspect the React tree in the test attachment (look for the calendar
-  // heatmap tooltip wrappers).
-  /A tree hydrated but some attributes of the server rendered HTML didn't match/i,
 ];
 
 function isIgnorableConsoleError(text: string): boolean {

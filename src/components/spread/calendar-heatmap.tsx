@@ -194,7 +194,11 @@ export function CalendarHeatmap({
     const lastCell = addDays(end, 6 - endDow); // upcoming Saturday
     const firstCell = addDays(lastCell, -(totalDays - 1));
     const firstActivity = firstActivityDate ? parseLocalDate(firstActivityDate) : null;
-    const todayYmd = fmtLocalDate(new Date());
+    // `endDate` is the server's "today" (see spreads/page.tsx:263 `heatmapEnd = ymdLocal(today)`).
+    // Using it here keeps SSR/CSR `isToday` identical; calling `new Date()` at
+    // render time would diverge between server and client renders and trip
+    // React's hydration check via the conditional `boxShadow` below.
+    const todayYmd = endDate;
 
     const out: BuiltCell[] = [];
     for (let i = 0; i < totalDays; i++) {
@@ -326,13 +330,13 @@ function FillGrid({ weeks, weeksCount, monthMarkers, maxAbs, labels }: GridProps
           belongs to. Empty cells in row 1 simply collapse. */}
       <span
         aria-hidden
-        style={{ gridColumn: 1, gridRow: 1 }}
+        style={{ gridColumnStart: 1, gridRowStart: 1 }}
         className="h-3"
       />
       {monthMarkers.map((m) => (
         <span
           key={`${m.label}-${m.weekIdx}`}
-          style={{ gridColumn: m.weekIdx + 2, gridRow: 1 }}
+          style={{ gridColumnStart: m.weekIdx + 2, gridRowStart: 1 }}
           className="font-mono text-[10px] uppercase tracking-[0.14em] text-text-tertiary leading-none"
         >
           {m.label}
@@ -344,7 +348,7 @@ function FillGrid({ weeks, weeksCount, monthMarkers, maxAbs, labels }: GridProps
       {labels.dayLabels.map((d, i) => (
         <span
           key={`dow-${i}`}
-          style={{ gridColumn: 1, gridRow: i + 2 }}
+          style={{ gridColumnStart: 1, gridRowStart: i + 2 }}
           className={cn(
             "flex items-center justify-end pr-1.5 font-mono text-[10px] text-text-tertiary",
             i % 2 === 1 ? "opacity-100" : "opacity-0",
@@ -364,10 +368,10 @@ function FillGrid({ weeks, weeksCount, monthMarkers, maxAbs, labels }: GridProps
                 role="img"
                 aria-label={cellAriaLabel(c, labels)}
                 style={{
-                  gridColumn: w + 2,
-                  gridRow: d + 2,
+                  gridColumnStart: w + 2,
+                  gridRowStart: d + 2,
                   aspectRatio: "1 / 1",
-                  background: cellBackground(c, maxAbs),
+                  backgroundColor: cellBackground(c, maxAbs),
                   boxShadow: c.isToday
                     ? "inset 0 0 0 1px var(--text-primary)"
                     : undefined,
@@ -403,13 +407,13 @@ function ScrollGrid({ weeks, weeksCount, monthMarkers, maxAbs, labels }: GridPro
       >
         <span
           aria-hidden
-          style={{ gridColumn: 1, gridRow: 1 }}
+          style={{ gridColumnStart: 1, gridRowStart: 1 }}
           className="h-3"
         />
         {monthMarkers.map((m) => (
           <span
             key={`${m.label}-${m.weekIdx}`}
-            style={{ gridColumn: m.weekIdx + 2, gridRow: 1 }}
+            style={{ gridColumnStart: m.weekIdx + 2, gridRowStart: 1 }}
             className="font-mono text-[10px] uppercase tracking-[0.14em] text-text-tertiary leading-none"
           >
             {m.label}
@@ -420,8 +424,8 @@ function ScrollGrid({ weeks, weeksCount, monthMarkers, maxAbs, labels }: GridPro
           <span
             key={`dow-${i}`}
             style={{
-              gridColumn: 1,
-              gridRow: i + 2,
+              gridColumnStart: 1,
+              gridRowStart: i + 2,
               height: `${SCROLL_CELL_SIZE}px`,
               lineHeight: `${SCROLL_CELL_SIZE}px`,
             }}
@@ -442,11 +446,11 @@ function ScrollGrid({ weeks, weeksCount, monthMarkers, maxAbs, labels }: GridPro
                   role="img"
                   aria-label={cellAriaLabel(c, labels)}
                   style={{
-                    gridColumn: w + 2,
-                    gridRow: d + 2,
+                    gridColumnStart: w + 2,
+                    gridRowStart: d + 2,
                     width: `${SCROLL_CELL_SIZE}px`,
                     height: `${SCROLL_CELL_SIZE}px`,
-                    background: cellBackground(c, maxAbs),
+                    backgroundColor: cellBackground(c, maxAbs),
                     boxShadow: c.isToday
                       ? "inset 0 0 0 1px var(--text-primary)"
                       : undefined,
@@ -585,7 +589,7 @@ function Legend({ maxAbs, legendLabel }: { maxAbs: number; legendLabel: string }
               style={{
                 width: "14px",
                 height: "14px",
-                background: t.bg,
+                backgroundColor: t.bg,
               }}
             />
             <span className="font-mono text-[9px] tabular-nums text-text-tertiary">
