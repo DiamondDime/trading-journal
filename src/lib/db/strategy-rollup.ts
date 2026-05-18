@@ -18,7 +18,6 @@
  * to never collide with a real tag (the underscore-prefix convention).
  */
 import { sql } from '@/lib/db/client';
-import type { Decimal } from '@/types/canonical';
 
 /** Sentinel bucket key for activities with NULL strategy_tag. */
 export const UNTAGGED_BUCKET = '__untagged__';

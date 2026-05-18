@@ -30,6 +30,7 @@ import {
 import { getOptionForEdit } from "@/app/add/option/db";
 import { closeOptionPosition } from "@/app/add/option/actions";
 import { getT, getLocale } from "@/lib/i18n/server";
+import { DeleteButton } from "@/components/activity/delete-button";
 
 export const dynamic = "force-dynamic";
 
@@ -133,7 +134,9 @@ export default async function OptionDetailPage({
       ? legs.map((l) => l.expiry).sort()[0]
       : null;
   const dte = earliestExpiry
-    ? Math.ceil((new Date(earliestExpiry).getTime() - Date.now()) / 86_400_000)
+    ? // Date.now is pure-at-request-time inside this async Server Component.
+      // eslint-disable-next-line react-hooks/purity
+      Math.ceil((new Date(earliestExpiry).getTime() - Date.now()) / 86_400_000)
     : null;
 
   const serial = `O#${activity.id.slice(0, 4).toUpperCase()}`;
@@ -469,9 +472,11 @@ export default async function OptionDetailPage({
                 <Pencil className="h-3 w-3" />
                 {t("optionDetail.actions.edit")}
               </Link>
-              {/* DeleteButton's activityType union doesn't include 'option' in
-                  v1 - intentionally omitted until W3d widens the type. The
-                  user can delete via the wizard edit-mode flow if needed. */}
+              <DeleteButton
+                activityId={activity.id}
+                activityType="option"
+                serial={serial}
+              />
             </div>
           </section>
         </article>

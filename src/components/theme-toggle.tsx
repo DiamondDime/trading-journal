@@ -8,7 +8,11 @@ import { Button } from "@/components/ui/button";
 export function ThemeToggle() {
   const { theme, setTheme } = useTheme();
   const [mounted, setMounted] = React.useState(false);
+  // Mount detection for SSR hydration — this is the canonical next-themes
+  // pattern and must run exactly once after hydration.
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   React.useEffect(() => setMounted(true), []);
+
 
   return (
     <Button

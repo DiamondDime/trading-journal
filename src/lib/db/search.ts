@@ -27,7 +27,6 @@ import type {
   HeadlineKind,
   HeadlineFormat,
   Decimal,
-  Iso8601,
 } from '@/types/canonical';
 
 /** Maximum results we'll return even if the caller asks for more. */

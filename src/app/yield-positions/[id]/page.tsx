@@ -32,6 +32,7 @@ import {
 } from "@/app/add/yield/actions";
 import { WizardSubmitButton } from "@/components/wizard/wizard-submit-button";
 import { WizardInput } from "@/components/wizard/wizard-field";
+import { DeleteButton } from "@/components/activity/delete-button";
 
 export const dynamic = "force-dynamic";
 
@@ -118,6 +119,8 @@ export default async function YieldPositionDetailPage({
   const serial = `Y#${row.id.slice(0, 4).toUpperCase()}`;
   const daysHeld = (() => {
     const start = new Date(row.openedAt).getTime();
+    // Date.now is pure-at-request-time inside this async Server Component.
+    // eslint-disable-next-line react-hooks/purity
     const end = row.closedAt ? new Date(row.closedAt).getTime() : Date.now();
     if (!Number.isFinite(start) || !Number.isFinite(end)) return 0;
     return Math.max(0, Math.floor((end - start) / 86_400_000));
@@ -501,6 +504,11 @@ export default async function YieldPositionDetailPage({
                   </button>
                 </form>
               )}
+              <DeleteButton
+                activityId={row.id}
+                activityType="yield_position"
+                serial={serial}
+              />
             </div>
           </section>
 

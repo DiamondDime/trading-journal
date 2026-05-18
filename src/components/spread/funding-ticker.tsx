@@ -143,6 +143,8 @@ function fmtFetchedAgo(fetchedAt: number, now: number): string {
 
 export async function FundingTicker() {
   const data = await getFundingRates();
+  // Date.now is pure-at-request-time inside this async Server Component.
+  // eslint-disable-next-line react-hooks/purity
   const now = Date.now();
 
   if (!data) {

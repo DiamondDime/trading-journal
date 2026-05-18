@@ -50,9 +50,7 @@
 import postgres from 'postgres';
 
 declare global {
-  // eslint-disable-next-line no-var
   var __pgSql: ReturnType<typeof postgres> | undefined;
-  // eslint-disable-next-line no-var
   var __desktopBootPromise: Promise<void> | undefined;
 }
 

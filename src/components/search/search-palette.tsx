@@ -48,16 +48,20 @@ export function SearchPalette({
   // ── Reset state every time the palette opens. We never want the previous
   //    query persisting into a fresh session — that's a usability footgun
   //    when users blur out and pop the palette later for a different query.
+  // Reset palette state every time it opens — deliberate sync of an external
+  // event (palette open) into local state. Cannot be derived from props.
   React.useEffect(() => {
     if (!open) return;
     previouslyFocusedRef.current =
       typeof document !== 'undefined'
         ? (document.activeElement as HTMLElement | null)
         : null;
+    /* eslint-disable react-hooks/set-state-in-effect */
     setQuery('');
     setItems([]);
     setActiveIdx(0);
     setErrored(false);
+    /* eslint-enable react-hooks/set-state-in-effect */
     // Defer focus until the input is in the DOM — opening + focusing in the
     // same tick fails because the dialog hasn't been painted yet.
     queueMicrotask(() => inputRef.current?.focus());
@@ -74,9 +78,12 @@ export function SearchPalette({
   // 250ms is the spec target — quick enough to feel live, slow enough to
   // avoid spamming the API for every keystroke. AbortController cancels the
   // previous in-flight request so stale results never overwrite fresh ones.
+  // Deliberate setState-in-effect: this is an async fetch lifecycle, not a
+  // pure derivation — loading / error states must be set as side effects.
   React.useEffect(() => {
     if (!open) return;
     const q = query.trim();
+    /* eslint-disable react-hooks/set-state-in-effect */
     if (q.length === 0) {
       setItems([]);
       setLoading(false);
@@ -88,6 +95,7 @@ export function SearchPalette({
     const ctrl = new AbortController();
     setLoading(true);
     setErrored(false);
+    /* eslint-enable react-hooks/set-state-in-effect */
     const timer = window.setTimeout(async () => {
       try {
         const url = `/api/search?q=${encodeURIComponent(q)}&limit=5`;

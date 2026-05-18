@@ -221,7 +221,7 @@ export default async function SpreadFieldsPage(props: { searchParams: Search }) 
   // ── Edit-mode pre-fill from DB ───────────────────────────────────────────
   let dbDefaults: Partial<FieldDefaults> & { spreadType?: string } = {};
   let dbLegs: PickerOptionRow[] = [];
-  let dbLegMap = new Map<string, { intendedPrice: string | null; role: string }>();
+  const dbLegMap = new Map<string, { intendedPrice: string | null; role: string }>();
   let editValid = false;
   const { id: userId } = await requireUser();
 

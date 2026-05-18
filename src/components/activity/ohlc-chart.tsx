@@ -88,8 +88,11 @@ export function OhlcChart({ activityId }: OhlcChartProps) {
   >({ kind: "loading" });
 
   // ── Fetch ────────────────────────────────────────────────────────────
+  // Deliberate setState-in-effect: async fetch lifecycle drives state, not
+  // pure derivation.
   useEffect(() => {
     const ac = new AbortController();
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setState({ kind: "loading" });
 
     (async () => {

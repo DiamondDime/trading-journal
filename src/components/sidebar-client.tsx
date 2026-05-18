@@ -30,7 +30,19 @@ import {
 import { cn } from "@/lib/utils";
 import { useT } from "@/lib/i18n/client";
 import { LocaleSwitcher } from "@/components/locale-switcher";
+import { PortfolioSidebarWidget } from "@/components/balances/portfolio-sidebar-widget";
 import type { SidebarCounts } from "@/lib/db/sidebar-counts";
+
+/**
+ * Pre-formatted portfolio summary passed in from the server `<Sidebar>`.
+ * Null when the user has no balance snapshot yet — widget is hidden in that
+ * case rather than showing "$0".
+ */
+export interface SidebarPortfolioSummary {
+  totalUsd: string;
+  delta24hUsd: string | null;
+  updatedLabel: string;
+}
 
 type NavItem = {
   icon: React.ComponentType<{ className?: string }>;
@@ -61,9 +73,11 @@ function isNavActive(pathname: string, href: string): boolean {
 export interface SidebarClientProps {
   /** Real counts pulled from the DB by the server entry. */
   counts: SidebarCounts;
+  /** Portfolio snapshot for the brand-area widget; null = no balances yet. */
+  portfolio: SidebarPortfolioSummary | null;
 }
 
-export function SidebarClient({ counts }: SidebarClientProps) {
+export function SidebarClient({ counts, portfolio }: SidebarClientProps) {
   const pathname = usePathname();
   const t = useT();
 
@@ -171,6 +185,19 @@ export function SidebarClient({ counts }: SidebarClientProps) {
           </span>
         </div>
       </div>
+
+      {/* Portfolio widget — appears once the user has at least one balance
+          snapshot. Hidden when null so we don't show "$0" before the worker
+          has populated `exchange_balances` for the first time. */}
+      {portfolio && (
+        <div className="px-3 pt-3">
+          <PortfolioSidebarWidget
+            totalUsd={portfolio.totalUsd}
+            delta24hUsd={portfolio.delta24hUsd}
+            updatedLabel={portfolio.updatedLabel}
+          />
+        </div>
+      )}
 
       {/* Search — placeholder for the global ⌘K palette wired by the search
           agent in `src/components/search/search-palette.tsx`. We keep the
@@ -389,6 +416,9 @@ function SidebarFooter() {
   const { theme, setTheme } = useTheme();
   const [mounted, setMounted] = React.useState(false);
   const t = useT();
+  // Mount detection for SSR hydration — canonical next-themes pattern,
+  // must run exactly once after hydration.
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   React.useEffect(() => setMounted(true), []);
 
   return (

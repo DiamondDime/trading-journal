@@ -75,7 +75,12 @@ export function DashboardActions({
   // source of truth; this is reset every time the dialog opens.
   const [open, setOpen] = React.useState(false);
   const [draft, setDraft] = React.useState<DashboardSearchParams>(current);
+  // Sync the dialog's draft state to URL state every time the dialog opens
+  // (or the URL filter changes while open). The setState-in-effect rule
+  // doesn't apply cleanly here: this is a deliberate sync of external state
+  // (URL searchParams) into local dialog state on a discrete trigger.
   React.useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     if (open) setDraft(current);
   }, [open, current]);
 

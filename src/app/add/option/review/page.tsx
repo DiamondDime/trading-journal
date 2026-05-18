@@ -226,6 +226,10 @@ export default async function OptionReviewPage(props: {
 
   // Status derivation mirrors db.ts: closed > unwinding > all-expired > open.
   const statusInput = getStr(sp, "status", "open");
+  // Date.now is pure-at-request-time inside this async Server Component —
+  // the value is captured once before any JSX is emitted, so the React
+  // purity rule's "unstable result on re-render" concern doesn't apply.
+  // eslint-disable-next-line react-hooks/purity
   const now = Date.now();
   const allExpired =
     legs.length > 0 &&
@@ -250,7 +254,8 @@ export default async function OptionReviewPage(props: {
       : null;
   const dte = earliestExpiryIso
     ? Math.ceil(
-        (new Date(earliestExpiryIso).getTime() - Date.now()) / 86_400_000,
+        // Reuse the request-scoped `now` captured above (pure within request).
+        (new Date(earliestExpiryIso).getTime() - now) / 86_400_000,
       )
     : null;
 

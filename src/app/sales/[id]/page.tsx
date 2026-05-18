@@ -136,7 +136,9 @@ export default async function SaleDetailPage({
   const rawHeldMs =
     activity.openedAt && activity.closedAt
       ? new Date(activity.closedAt).getTime() - new Date(activity.openedAt).getTime()
-      : Date.now() - new Date(activity.openedAt ?? activity.createdAt).getTime();
+      : // Date.now is pure-at-request-time inside this async Server Component.
+        // eslint-disable-next-line react-hooks/purity
+        Date.now() - new Date(activity.openedAt ?? activity.createdAt).getTime();
   const daysHeldMs = Math.max(0, rawHeldMs);
   const daysLabel =
     daysHeldMs < 86_400_000

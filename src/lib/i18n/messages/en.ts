@@ -904,6 +904,8 @@ export const en = {
     },
     detail: {
       backToList: 'back to movements',
+      typeLabel: 'movement',
+      deleteHardHint: 'Movements are hard-deleted (no soft-delete column on event_log). The row is removed and excluded from tax exports. Re-log it manually if you need to undo.',
       section: {
         identity: 'Identity',
         asset:    'Asset',

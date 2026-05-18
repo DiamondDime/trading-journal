@@ -21,7 +21,6 @@
  * .env.example's APP_USER_ID default — change `DEMO_USER_ID` below if you
  * run multiple seeded users.
  */
-/* eslint-disable no-console */
 import { sql } from "@/lib/db/client";
 import {
   SEED_SPREADS,

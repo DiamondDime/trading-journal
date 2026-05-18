@@ -3,6 +3,7 @@ import { ArrowLeft } from "lucide-react";
 import { WizardShell } from "@/components/wizard/wizard-shell";
 import { WizardField, WizardInput, WizardSelect } from "@/components/wizard/wizard-field";
 import { getT } from "@/lib/i18n/server";
+import { fetchOnchainClaimsForWallet } from "@/lib/onchain/claims";
 
 // getT() reads the csj-locale cookie per request; we also read searchParams
 // for the optional chain pre-fill. Both make the page non-cacheable.
@@ -16,7 +17,14 @@ function getStr(sp: Awaited<Search>, key: string, fallback = ""): string {
   return fallback;
 }
 
-interface OnchainClaim {
+/**
+ * Display shape for the discovered-claims list. Wider than the v1
+ * indexer contract ({@link import("@/lib/onchain/claims").OnchainClaim})
+ * because the eventual v3 indexer will join protocol metadata + chain
+ * hints in. Until then the list is always empty so the extra fields are
+ * never read at runtime.
+ */
+interface DisplayClaim {
   txHash: string;
   protocol: string;
   asset: string;
@@ -24,21 +32,7 @@ interface OnchainClaim {
   qty: string;
   valueUsd: string;
   gasUsd: string;
-  claimedAt: string; // ISO
-}
-
-/**
- * v1 stub for the on-chain claim fetcher. Returns no matches — the real
- * Etherscan / Solscan integration is v3 backlog. When v3 lands, this server
- * helper gets replaced by a fetch() against `/api/onchain/claims?chain=...
- * &wallet=...` and the page wires the response straight in.
- *
- * Kept in this file (not the API route) because v1 has no real call — the
- * route still exists so the wallet page can demonstrate the auth/CSRF
- * shape, but it returns an empty array.
- */
-function fetchOnchainClaims(_chain: string, _wallet: string): OnchainClaim[] {
-  return [];
+  claimedAt: string;
 }
 
 /**
@@ -58,7 +52,25 @@ export default async function AirdropWalletPage(props: { searchParams: Search })
 
   const chain = getStr(sp, "chain", "ethereum");
   const wallet = getStr(sp, "wallet");
-  const fetched = wallet ? fetchOnchainClaims(chain, wallet) : [];
+  // v1: server helper short-circuits and returns an empty list for the
+  // already-validated input shape; null only on bad input (page still
+  // renders the empty state in that case — no inline 400 surfacing here
+  // since the form is the source of the bad value).
+  const indexed = wallet
+    ? await fetchOnchainClaimsForWallet(chain, wallet)
+    : null;
+  const fetched: DisplayClaim[] = (indexed?.claims ?? []).map((c) => ({
+    txHash: c.txHash,
+    // Indexer (v3) provides protocol metadata via a separate join.
+    // For v1 placeholder these collapse to the asset symbol.
+    protocol: c.token,
+    asset: c.token,
+    tokenChain: chain,
+    qty: c.qty,
+    valueUsd: c.valueUsd,
+    gasUsd: c.gasCostUsd,
+    claimedAt: c.claimDate,
+  }));
 
   const STEP_LABELS = [
     t("wizard.airdrop.wallet.stepLabels.intent"),

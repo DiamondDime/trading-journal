@@ -17,11 +17,30 @@ import {
 import { cn } from "@/lib/utils";
 import { useT } from "@/lib/i18n/client";
 
+/**
+ * Activity-supertype types — the polymorphic public.activity row covers
+ * spread / trade / sale / airdrop / yield_position / option. event_log
+ * movements live in their own table and use {@link MovementDeleteButton}.
+ */
+type ActivityKind =
+  | "spread"
+  | "trade"
+  | "sale"
+  | "airdrop"
+  | "yield_position"
+  | "option";
+
 interface DeleteButtonProps {
   activityId: string;
-  activityType: "spread" | "trade" | "sale" | "airdrop";
+  activityType: ActivityKind;
   /** Optional short serial to show in the confirmation dialog. */
   serial?: string;
+  /**
+   * Override the post-delete redirect target. Defaults to /spreads/archive
+   * with the right ?activity= filter for the type so the user lands on a
+   * non-404 page.
+   */
+  redirectTo?: string;
 }
 
 /**
@@ -40,6 +59,7 @@ export function DeleteButton({
   activityId,
   activityType,
   serial,
+  redirectTo,
 }: DeleteButtonProps) {
   const router = useRouter();
   const t = useT();
@@ -66,7 +86,7 @@ export function DeleteButton({
       // Server returns 204 No Content. Route to a known-good page so the
       // browser can't get stuck on a now-404'd detail URL.
       setOpen(false);
-      router.replace("/spreads/archive");
+      router.replace(redirectTo ?? defaultRedirectFor(activityType));
       router.refresh();
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
@@ -74,14 +94,7 @@ export function DeleteButton({
     }
   }
 
-  const typeLabel =
-    activityType === "spread"
-      ? t("activity.spread")
-      : activityType === "trade"
-        ? t("activity.trade")
-        : activityType === "sale"
-          ? t("activity.sale")
-          : t("activity.airdrop");
+  const typeLabel = typeLabelFor(activityType, t);
   const idSuffix = serial ?? `#${activityId.slice(0, 4).toUpperCase()}`;
 
   return (
@@ -157,4 +170,177 @@ export function DeleteButton({
       </DialogContent>
     </Dialog>
   );
+}
+
+interface MovementDeleteButtonProps {
+  eventId: string;
+  /** Optional short serial to show in the confirmation dialog. */
+  serial?: string;
+}
+
+/**
+ * Delete affordance for an event_log movement detail page.
+ *
+ * Movements aren't activities (no `deleted_at` column — see the
+ * /api/events/[id] route comment for the why). Confirming hard-deletes
+ * via DELETE /api/events/[id] and replaces the route with the list page.
+ *
+ * Visual style intentionally mirrors {@link DeleteButton} so the two
+ * read as one affordance across detail pages.
+ */
+export function MovementDeleteButton({
+  eventId,
+  serial,
+}: MovementDeleteButtonProps) {
+  const router = useRouter();
+  const t = useT();
+  const [open, setOpen] = React.useState(false);
+  const [pending, setPending] = React.useState(false);
+  const [error, setError] = React.useState<string | null>(null);
+
+  async function handleDelete() {
+    setPending(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/events/${eventId}`, {
+        method: "DELETE",
+      });
+      if (!res.ok && res.status !== 204) {
+        const body = await res.json().catch(() => null);
+        setError(
+          body?.error?.message ??
+            t("activity.delete.errors.failed", { status: res.status }),
+        );
+        setPending(false);
+        return;
+      }
+      setOpen(false);
+      router.replace("/movement-events");
+      router.refresh();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+      setPending(false);
+    }
+  }
+
+  const typeLabel = t("movementEvents.detail.typeLabel");
+  const idSuffix = serial ?? `#${eventId.slice(0, 4).toUpperCase()}`;
+
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger asChild>
+        <button
+          type="button"
+          className={cn(
+            "inline-flex items-center gap-1.5 rounded-md border border-border bg-surface px-3 py-1.5",
+            "font-mono text-[10px] uppercase tracking-[0.16em] text-text-secondary",
+            "transition-colors hover:border-down hover:text-down focus:outline-none focus:ring-1 focus:ring-down",
+          )}
+        >
+          <Trash2 className="h-3 w-3" />
+          {t("common.delete")}
+        </button>
+      </DialogTrigger>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>
+            {t("activity.delete.title", { type: typeLabel })}
+          </DialogTitle>
+          <DialogDescription>
+            {t("activity.delete.desc", { idSuffix })}
+          </DialogDescription>
+        </DialogHeader>
+        <DialogBody>
+          {error && (
+            <p
+              className="rounded-md border border-down/30 bg-down/5 px-3 py-2 font-mono text-[11px] text-down"
+              role="alert"
+            >
+              {error}
+            </p>
+          )}
+          {!error && (
+            <p className="font-serif text-[13px] italic leading-snug text-text-secondary">
+              {t("movementEvents.detail.deleteHardHint")}
+            </p>
+          )}
+        </DialogBody>
+        <DialogFooter>
+          <DialogClose asChild>
+            <button
+              type="button"
+              disabled={pending}
+              className={cn(
+                "inline-flex items-center justify-center rounded-md border border-border bg-surface px-4 py-2",
+                "font-mono text-[11px] uppercase tracking-[0.16em] text-text-secondary",
+                "transition-colors hover:border-border-strong hover:text-text",
+                "disabled:cursor-not-allowed disabled:opacity-60",
+              )}
+            >
+              {t("common.cancel")}
+            </button>
+          </DialogClose>
+          <button
+            type="button"
+            onClick={handleDelete}
+            disabled={pending}
+            className={cn(
+              "inline-flex items-center justify-center rounded-md border border-down bg-down px-4 py-2",
+              "font-mono text-[11px] uppercase tracking-[0.16em] text-app",
+              "transition-colors hover:bg-down/90",
+              "disabled:cursor-not-allowed disabled:opacity-60",
+            )}
+          >
+            {pending
+              ? t("activity.delete.deleting")
+              : t("activity.delete.confirmCta", { type: typeLabel })}
+          </button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// ── Helpers ───────────────────────────────────────────────────────────────
+
+function typeLabelFor(
+  kind: ActivityKind,
+  t: ReturnType<typeof useT>,
+): string {
+  switch (kind) {
+    case "spread":
+      return t("activity.spread");
+    case "trade":
+      return t("activity.trade");
+    case "sale":
+      return t("activity.sale");
+    case "airdrop":
+      return t("activity.airdrop");
+    case "yield_position":
+      return t("activity.yieldPosition");
+    case "option":
+      return t("activity.option");
+  }
+}
+
+/**
+ * The detail page the user is about to leave will 404 immediately after
+ * delete. Drop them on the archive list filtered to the matching type so
+ * they keep their bearings.
+ */
+function defaultRedirectFor(kind: ActivityKind): string {
+  switch (kind) {
+    case "spread":
+      return "/spreads/archive";
+    case "trade":
+      return "/spreads/archive?activity=trade";
+    case "sale":
+      return "/spreads/archive?activity=sale";
+    case "airdrop":
+      return "/spreads/archive?activity=airdrop";
+    case "yield_position":
+      return "/spreads/archive?activity=yield_position";
+    case "option":
+      return "/spreads/archive?activity=option";
+  }
 }

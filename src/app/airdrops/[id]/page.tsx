@@ -95,7 +95,9 @@ export default async function AirdropDetailPage({
   const serial = `A#${activity.id.slice(0, 4).toUpperCase()}`;
   const claimLabel = fmtDate(a.claimDate ?? activity.openedAt, intlLocale);
   const daysSinceClaim = a.claimDate
-    ? Math.max(0, Math.round((Date.now() - new Date(a.claimDate).getTime()) / 86_400_000))
+    ? // Date.now is pure-at-request-time inside this async Server Component.
+      // eslint-disable-next-line react-hooks/purity
+      Math.max(0, Math.round((Date.now() - new Date(a.claimDate).getTime()) / 86_400_000))
     : 0;
 
   return (

@@ -1,13 +1,13 @@
-import { notFound, redirect } from "next/navigation";
+import { notFound } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, Trash2 } from "lucide-react";
+import { ArrowLeft } from "lucide-react";
 import { requireUser } from "@/lib/auth/server";
-import { getEvent, deleteEventLog } from "@/lib/db/events";
+import { getEvent } from "@/lib/db/events";
 import { EventCard } from "@/components/event/event-card";
 import { WizardSummaryRow } from "@/components/wizard/wizard-summary-row";
 import { WizardPreviewBanner } from "@/components/wizard/wizard-preview-banner";
 import { getT, getLocale } from "@/lib/i18n/server";
-import type { MovementEventKind } from "@/types/canonical";
+import { MovementDeleteButton } from "@/components/activity/delete-button";
 
 export const dynamic = "force-dynamic";
 
@@ -43,16 +43,6 @@ function fmtDateTime(iso: string, intlLocale: string): string {
     hour:   "2-digit",
     minute: "2-digit",
   });
-}
-
-// Inline server action — keeps the detail page atomic with its delete path.
-async function deleteEventAction(formData: FormData): Promise<void> {
-  "use server";
-  const id = formData.get("id");
-  if (typeof id !== "string") return;
-  const { id: userId } = await requireUser();
-  await deleteEventLog(userId, id);
-  redirect("/movement-events");
 }
 
 export default async function MovementEventDetailPage({
@@ -251,16 +241,7 @@ export default async function MovementEventDetailPage({
         >
           {t("movementEvents.detail.actions.edit")}
         </Link>
-        <form action={deleteEventAction}>
-          <input type="hidden" name="id" value={row.id} />
-          <button
-            type="submit"
-            className="inline-flex items-center gap-2 rounded-md border border-down/30 bg-surface px-4 py-2 font-mono text-[11px] uppercase tracking-[0.16em] text-down transition-colors hover:bg-down/10"
-          >
-            <Trash2 className="h-3 w-3" />
-            {t("movementEvents.detail.actions.delete")}
-          </button>
-        </form>
+        <MovementDeleteButton eventId={row.id} serial={serial} />
       </section>
 
       <footer className="mt-12 border-t border-border pt-4 font-mono text-[10px] uppercase tracking-[0.16em] text-text-tertiary">

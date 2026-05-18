@@ -5,7 +5,6 @@ import { Dialog as DialogPrimitive } from "radix-ui";
 import { X } from "lucide-react";
 
 import { cn } from "@/lib/utils";
-import { useT } from "@/lib/i18n/client";
 
 /**
  * Editorial Dialog primitive — thin wrapper around Radix Dialog.

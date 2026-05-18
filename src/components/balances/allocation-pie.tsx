@@ -84,11 +84,14 @@ export function AllocationPie({ assets, size = 240, topN = 5 }: Props) {
   const outerR = size / 2 - 2;
   const innerR = size / 2 - 36; // wide rim → editorial donut, not pinwheel
 
-  let cumulative = 0;
-  const paths = slices.map((s) => {
-    const start = cumulative;
-    cumulative += s.pct;
-    const end = cumulative;
+  // Pre-compute cumulative end-offsets via an immutable scan — keeps the
+  // React immutability linter happy without losing the donut path geometry.
+  const cumulativeEnds: readonly number[] = slices.map((_, i) =>
+    slices.slice(0, i + 1).reduce((sum, s) => sum + s.pct, 0),
+  );
+  const paths = slices.map((s, i) => {
+    const start = i === 0 ? 0 : cumulativeEnds[i - 1] ?? 0;
+    const end = cumulativeEnds[i] ?? start;
     return {
       asset: s.asset,
       d: ringArc(cx, cy, outerR, innerR, start, end),

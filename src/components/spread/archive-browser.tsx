@@ -342,7 +342,7 @@ export function ArchiveBrowser({ data }: { data: Activity[] }) {
       rows = rows.filter((r) => rowSearchHaystack(r, retroDropLabel).includes(q));
     }
     return rows;
-  }, [data, activityFilters, spreadTypeFilters, spreadSubtypeApplicable, assetFilters, statusFilters, outcome, search]);
+  }, [data, activityFilters, spreadTypeFilters, spreadSubtypeApplicable, assetFilters, statusFilters, outcome, search, retroDropLabel]);
 
   const sorted = React.useMemo(() => {
     const dir = sort.dir === "asc" ? 1 : -1;

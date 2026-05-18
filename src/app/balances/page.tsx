@@ -25,6 +25,7 @@ import { PortfolioHistoryChart } from "@/components/balances/portfolio-history-c
 import { AllocationPie } from "@/components/balances/allocation-pie";
 import { BalanceTable } from "@/components/balances/balance-table";
 import { ExchangeBalanceRow } from "@/components/balances/exchange-balance-row";
+import { RefreshButton } from "@/components/balances/refresh-button";
 
 export const dynamic = "force-dynamic";
 
@@ -236,21 +237,3 @@ function EmptyState() {
   );
 }
 
-/**
- * Manual-refresh button — fires the `/api/balances/refresh` route which
- * synchronously asks the worker to re-fetch every connection. Implemented
- * as a tiny client island so the rest of the page stays server-rendered;
- * the refresh action is a `<form>` with a server-side route handler.
- */
-function RefreshButton() {
-  return (
-    <form action="/api/balances/refresh" method="post">
-      <button
-        type="submit"
-        className="rounded-md border border-border bg-app px-3 py-1.5 font-mono text-[10px] uppercase tracking-[0.18em] text-text hover:border-border-strong"
-      >
-        Refresh
-      </button>
-    </form>
-  );
-}
