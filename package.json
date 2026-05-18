@@ -24,6 +24,7 @@
     "db:reset": "pnpm db:drop && pnpm db:create && pnpm db:migrate",
     "db:seed": "tsx src/lib/db/seed.ts",
     "db:psql": "psql -d crypto_spread_journal",
+    "db:wipe-user-data": "psql -d crypto_spread_journal -f scripts/wipe-user-data.sql",
     "worker:dev": "cd worker && uv run python -m csj_worker.main",
     "worker:once": "cd worker && uv run python -m csj_worker.main --once",
     "worker:match": "cd worker && uv run python -m csj_worker.main match",

@@ -1263,7 +1263,7 @@ export const en = {
           rejected: 'Credentials were rejected. Use a read-only key (no withdraw scope).',
           failed: 'Failed to add connection (status {status}).',
           network: 'Network error. Check the dev server and try again.',
-          walletNotSupported: 'This exchange connects via a wallet address, not an API key. Wallet-based connections are not yet supported in the UI — try again in a later release.',
+          walletNotSupported: 'This exchange connects via a wallet address, not an API key. Wallet-address venues are tracked via the on-chain indexer rather than this dialog.',
         },
       },
       row: {
@@ -2039,8 +2039,6 @@ export const en = {
         subtitle: 'IDO / launchpad / premarket / OTC / IEO / private round / OTC allocation / vesting claim. The kind drives which fields the next step surfaces.',
         back: 'Back',
         continue: 'Continue',
-        walletHintLabel: 'Coming soon',
-        walletHintBody: 'Paste the claim wallet to auto-fetch the tx hash and qty received. Lands in v3.',
       },
       kind: {
         ido: { title: 'IDO', description: 'Initial DEX offering. Public sale on a launchpad.' },
@@ -2357,13 +2355,11 @@ export const en = {
         },
         fetchBtn: {
           label: 'Fetch from chain',
-          comingSoon: '— coming soon (v3)',
-          disabledHint: 'On-chain indexer is a v3 backlog item. For v1 the manual path is the supported flow.',
         },
         results: {
           heading: 'Discovered claims',
-          idle: 'Paste a wallet to start. v1 is a preview — the indexer returns no matches; use the manual path below.',
-          empty: 'No claims discovered for this wallet yet. (v1 returns an empty index — the real lookup ships in v3.)',
+          idle: 'Paste a wallet to start.',
+          empty: 'No claims discovered for this wallet yet — type the claim manually below.',
           fallbackHint: 'In the meantime, type the claim manually:',
           fallbackCta: 'Continue with manual entry →',
           useClaim: 'Use this claim',

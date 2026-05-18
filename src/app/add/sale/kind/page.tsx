@@ -27,19 +27,6 @@ const SALE_KINDS = [
   { value: "vesting_claim",  i18n: "vestingClaim"   },
 ] as const;
 
-// Kinds where the trader expects to receive tokens to a known wallet. The
-// wallet-paste claim fetcher (v3) will read this set to decide whether to
-// surface the paste hint on the fields step. For now we just show a disabled
-// affordance on the kind step so users discover the upcoming UX without it
-// blocking submission.
-const WALLET_RELEVANT_KINDS: ReadonlySet<string> = new Set([
-  "ido",
-  "premarket",
-  "private_round",
-  "otc_allocation",
-  "vesting_claim",
-]);
-
 function getStr(sp: Awaited<Search>, key: string, fallback = ""): string {
   const v = sp[key];
   if (typeof v === "string") return v;
@@ -81,8 +68,6 @@ export default async function SaleKindPage(props: { searchParams: Search }) {
     description: t(`wizard.sale.kind.${k.i18n}.description` as const),
   }));
 
-  const showWalletHint = WALLET_RELEVANT_KINDS.has(preSelected);
-
   return (
     <WizardShell
       type="sale"
@@ -105,25 +90,6 @@ export default async function SaleKindPage(props: { searchParams: Search }) {
           variant="cards"
           options={OPTIONS}
         />
-
-        {/* Wallet-paste affordance — disabled in v2, real implementation
-            ships in v3 (Etherscan/Solscan integration per master plan §1
-            "Above-and-beyond features"). We surface the disabled hint so the
-            UX is discoverable but don't gate submission on it. */}
-        {showWalletHint && (
-          <aside
-            className="rounded-md border border-dashed border-border-strong bg-subtle/60 px-4 py-3 text-[12px] text-text-tertiary"
-            role="status"
-            aria-live="polite"
-          >
-            <span className="font-mono text-[10px] uppercase tracking-[0.16em] text-text-secondary">
-              {t("wizard.sale.kindStep.walletHintLabel")}
-            </span>
-            <span className="ml-2 font-serif italic">
-              {t("wizard.sale.kindStep.walletHintBody")}
-            </span>
-          </aside>
-        )}
 
         <div className="mt-6 flex items-center justify-between border-t border-border pt-6">
           <Link

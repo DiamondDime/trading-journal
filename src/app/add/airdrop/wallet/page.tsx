@@ -37,14 +37,15 @@ interface DisplayClaim {
 
 /**
  * Optional wallet-paste shortcut for the airdrop wizard. Trader pastes a
- * wallet + chain, the page (in v3) calls an indexer and lists any claim
+ * wallet + chain, the page calls the indexer helper, and lists any claim
  * transactions found. "Use this claim" pre-fills /fields with the chain,
  * tx hash, qty, value-at-claim, and gas cost so the trader only fills in
  * the thesis / tags.
  *
- * v1 behaviour: the indexer is stubbed empty so the path is reachable and
- * the UI demonstrates the eventual UX. The "Fetch from chain" button is
- * disabled with a "coming soon" hint.
+ * The indexer (`fetchOnchainClaimsForWallet`) is a stub today — it returns
+ * an empty claims list for any wallet. The UI renders the empty state and
+ * the manual-entry fallback in that case. Wiring a real indexer is a swap
+ * inside the helper, no UI changes required.
  */
 export default async function AirdropWalletPage(props: { searchParams: Search }) {
   const t = await getT();
@@ -140,16 +141,10 @@ export default async function AirdropWalletPage(props: { searchParams: Search })
         <div className="flex items-center gap-3">
           <button
             type="submit"
-            disabled
-            aria-disabled
-            title={t("wizard.airdrop.wallet.fetchBtn.disabledHint")}
-            className="inline-flex items-center gap-2 rounded-md border border-border bg-subtle px-4 py-2 font-mono text-[11px] uppercase tracking-[0.16em] text-text-disabled cursor-not-allowed"
+            className="inline-flex items-center gap-2 rounded-md border border-border bg-app px-4 py-2 font-mono text-[11px] uppercase tracking-[0.16em] text-text hover:border-border-strong"
           >
             {t("wizard.airdrop.wallet.fetchBtn.label")}
           </button>
-          <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-text-tertiary">
-            {t("wizard.airdrop.wallet.fetchBtn.comingSoon")}
-          </span>
         </div>
       </form>
 
