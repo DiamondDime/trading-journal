@@ -28,6 +28,11 @@ export function SettingsSubnav() {
       caption: t("subnav.settings.importCaption"),
     },
     {
+      label: t("settings.sections.mcp"),
+      href: "/settings/mcp",
+      caption: t("subnav.settings.mcpCaption"),
+    },
+    {
       label: t("settings.sections.profile"),
       href: "/settings/profile",
       caption: t("subnav.settings.profileCaption"),

@@ -82,6 +82,7 @@ export const ru: MessageDict = {
       profileCaption: 'Профиль и язык',
       aboutCaption: 'Сборка и лицензия',
       importCaption: 'История сделок CSV',
+      mcpCaption: 'LLM-мост и токен',
     },
     analytics: {
       aria: 'Разделы аналитики',
@@ -1147,6 +1148,7 @@ export const ru: MessageDict = {
       profile: 'Профиль',
       about: 'О журнале',
       import: 'CSV-импорт',
+      mcp: 'MCP-мост',
     },
     import: {
       sectionHeading: 'CSV-импорт',
@@ -1369,6 +1371,68 @@ export const ru: MessageDict = {
       timezone: 'Часовой пояс',
       baseCurrency: 'Базовая валюта',
       footer: 'Только чтение · v1',
+    },
+    mcp: {
+      sectionHeading: 'MCP-мост',
+      sectionSubtitle:
+        'Дай LLM-клиентам читать твой журнал — для анализа стиля и коучинга. Только localhost, защита токеном.',
+      status: {
+        active: 'Активен',
+        inactive: 'Пока не сгенерирован — запусти десктопное приложение, оно создаст токен',
+        label: 'Статус моста',
+      },
+      token: {
+        title: 'Токен моста',
+        body: 'Идентифицирует твой журнал для MCP-клиента. CLI-мост подхватит его автоматически по пути ниже.',
+        warning:
+          'Относись к токену как к паролю — у любого, у кого он есть И есть доступ к твоей машине, будет доступ к журналу.',
+        copy: 'Скопировать токен',
+        copied: 'Скопировано',
+        path: 'Файл токена',
+        none: 'Токена пока нет. Запусти десктопное приложение — оно создаст файл.',
+      },
+      install: {
+        sectionTitle: 'Установка моста',
+        sectionBody:
+          'Поставь npm-пакет глобально и вставь сниппет в конфиг своего LLM-клиента. Пакет читает токен из ~/.journal/mcp.json — в конфиг его вставлять не нужно.',
+        npmHeading: 'Установка',
+        configHeading: 'Добавь в конфиг',
+        clients: {
+          claudeDesktop: 'Claude Desktop',
+          cursor: 'Cursor',
+          zed: 'Zed',
+        },
+        paths: {
+          macos: 'macOS',
+          windows: 'Windows',
+          cursorBody:
+            'Настройки → MCP → Добавить сервер, либо отредактируй ~/.cursor/mcp.json напрямую.',
+          zedBody:
+            'Отредактируй ~/.config/zed/settings.json в разделе "context_servers".',
+        },
+        tokenNote:
+          'Мост сам читает токен из ~/.journal/mcp.json — держи его подальше от конфигурационного файла.',
+      },
+      canSee: {
+        title: 'Что LLM видит',
+        items: {
+          activities:
+            'Спреды, сделки, продажи, эирдропы, доходные позиции, опционы — суммы, P&L, времена, площадки',
+          notes: 'Содержимое заметок',
+          tags: 'Теги и их определения',
+          exchanges:
+            'Имена подключённых бирж и время последней синхронизации (без ключей)',
+        },
+      },
+      cannotSee: {
+        title: 'Что LLM не видит',
+        items: {
+          apiKeys: 'API-ключи бирж (шифруются в системном кейчейне)',
+          masterKey: 'Мастер-ключ шифрования',
+          credentials: 'Пароли и OAuth-токены',
+        },
+      },
+      footer: 'Токен перегенерируется только если файл отсутствует · v1',
     },
   },
   wizard: {

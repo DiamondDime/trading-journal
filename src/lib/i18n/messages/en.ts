@@ -80,6 +80,7 @@ export const en = {
       profileCaption: 'Identity & locale',
       aboutCaption: 'Build & license',
       importCaption: 'CSV trade history',
+      mcpCaption: 'LLM bridge & token',
     },
     analytics: {
       aria: 'Analytics sections',
@@ -1130,6 +1131,7 @@ export const en = {
       profile: 'Profile',
       about: 'About',
       import: 'CSV import',
+      mcp: 'MCP bridge',
     },
     import: {
       sectionHeading: 'CSV import',
@@ -1350,6 +1352,68 @@ export const en = {
       timezone: 'Timezone',
       baseCurrency: 'Base currency',
       footer: 'Read-only · v1',
+    },
+    mcp: {
+      sectionHeading: 'MCP bridge',
+      sectionSubtitle:
+        'Let LLM clients read your journal for personality analysis and coaching. Localhost-only, token-protected.',
+      status: {
+        active: 'Active',
+        inactive: 'Not yet generated — launch the desktop app to provision',
+        label: 'Bridge status',
+      },
+      token: {
+        title: 'Bridge token',
+        body: 'Identifies your journal to the MCP client. The CLI bridge loads this automatically from the path below.',
+        warning:
+          'Treat this token like a password — anyone with it AND access to your machine can read your journal.',
+        copy: 'Copy token',
+        copied: 'Copied',
+        path: 'Token file',
+        none: 'No token yet. Launch the desktop app so it provisions the file.',
+      },
+      install: {
+        sectionTitle: 'Install the bridge',
+        sectionBody:
+          'Install the npm package globally, then drop the snippet into your LLM client config. The package reads the token from ~/.journal/mcp.json — you never paste it into the config.',
+        npmHeading: 'Install',
+        configHeading: 'Add to config',
+        clients: {
+          claudeDesktop: 'Claude Desktop',
+          cursor: 'Cursor',
+          zed: 'Zed',
+        },
+        paths: {
+          macos: 'macOS',
+          windows: 'Windows',
+          cursorBody:
+            'Settings → MCP → Add server, or edit ~/.cursor/mcp.json directly.',
+          zedBody:
+            'Edit ~/.config/zed/settings.json under "context_servers".',
+        },
+        tokenNote:
+          'The token is loaded by the bridge from ~/.journal/mcp.json — keep it out of your config file.',
+      },
+      canSee: {
+        title: 'What the LLM can see',
+        items: {
+          activities:
+            'Spread, trade, sale, airdrop, yield, and option records — amounts, P&L, timestamps, venues',
+          notes: 'Notes content',
+          tags: 'Tags and tag definitions',
+          exchanges:
+            'Connected exchange names and last-sync times (not credentials)',
+        },
+      },
+      cannotSee: {
+        title: 'What the LLM cannot see',
+        items: {
+          apiKeys: 'Exchange API keys (encrypted in OS keychain)',
+          masterKey: 'The encryption master key',
+          credentials: 'Any password or OAuth token',
+        },
+      },
+      footer: 'Token is regenerated only when the file is missing · v1',
     },
   },
   wizard: {

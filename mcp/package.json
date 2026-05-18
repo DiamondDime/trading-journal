@@ -1,0 +1,42 @@
+{
+  "name": "trading-journal-mcp",
+  "version": "0.1.0",
+  "description": "MCP server for the Journal crypto trading journal. Exposes your local journal data to LLM clients (Claude Desktop, Cursor) for personality analysis and trade coaching.",
+  "type": "module",
+  "main": "./dist/index.js",
+  "bin": {
+    "trading-journal-mcp": "./dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "start": "node dist/index.js"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.29.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "typescript": "^5.6.0"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "keywords": [
+    "mcp",
+    "trading-journal",
+    "crypto",
+    "model-context-protocol"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/DiamondDime/trading-journal.git",
+    "directory": "mcp"
+  },
+  "author": "DDDime77",
+  "files": [
+    "dist",
+    "README.md"
+  ]
+}

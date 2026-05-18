@@ -31,6 +31,9 @@ import { bootDesktopDb, type DesktopDbHandle } from './migrate';
 // Auto-update agent: helper that wires `electron-updater` + IPC channels.
 // Idempotent and a no-op in dev mode.
 import { attachAutoUpdater } from './auto-update';
+// MCP token plumbing: idempotent loader for ~/.journal/mcp.json. Bridges the
+// standalone `trading-journal-mcp` npm package to the in-app HTTP API.
+import { loadOrCreateMcpToken } from './mcp-token';
 
 const isDev = process.env.DESKTOP_DEV === '1' || !app.isPackaged;
 const DEV_PORT = Number.parseInt(process.env.DESKTOP_DEV_PORT ?? '3000', 10);
@@ -125,7 +128,11 @@ function resolveStandaloneServerEntry(): string {
  * at the standalone root so its require()s resolve against the bundled
  * node_modules.
  */
-function spawnNextServer(port: number, pgPort: number): ChildProcess {
+function spawnNextServer(
+  port: number,
+  pgPort: number,
+  mcpToken: string,
+): ChildProcess {
   const serverEntry = resolveStandaloneServerEntry();
   if (!existsSync(serverEntry)) {
     throw new Error(
@@ -154,6 +161,11 @@ function spawnNextServer(port: number, pgPort: number): ChildProcess {
       // directly. The Next.js subprocess doesn't read this — it connects via
       // PGLITE_PORT — but downstream tooling may.
       PGLITE_DATA_DIR: dataDir,
+      // Shared secret with the `trading-journal-mcp` package. The Next.js
+      // server uses this to authenticate requests on /api/mcp/v1/*. The
+      // source of truth is ~/.journal/mcp.json; we forward it here so the
+      // Next.js subprocess doesn't need its own filesystem read.
+      MCP_TOKEN: mcpToken,
       // Don't inherit the parent process's ELECTRON_RUN_AS_NODE flag, etc.
       ELECTRON_RUN_AS_NODE: '1',
       NODE_ENV: 'production',
@@ -229,6 +241,18 @@ function registerIpcHandlers(): void {
 async function boot(): Promise<void> {
   registerIpcHandlers();
 
+  // Provision the MCP auth token BEFORE the Next.js subprocess spawns. We pass
+  // it forward as MCP_TOKEN in the spawn env so /api/mcp/v1/* (handled by a
+  // separate agent) can authenticate the `trading-journal-mcp` npm bridge.
+  //
+  // Source of truth is ~/.journal/mcp.json — the /settings/mcp page reads the
+  // same file at request time, so dev mode (where there's no child spawn)
+  // still works without us threading the value through process env.
+  const mcp = await loadOrCreateMcpToken();
+  console.log(
+    `[mcp] token ${mcp.generated ? 'generated new token' : 'loaded from ~/.journal/mcp.json'}`,
+  );
+
   // Boot the PGlite database BEFORE we spawn the Next.js subprocess. The
   // subprocess connects to PGlite via the wire-protocol bridge on PGLITE_PORT;
   // if it queried before the bridge was up, postgres.js would ECONNREFUSED.
@@ -247,7 +271,7 @@ async function boot(): Promise<void> {
   } else {
     targetPort = await findFreePort();
     console.log(`[main] spawning Next.js standalone on :${targetPort}`);
-    nextServer = spawnNextServer(targetPort, desktopDb.port);
+    nextServer = spawnNextServer(targetPort, desktopDb.port, mcp.token);
     await waitForServer(targetPort);
   }
 
