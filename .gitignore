@@ -30,6 +30,8 @@ coverage/
 .idea/
 .DS_Store
 .claude/
+CLAUDE.md
+AGENTS.md
 
 # Logs
 *.log
