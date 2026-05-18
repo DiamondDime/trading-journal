@@ -365,6 +365,34 @@ export const ru: MessageDict = {
         deleteFailed: 'Не удалось удалить ({status})',
       },
     },
+    notes: {
+      editorAria: 'Заметки по активности',
+      placeholder:
+        'Напиши то, что захочешь прочитать через год. Что сработало, что нет, что стоит сделать иначе в следующий раз…',
+      save: 'Сохранить',
+      status: {
+        saving: 'Сохраняем…',
+        editedSaved: 'Редактируется · последнее сохранение {ts}',
+        editedUnsaved: 'Редактируется · не сохранено',
+        savedAt: 'Сохранено {ts}',
+        saved: 'Сохранено',
+        lastSaved: 'Сохранено {ts}',
+        noNote: 'Заметки пока нет',
+        error: 'Ошибка',
+      },
+      relative: {
+        justNow: 'только что',
+        minutesAgo: '{n} мин назад',
+        hoursAgo: '{n} ч назад',
+      },
+      errors: {
+        conflict:
+          'Эта заметка была изменена в другом месте — перезагрузите, чтобы увидеть последнюю версию.',
+        notFound:
+          'Этой активности больше нет. Ваш текст остаётся в поле ввода.',
+        saveFailed: 'Не удалось сохранить ({status})',
+      },
+    },
     satisfaction: {
       groupAria: 'Качество исполнения',
       pillUp: 'Чистое исполнение',
@@ -2558,6 +2586,7 @@ export const ru: MessageDict = {
           customPct: '%',
           customTotal: 'Итого',
           customOver100: 'больше 100% — проверь',
+          removeRowAria: 'Удалить строку',
           variants: {
             allAtTge: 'Всё на TGE',
             tgePlusLinear: 'TGE + линейный',
@@ -3503,6 +3532,7 @@ export const ru: MessageDict = {
   },
   optionDetail: {
     editAria: 'Редактировать опцион',
+    payoffAria: 'Payoff опциона на экспирации',
     dteValue: '{dte}д DTE',
     expired: 'истёк',
     legCount: '{count} ног',

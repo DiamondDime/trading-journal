@@ -494,6 +494,7 @@ export default async function SaleFieldsPage(props: { searchParams: Search }) {
             customPct: t("wizard.sale.fields.vesting.customPct"),
             customRunningTotal: t("wizard.sale.fields.vesting.customTotal"),
             customOver100: t("wizard.sale.fields.vesting.customOver100"),
+            removeRowAria: t("wizard.sale.fields.vesting.removeRowAria"),
           }}
         />
 

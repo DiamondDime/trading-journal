@@ -357,6 +357,32 @@ export const en = {
         deleteFailed: 'Delete failed ({status})',
       },
     },
+    notes: {
+      editorAria: 'Activity notes',
+      placeholder:
+        "Write what you'd want to read in a year. What worked, what didn't, what's worth doing differently next time…",
+      save: 'Save',
+      status: {
+        saving: 'Saving…',
+        editedSaved: 'Edited · last saved {ts}',
+        editedUnsaved: 'Edited · unsaved',
+        savedAt: 'Saved {ts}',
+        saved: 'Saved',
+        lastSaved: 'Last saved {ts}',
+        noNote: 'No note yet',
+        error: 'Error',
+      },
+      relative: {
+        justNow: 'just now',
+        minutesAgo: '{n}m ago',
+        hoursAgo: '{n}h ago',
+      },
+      errors: {
+        conflict: 'This note was edited elsewhere — reload to see the latest.',
+        notFound: 'This activity no longer exists. Your text is safe in the textarea.',
+        saveFailed: 'Save failed ({status})',
+      },
+    },
     satisfaction: {
       groupAria: 'Execution satisfaction',
       pillUp: 'Clean execution',
@@ -2545,6 +2571,7 @@ export const en = {
           customPct: '%',
           customTotal: 'Total',
           customOver100: 'over 100% — verify before submit',
+          removeRowAria: 'Remove row',
           variants: {
             allAtTge: 'All at TGE',
             tgePlusLinear: 'TGE + linear',
@@ -3556,6 +3583,7 @@ export const en = {
   },
   optionDetail: {
     editAria: 'Edit option',
+    payoffAria: 'Option payoff at expiration',
     dteValue: '{dte}d DTE',
     expired: 'expired',
     legCount: '{count} legs',

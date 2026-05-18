@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import { cn } from "@/lib/utils";
+import { useT, useLocale } from "@/lib/i18n/client";
 
 interface NotesEditorProps {
   activityId: string;
@@ -45,6 +46,9 @@ export function NotesEditor({
   initialVersion,
   initialNoteId,
 }: NotesEditorProps) {
+  const t = useT();
+  const locale = useLocale();
+  const intlLocale = locale === "ru" ? "ru-RU" : "en-US";
   const [body, setBody] = React.useState(initialBody);
   // noteId + version live in refs because they're set server-side after each
   // save; capturing them in the `save` closure via useState would risk a stale
@@ -117,20 +121,23 @@ export function NotesEditor({
         setStatus("error");
         setErrorMsg(
           json?.error?.message ??
-            "This note was edited elsewhere — reload to see the latest.",
+            t("activity.notes.errors.conflict"),
         );
         return;
       }
       if (res.status === 404) {
         // Parent activity was deleted out from under us.
         setStatus("error");
-        setErrorMsg("This activity no longer exists. Your text is safe in the textarea.");
+        setErrorMsg(t("activity.notes.errors.notFound"));
         return;
       }
       if (!res.ok) {
         const json = await res.json().catch(() => null);
         setStatus("error");
-        setErrorMsg(json?.error?.message ?? `Save failed (${res.status})`);
+        setErrorMsg(
+          json?.error?.message ??
+            t("activity.notes.errors.saveFailed", { status: res.status }),
+        );
         return;
       }
       const json = (await res.json()) as {
@@ -146,7 +153,7 @@ export function NotesEditor({
       setStatus("error");
       setErrorMsg(e instanceof Error ? e.message : String(e));
     }
-  }, [activityId, body, conflict]);
+  }, [activityId, body, conflict, t]);
 
   function handleChange(e: React.ChangeEvent<HTMLTextAreaElement>) {
     setBody(e.target.value);
@@ -180,7 +187,7 @@ export function NotesEditor({
     };
   }, []);
 
-  const versionLabel = renderRelativeTime(lastSavedAt, tick);
+  const versionLabel = renderRelativeTime(lastSavedAt, tick, intlLocale, t);
 
   return (
     <div className="flex flex-col gap-3">
@@ -188,8 +195,8 @@ export function NotesEditor({
         value={body}
         onChange={handleChange}
         onBlur={handleBlur}
-        placeholder="Write what you'd want to read in a year. What worked, what didn't, what's worth doing differently next time…"
-        aria-label="Activity notes"
+        placeholder={t("activity.notes.placeholder")}
+        aria-label={t("activity.notes.editorAria")}
         className={cn(
           "w-full resize-y rounded-md border border-border bg-surface p-4",
           "min-h-[180px] font-serif text-[15px] leading-[1.7] text-text",
@@ -200,13 +207,23 @@ export function NotesEditor({
       />
       <div className="flex items-center justify-between font-mono text-[10px] uppercase tracking-[0.16em] text-text-tertiary">
         <span aria-live="polite">
-          {status === "saving" && "Saving…"}
-          {status === "dirty" && (lastSavedAt ? `Edited · last saved ${versionLabel}` : "Edited · unsaved")}
-          {status === "saved" && (lastSavedAt ? `Saved ${versionLabel}` : "Saved")}
-          {status === "idle" && lastSavedAt && `Last saved ${versionLabel}`}
-          {status === "idle" && !lastSavedAt && "No note yet"}
+          {status === "saving" && t("activity.notes.status.saving")}
+          {status === "dirty" &&
+            (lastSavedAt
+              ? t("activity.notes.status.editedSaved", { ts: versionLabel })
+              : t("activity.notes.status.editedUnsaved"))}
+          {status === "saved" &&
+            (lastSavedAt
+              ? t("activity.notes.status.savedAt", { ts: versionLabel })
+              : t("activity.notes.status.saved"))}
+          {status === "idle" && lastSavedAt &&
+            t("activity.notes.status.lastSaved", { ts: versionLabel })}
+          {status === "idle" && !lastSavedAt &&
+            t("activity.notes.status.noNote")}
           {status === "error" && (
-            <span className="text-down">{errorMsg ?? "Error"}</span>
+            <span className="text-down">
+              {errorMsg ?? t("activity.notes.status.error")}
+            </span>
           )}
         </span>
         <button
@@ -219,7 +236,9 @@ export function NotesEditor({
             "disabled:cursor-not-allowed disabled:opacity-60",
           )}
         >
-          {status === "saving" ? "Saving…" : "Save"}
+          {status === "saving"
+            ? t("activity.notes.status.saving")
+            : t("activity.notes.save")}
         </button>
       </div>
       {conflict && (
@@ -245,14 +264,27 @@ export function NotesEditor({
  * "Just now", "2m ago", "1h ago", "Mar 14". Re-renders via the `tick`
  * dependency every 30s.
  */
-function renderRelativeTime(ts: number | null, _tick: number): string {
+function renderRelativeTime(
+  ts: number | null,
+  _tick: number,
+  intlLocale: string,
+  t: ReturnType<typeof useT>,
+): string {
   if (ts === null) return "—";
   void _tick;
   const diff = Date.now() - ts;
-  if (diff < 60_000) return "just now";
-  if (diff < 3_600_000) return `${Math.round(diff / 60_000)}m ago`;
-  if (diff < 86_400_000) return `${Math.round(diff / 3_600_000)}h ago`;
-  return new Date(ts).toLocaleDateString("en-US", {
+  if (diff < 60_000) return t("activity.notes.relative.justNow");
+  if (diff < 3_600_000) {
+    return t("activity.notes.relative.minutesAgo", {
+      n: Math.round(diff / 60_000),
+    });
+  }
+  if (diff < 86_400_000) {
+    return t("activity.notes.relative.hoursAgo", {
+      n: Math.round(diff / 3_600_000),
+    });
+  }
+  return new Date(ts).toLocaleDateString(intlLocale, {
     month: "short",
     day: "numeric",
   });

@@ -29,6 +29,7 @@ export interface WizardVestingEditorProps {
     customPct?: string;
     customRunningTotal?: string;
     customOver100?: string;
+    removeRowAria?: string;
   };
 }
 
@@ -218,7 +219,7 @@ export function WizardVestingEditor({
                 onClick={() =>
                   setEntries((prev) => prev.filter((_, j) => j !== i))
                 }
-                aria-label="Remove row"
+                aria-label={labels.removeRowAria ?? "Remove row"}
                 className="rounded-md border border-border bg-surface p-2 text-text-tertiary hover:border-border-strong hover:text-text"
               >
                 <X className="h-3 w-3" />

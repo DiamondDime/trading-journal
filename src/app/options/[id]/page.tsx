@@ -239,7 +239,12 @@ export default async function OptionDetailPage({
             </div>
 
             <div className="mt-8">
-              <OptionPayoffChart legs={chartLegs} variant="full" height={260} />
+              <OptionPayoffChart
+                legs={chartLegs}
+                variant="full"
+                height={260}
+                ariaLabel={t("optionDetail.payoffAria")}
+              />
             </div>
           </section>
 

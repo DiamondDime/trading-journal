@@ -425,7 +425,12 @@ export default async function OptionReviewPage(props: {
           {t("wizard.option.review.sections.payoff")}
         </h2>
         <div className="rounded-md border border-border bg-surface p-4">
-          <OptionPayoffChart legs={chartLegs} variant="full" height={220} />
+          <OptionPayoffChart
+            legs={chartLegs}
+            variant="full"
+            height={220}
+            ariaLabel={t("optionDetail.payoffAria")}
+          />
         </div>
       </section>
 

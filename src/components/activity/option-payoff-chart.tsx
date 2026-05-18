@@ -85,7 +85,8 @@ export function OptionPayoffChart({
   samples = 81,
   variant = "compact",
   className,
-}: OptionPayoffChartProps) {
+  ariaLabel,
+}: OptionPayoffChartProps & { ariaLabel?: string }) {
   // Empty / invalid input: render a stable placeholder so the layout doesn't
   // jump while the user fills out the wizard.
   if (legs.length === 0 || legs.some((l) => !Number.isFinite(l.strike))) {
@@ -220,7 +221,7 @@ export function OptionPayoffChart({
         className="block h-full w-full"
         preserveAspectRatio="none"
         role="img"
-        aria-label="Option payoff at expiration"
+        aria-label={ariaLabel ?? "Option payoff at expiration"}
       >
         {/* Loss zone fill. */}
         <path
