@@ -15,8 +15,10 @@
 
 import { useEffect, useState } from "react";
 import type { UpdateAvailablePayload } from "@/types/electron";
+import { useT } from "@/lib/i18n/client";
 
 export function UpdateBanner() {
+  const t = useT();
   const [update, setUpdate] = useState<UpdateAvailablePayload | null>(null);
   const [installing, setInstalling] = useState(false);
 
@@ -60,7 +62,7 @@ export function UpdateBanner() {
             className="inline-block size-1.5 rounded-full bg-signature"
           />
           <span className="font-serif italic">
-            Update ready
+            {t("desktop.updateBanner.ready")}
           </span>
           <span className="text-text-tertiary">·</span>
           <span className="font-mono text-xs uppercase tracking-[0.14em] text-text-secondary">
@@ -73,7 +75,7 @@ export function UpdateBanner() {
             onClick={() => setUpdate(null)}
             className="rounded-md px-2.5 py-1 text-xs font-medium text-text-tertiary transition-colors hover:bg-subtle hover:text-text"
           >
-            Later
+            {t("desktop.updateBanner.later")}
           </button>
           <button
             type="button"
@@ -81,7 +83,7 @@ export function UpdateBanner() {
             disabled={installing}
             className="rounded-md bg-signature px-3 py-1 text-xs font-medium text-white shadow-sm transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
           >
-            {installing ? "Restarting…" : "Restart now"}
+            {installing ? t("desktop.updateBanner.restarting") : t("desktop.updateBanner.restartNow")}
           </button>
         </div>
       </div>

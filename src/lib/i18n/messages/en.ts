@@ -11,7 +11,7 @@ import type { PluralLeaf } from '../types';
 export const en = {
   app: {
     name: 'Trading Journal',
-    tagline: 'journal · v0.2',
+    tagline: 'journal · v0.1',
   },
   sidebar: {
     sections: {
@@ -115,6 +115,14 @@ export const en = {
       airdrop: 'Airdrops',
       option: 'Options',
       yield_position: 'Yield positions',
+    },
+  },
+  desktop: {
+    updateBanner: {
+      ready: 'Update ready',
+      later: 'Later',
+      restartNow: 'Restart now',
+      restarting: 'Restarting…',
     },
   },
   common: {
@@ -898,7 +906,7 @@ export const en = {
     all: 'All',
     empty: {
       title: 'No movements logged yet.',
-      body: 'Bridges, deposits, withdrawals, NFTs, losses — anything that touches your books but isn’t a strategy event.',
+      body: 'Losses, hacks, write-offs — anything that touches your books but isn’t a trade.',
       filteredTitle: 'No movements of this kind.',
       filteredBody: 'Try a different filter — or log one now.',
     },
@@ -1490,7 +1498,7 @@ export const en = {
           caption: 'Yield',
           title: 'Yield position',
           description: 'Stake / lend / farm / LP / validator / mining. Track principal, expected and realized APY, and reward claims.',
-          badge: 'MANUAL + AUTO SOON',
+          badge: 'MANUAL',
         },
         option: {
           caption: 'Defined risk',
@@ -2923,7 +2931,7 @@ export const en = {
       },
       kind: {
         title: 'What kind of movement?',
-        subtitle: 'These are accounting events — not strategy. The kind drives which fields the next step pre-emphasizes (transfers care about from/to; losses just need a value).',
+        subtitle: 'These are accounting events — not strategy. Pick the closest kind; the next step adjusts the fields it asks for.',
         legend: 'Movement kind',
         requiredCue: '· required',
       },

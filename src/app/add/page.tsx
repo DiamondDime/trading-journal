@@ -31,14 +31,14 @@ export default async function AddIndexPage() {
       caption: t("wizard.add.options.sale.caption"),
       title: t("wizard.add.options.sale.title"),
       description: t("wizard.add.options.sale.description"),
-      href: "/add/sale/fields",
+      href: "/add/sale/kind",
       badge: t("wizard.add.manual"),
     },
     {
       caption: t("wizard.add.options.airdrop.caption"),
       title: t("wizard.add.options.airdrop.title"),
       description: t("wizard.add.options.airdrop.description"),
-      href: "/add/airdrop/fields",
+      href: "/add/airdrop",
       badge: t("wizard.add.manual"),
     },
     {

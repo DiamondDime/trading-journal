@@ -362,6 +362,7 @@ async function PageHero({ totalNet, count }: { totalNet: number; count: number }
       <AnalyticsHeadline
         label={t("analytics.activityMix.heroLabel")}
         value={fmtUsd(totalNet, true)}
+        tone={totalNet < 0 ? "down" : "signature"}
         subtitle={
           count === 1
             ? t("analytics.activityMix.heroSubtitleOne")

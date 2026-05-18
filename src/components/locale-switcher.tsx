@@ -4,7 +4,7 @@ import * as React from 'react';
 import { useTransition } from 'react';
 import { cn } from '@/lib/utils';
 import { setLocaleAction } from '@/lib/i18n/actions';
-import { useLocale } from '@/lib/i18n/client';
+import { useLocale, useT } from '@/lib/i18n/client';
 import type { Locale } from '@/lib/i18n/types';
 
 /**
@@ -15,6 +15,7 @@ import type { Locale } from '@/lib/i18n/types';
  * updates locally on click for instant feedback during the transition.
  */
 export function LocaleSwitcher() {
+  const t = useT();
   const locale = useLocale();
   const [isPending, startTransition] = useTransition();
   const [optimistic, setOptimistic] = React.useState<Locale | null>(null);
@@ -25,15 +26,20 @@ export function LocaleSwitcher() {
     if (next === active) return;
     setOptimistic(next);
     startTransition(async () => {
-      await setLocaleAction(next);
-      setOptimistic(null);
+      try {
+        await setLocaleAction(next);
+      } finally {
+        // Always clear optimistic so a rejected server action doesn't pin
+        // the UI on a state the server never accepted.
+        setOptimistic(null);
+      }
     });
   };
 
   return (
     <div
       role="group"
-      aria-label="Language"
+      aria-label={t("common.language")}
       className={cn(
         'inline-flex items-center rounded-md border border-border bg-inset text-[10px] font-mono leading-none overflow-hidden',
         isPending && 'opacity-70',

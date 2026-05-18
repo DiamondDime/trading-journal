@@ -339,7 +339,7 @@ function deriveStatus(
   const tgeMs = new Date(tgeDateIso).getTime();
   if (!Number.isFinite(tgeMs)) return "pending";
   if (tgeMs > Date.now()) return "pending";
-  if (tgeUnlockPct >= 100) return "vesting";
+  if (tgeUnlockPct >= 100) return "closed";
   return "vesting";
 }
 

@@ -459,6 +459,7 @@ async function PageHero({
         label={t("analytics.trackRecord.heroLabel")}
         value={fmtUsd(cumulativeNet, true)}
         subtitle={subtitle}
+        tone={cumulativeNet < 0 ? "down" : "signature"}
       />
     </header>
   );

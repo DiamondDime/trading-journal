@@ -166,9 +166,14 @@ export function CsvImportForm({ connections }: CsvImportFormProps) {
     }
   };
 
-  const matchingConnections = connections.filter(
-    (c) => c.exchangeCode === exchange,
-  );
+  // Generic parser is the documented escape valve for unsupported venues —
+  // it would be useless if we filtered out every connection that doesn't have
+  // `exchange_code === 'generic'` (no connection does). When the user picks
+  // Generic, show every connection so they can pin the import to any of them.
+  const matchingConnections =
+    exchange === "generic"
+      ? connections
+      : connections.filter((c) => c.exchangeCode === exchange);
 
   return (
     <form

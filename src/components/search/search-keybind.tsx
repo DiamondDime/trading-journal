@@ -44,8 +44,17 @@ export function SearchKeybind() {
       setOpen((prev) => !prev);
     };
 
+    // Sidebar search-pill clicks dispatch a synthetic 'search:open' event so
+    // any UI affordance can route through the same palette without needing
+    // to bind the keyboard shortcut twice. Keeps state ownership in one place.
+    const onOpen = () => setOpen(true);
+
     document.addEventListener('keydown', onKey);
-    return () => document.removeEventListener('keydown', onKey);
+    document.addEventListener('search:open', onOpen as EventListener);
+    return () => {
+      document.removeEventListener('keydown', onKey);
+      document.removeEventListener('search:open', onOpen as EventListener);
+    };
   }, []);
 
   return <SearchPalette open={open} onOpenChange={setOpen} />;

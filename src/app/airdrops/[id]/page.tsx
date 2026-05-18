@@ -1,7 +1,6 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { Pencil } from "lucide-react";
-import { Sidebar } from "@/components/sidebar";
 import {
   Table,
   TableBody,
@@ -101,10 +100,7 @@ export default async function AirdropDetailPage({
     : 0;
 
   return (
-    <div className="flex h-screen w-full bg-app">
-      <Sidebar />
-      <main className="flex-1 overflow-y-auto">
-        <article className="mx-auto max-w-4xl px-6 py-14 md:py-20">
+    <article className="mx-auto max-w-4xl px-6 py-14 md:py-20">
           <WizardPreviewBanner from={sp.from} action={sp.action} />
           <div className="flex items-center justify-between font-mono text-xs text-text-tertiary">
             <span>{serial}</span>
@@ -341,9 +337,7 @@ export default async function AirdropDetailPage({
               </span>
             </div>
           </footer>
-        </article>
-      </main>
-    </div>
+    </article>
   );
 }
 

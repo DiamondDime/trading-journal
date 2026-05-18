@@ -156,14 +156,13 @@ export default async function RegimeDistributionPage() {
                 {t("analytics.regime.untaggedHelp")}
               </p>
             </div>
-            <a
-              href="#"
-              className="font-mono text-[10px] uppercase tracking-[0.16em] text-text-tertiary underline-offset-4 hover:text-text hover:underline"
-              aria-disabled="true"
+            <span
+              className="cursor-not-allowed font-mono text-[10px] uppercase tracking-[0.16em] text-text-disabled"
               title={t("analytics.regime.bulkTagTitle")}
+              aria-disabled="true"
             >
               {t("analytics.regime.bulkTag")}
-            </a>
+            </span>
           </div>
         )}
       </div>

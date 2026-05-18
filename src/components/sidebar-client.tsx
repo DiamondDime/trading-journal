@@ -210,18 +210,7 @@ export function SidebarClient({ counts, portfolio, displayName, initials }: Side
       {/* Search + bell row */}
       <div className="px-3 pt-4 pb-2">
         <div className="flex items-center gap-2">
-          <div className="flex flex-1 items-center gap-2 rounded-md border border-border bg-inset px-2.5 py-1.5 transition-colors hover:border-border-strong">
-            <Search className="h-3.5 w-3.5 text-text-tertiary" />
-            <input
-              type="text"
-              placeholder={t("sidebar.search")}
-              aria-label={t("sidebar.searchAria")}
-              className="flex-1 bg-transparent text-[12px] text-text placeholder:text-text-tertiary focus:outline-none"
-            />
-            <kbd className="hidden sm:inline-block font-mono text-[9px] text-text-tertiary border border-border rounded px-1 py-px">
-              ⌘K
-            </kbd>
-          </div>
+          <SearchPillButton placeholder={t("sidebar.search")} ariaLabel={t("sidebar.searchAria")} />
           <NotificationsBell />
         </div>
       </div>
@@ -465,5 +454,48 @@ function SidebarFooter({ displayName, initials }: { displayName: string; initial
       </div>
       <LocaleSwitcher />
     </div>
+  );
+}
+
+/**
+ * Sidebar search pill — opens the global search palette on click. The pill
+ * looks like an input so it reads as searchable, but the actual search
+ * affordance lives in the ⌘K palette mounted at the root layout. Click here
+ * dispatches a `search:open` custom event the keybind listener is already
+ * watching for.
+ *
+ * The kbd hint shows the right modifier per platform (⌘ on Mac, Ctrl
+ * elsewhere). Computed after mount to avoid SSR/CSR mismatch — pre-hydration
+ * we show ⌘ since the asset is mac-heavy and the difference is a flash.
+ */
+function SearchPillButton({
+  placeholder,
+  ariaLabel,
+}: {
+  placeholder: string;
+  ariaLabel: string;
+}) {
+  const [modKey, setModKey] = React.useState("⌘");
+  React.useEffect(() => {
+    const ua = navigator.userAgent;
+    const isMac = /Mac|iPhone|iPad/.test(ua);
+    setModKey(isMac ? "⌘" : "Ctrl");
+  }, []);
+
+  return (
+    <button
+      type="button"
+      aria-label={ariaLabel}
+      onClick={() => document.dispatchEvent(new CustomEvent("search:open"))}
+      className="group flex flex-1 items-center gap-2 rounded-md border border-border bg-inset px-2.5 py-1.5 text-left transition-colors hover:border-border-strong focus:border-border-strong focus:outline-none"
+    >
+      <Search className="h-3.5 w-3.5 text-text-tertiary" />
+      <span className="flex-1 bg-transparent text-[12px] text-text-tertiary">
+        {placeholder}
+      </span>
+      <kbd className="hidden sm:inline-block rounded border border-border px-1 py-px font-mono text-[9px] text-text-tertiary">
+        {modKey}K
+      </kbd>
+    </button>
   );
 }

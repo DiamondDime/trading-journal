@@ -128,7 +128,19 @@ export async function logOption(formData: FormData): Promise<void> {
       legs: parsedLegs,
     };
 
-    const input = CreateOptionBody.parse(body);
+    // `expected_holding_days` and `target_iv_change_bps` are wizard-only
+    // intent inputs — no column exists on `activity_option` yet, so the
+    // strict-mode Zod schema rejects them. Strip before parse; they still
+    // survive the URL round-trip via `cleanedRaw` if a different validation
+    // failure bounces the user back to /review with their inputs intact.
+    const {
+      expected_holding_days: _ehd,
+      target_iv_change_bps: _ticb,
+      ...bodyForParse
+    } = body as Record<string, unknown>;
+    void _ehd;
+    void _ticb;
+    const input = CreateOptionBody.parse(bodyForParse);
 
     if (editId) {
       isEdit = true;
