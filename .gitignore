@@ -68,3 +68,6 @@ playwright-report/
 electron/dist/
 dist-electron/
 .audit-screenshots/
+
+# Local screenshot scratchpad for Chrome MCP visual verification
+.screenshots/

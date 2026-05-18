@@ -333,6 +333,13 @@ async function EmptyState({ hasConnections }: { hasConnections: boolean }) {
       <p className="mx-auto mt-2 max-w-[48ch] font-serif text-[13px] italic leading-snug text-text-tertiary">
         {t("trades.feed.empty.noPositions.body")}
       </p>
+      <Link
+        href="/settings/exchanges"
+        className="mt-5 inline-flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-[0.16em] text-text-secondary underline-offset-4 transition-colors hover:text-text hover:underline"
+      >
+        <Plug className="h-3 w-3" />
+        {t("trades.feed.empty.noPositions.connectAnother")}
+      </Link>
     </div>
   );
 }

@@ -790,6 +790,7 @@ export const ru: MessageDict = {
         noPositions: {
           title: 'Пока нет позиций.',
           body: 'Биржи подключены, но пока не отдали позиции. Поменяй фильтры или жди следующую синхронизацию.',
+          connectAnother: 'Подключить ещё биржу',
         },
       },
       filter: {
@@ -1958,11 +1959,13 @@ export const ru: MessageDict = {
       type: {
         title: 'Какой это тип спреда?',
         subtitlePreSelected: 'Предзаполнено по подсказке матчера. Поменяйте, если автоопределение мимо.',
+        subtitleSuggested: 'Подсказка по выбранным позициям. Поменяйте, если вывод неверный.',
         subtitleDefault: 'Выберите форму спреда, которая лучше описывает выбранные ноги. Шаг полей подстроится под выбор.',
         legend: 'Тип спреда',
         back: 'Назад',
         continue: 'Дальше',
         currentBadge: 'Текущий выбор',
+        suggestedBadge: 'Подсказка',
         groups: {
           fundingBased: {
             title: 'На фандинге',

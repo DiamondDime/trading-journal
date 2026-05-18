@@ -762,6 +762,7 @@ export const en = {
         noPositions: {
           title: 'No positions yet.',
           body: "Your exchanges are connected but haven't reported any positions. Adjust filters or wait for the next sync.",
+          connectAnother: 'Connect another exchange',
         },
       },
       filter: {
@@ -1917,11 +1918,13 @@ export const en = {
       type: {
         title: 'What kind of spread is this?',
         subtitlePreSelected: "Pre-selected from the matcher's suggestion. Switch it if the auto-detection is off.",
+        subtitleSuggested: 'Suggested from the positions you picked. Switch it if the inference is off.',
         subtitleDefault: 'Pick the spread shape that best describes the legs you selected. The fields step adapts to your choice.',
         legend: 'Spread type',
         back: 'Back',
         continue: 'Continue',
         currentBadge: 'Current choice',
+        suggestedBadge: 'Suggested',
         groups: {
           fundingBased: {
             title: 'Funding-based',
