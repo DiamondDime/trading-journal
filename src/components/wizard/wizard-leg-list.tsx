@@ -3,6 +3,7 @@ import { Plus, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { WizardField, WizardInput, WizardSelect } from "./wizard-field";
 import type { OptionLegInput } from "@/lib/db/zod-schemas";
+import { getT } from "@/lib/i18n/server";
 
 const MAX_LEGS = 8;
 const MIN_LEGS = 1;
@@ -35,7 +36,7 @@ export interface WizardLegListProps {
  * can rehydrate the legs array via simple FormData iteration (see
  * Wave 2F's /add/option/actions.ts).
  */
-export function WizardLegList({
+export async function WizardLegList({
   name = "legs",
   count,
   defaults = [],
@@ -43,6 +44,7 @@ export function WizardLegList({
   preserveParams = {},
   hideHeader = false,
 }: WizardLegListProps) {
+  const t = await getT();
   const clamped = Math.min(MAX_LEGS, Math.max(MIN_LEGS, count));
   const buildHref = (n: number) => {
     const params = new URLSearchParams();
@@ -61,10 +63,10 @@ export function WizardLegList({
       {!hideHeader && (
         <header className="flex items-center justify-between">
           <h3 className="font-serif text-[14px] font-medium uppercase tracking-[0.16em] text-text-tertiary">
-            Legs
+            {t("wizard.legList.heading")}
           </h3>
           <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-text-tertiary">
-            {clamped} of {MAX_LEGS}
+            {t("wizard.legList.count", { current: clamped, max: MAX_LEGS })}
           </span>
         </header>
       )}
@@ -80,7 +82,7 @@ export function WizardLegList({
             >
               <div className="mb-3 flex items-center justify-between">
                 <span className="font-mono text-[10px] uppercase tracking-[0.16em] text-text-tertiary">
-                  Leg {i + 1}
+                  {t("wizard.legList.legIndex", { i: i + 1 })}
                 </span>
                 <input
                   type="hidden"
@@ -89,7 +91,7 @@ export function WizardLegList({
                 />
               </div>
               <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
-                <WizardField label="Exchange" htmlFor={`${prefix}-exchange`}>
+                <WizardField label={t("wizard.legList.exchange")} htmlFor={`${prefix}-exchange`}>
                   <WizardSelect
                     name={`${prefix}.exchange`}
                     id={`${prefix}-exchange`}
@@ -103,7 +105,7 @@ export function WizardLegList({
                     ))}
                   </WizardSelect>
                 </WizardField>
-                <WizardField label="Underlying" htmlFor={`${prefix}-underlying`}>
+                <WizardField label={t("wizard.legList.underlying")} htmlFor={`${prefix}-underlying`}>
                   <WizardInput
                     id={`${prefix}-underlying`}
                     name={`${prefix}.underlying`}
@@ -112,7 +114,7 @@ export function WizardLegList({
                     required
                   />
                 </WizardField>
-                <WizardField label="Expiry" htmlFor={`${prefix}-expiry`}>
+                <WizardField label={t("wizard.legList.expiry")} htmlFor={`${prefix}-expiry`}>
                   <WizardInput
                     id={`${prefix}-expiry`}
                     type="date"
@@ -121,7 +123,7 @@ export function WizardLegList({
                     required
                   />
                 </WizardField>
-                <WizardField label="Strike" htmlFor={`${prefix}-strike`}>
+                <WizardField label={t("wizard.legList.strike")} htmlFor={`${prefix}-strike`}>
                   <WizardInput
                     id={`${prefix}-strike`}
                     type="number"
@@ -132,29 +134,29 @@ export function WizardLegList({
                     required
                   />
                 </WizardField>
-                <WizardField label="C / P" htmlFor={`${prefix}-option_kind`}>
+                <WizardField label={t("wizard.legList.callPut")} htmlFor={`${prefix}-option_kind`}>
                   <WizardSelect
                     id={`${prefix}-option_kind`}
                     name={`${prefix}.option_kind`}
                     defaultValue={(d.option_kind as string | undefined) ?? "call"}
                     required
                   >
-                    <option value="call">call</option>
-                    <option value="put">put</option>
+                    <option value="call">{t("wizard.legList.call")}</option>
+                    <option value="put">{t("wizard.legList.put")}</option>
                   </WizardSelect>
                 </WizardField>
-                <WizardField label="Side" htmlFor={`${prefix}-side`}>
+                <WizardField label={t("wizard.legList.side")} htmlFor={`${prefix}-side`}>
                   <WizardSelect
                     id={`${prefix}-side`}
                     name={`${prefix}.side`}
                     defaultValue={(d.side as string | undefined) ?? "long"}
                     required
                   >
-                    <option value="long">long</option>
-                    <option value="short">short</option>
+                    <option value="long">{t("side.long")}</option>
+                    <option value="short">{t("side.short")}</option>
                   </WizardSelect>
                 </WizardField>
-                <WizardField label="Contracts" htmlFor={`${prefix}-contracts`}>
+                <WizardField label={t("wizard.legList.contracts")} htmlFor={`${prefix}-contracts`}>
                   <WizardInput
                     id={`${prefix}-contracts`}
                     type="number"
@@ -166,7 +168,7 @@ export function WizardLegList({
                   />
                 </WizardField>
                 <WizardField
-                  label="Premium / contract"
+                  label={t("wizard.legList.premiumPerContract")}
                   htmlFor={`${prefix}-premium`}
                 >
                   <WizardInput
@@ -181,7 +183,7 @@ export function WizardLegList({
                     required
                   />
                 </WizardField>
-                <WizardField label="IV" htmlFor={`${prefix}-iv`}>
+                <WizardField label={t("wizard.legList.iv")} htmlFor={`${prefix}-iv`}>
                   <WizardInput
                     id={`${prefix}-iv`}
                     type="number"
@@ -194,7 +196,7 @@ export function WizardLegList({
               </div>
               <details className="mt-3">
                 <summary className="cursor-pointer font-mono text-[10px] uppercase tracking-[0.16em] text-text-tertiary hover:text-text">
-                  Greeks
+                  {t("wizard.legList.greeks")}
                 </summary>
                 <div className="mt-3 grid grid-cols-2 gap-3 md:grid-cols-5">
                   {(["delta", "gamma", "theta", "vega", "rho"] as const).map((g) => (
@@ -226,7 +228,7 @@ export function WizardLegList({
             )}
           >
             <Plus className="h-3 w-3" />
-            Add leg
+            {t("wizard.legList.addLeg")}
           </Link>
         )}
         {removeHref && (
@@ -239,7 +241,7 @@ export function WizardLegList({
             )}
           >
             <X className="h-3 w-3" />
-            Remove last leg
+            {t("wizard.legList.removeLastLeg")}
           </Link>
         )}
       </div>
