@@ -130,15 +130,9 @@ export default async function AirdropFieldsPage(props: {
         note: text, // legacy alias — `note` slot in the form maps to eligibility text
         regimeTags: activity.regimeTags.join(", "),
         customTags: activity.customTags.join(", "),
-        // strategy_tag + tax flags live on the supertype but aren't surfaced
-        // by getActivity()'s return shape. Wave 3 will plumb them through;
-        // for now the wizard re-renders the user's last-typed value via the
-        // searchParams round-trip (works fine for fresh entries and for the
-        // round-trip path; the only edge that misses pre-fill is editing an
-        // existing row that already has these set — covered in v3).
-        strategyTag: "",
-        taxTaxable: "",
-        taxJurisdiction: "",
+        strategyTag: activity.strategyTag ?? "",
+        taxTaxable: activity.taxTaxable == null ? "" : activity.taxTaxable ? "true" : "false",
+        taxJurisdiction: activity.taxJurisdiction ?? "",
         serial: activity.id.slice(0, 4).toUpperCase(),
       };
       editValid = true;

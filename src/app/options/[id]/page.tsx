@@ -297,14 +297,16 @@ export default async function OptionDetailPage({
                       <TableCell className="text-right font-mono tabular-nums">
                         {fmtNumber(parseDec(leg.strike), 2, intlLocale)}
                       </TableCell>
-                      <TableCell className="font-mono uppercase">{leg.optionKind}</TableCell>
+                      <TableCell className="font-mono uppercase">
+                        {leg.optionKind}
+                      </TableCell>
                       <TableCell
                         className={
                           "font-mono uppercase " +
                           (leg.side === "long" ? "text-up" : "text-down")
                         }
                       >
-                        {leg.side}
+                        {leg.side === "long" ? t("side.long") : t("side.short")}
                       </TableCell>
                       <TableCell className="text-right font-mono tabular-nums">
                         {leg.contracts}

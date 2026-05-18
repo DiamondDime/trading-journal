@@ -119,6 +119,9 @@ export interface ActivityDetailRow {
   netPnlUsd: Decimal | null;
   regimeTags: string[];
   customTags: string[];
+  strategyTag: string | null;
+  taxTaxable: boolean | null;
+  taxJurisdiction: string | null;
   createdAt: string;
   updatedAt: string;
   deletedAt: string | null;
@@ -289,6 +292,9 @@ export async function getActivity(
     netPnlUsd: string | null;
     regimeTags: string[];
     customTags: string[];
+    strategyTag: string | null;
+    taxTaxable: boolean | null;
+    taxJurisdiction: string | null;
     createdAt: string;
     updatedAt: string;
     deletedAt: string | null;
@@ -362,6 +368,9 @@ export async function getActivity(
     netPnlUsd: a.netPnlUsd,
     regimeTags: a.regimeTags,
     customTags: a.customTags,
+    strategyTag: a.strategyTag,
+    taxTaxable: a.taxTaxable,
+    taxJurisdiction: a.taxJurisdiction,
     createdAt: a.createdAt,
     updatedAt: a.updatedAt,
     deletedAt: a.deletedAt,

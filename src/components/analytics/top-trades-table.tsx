@@ -61,11 +61,13 @@ function fmtR(v: number | null, signed = true): string {
   return `${sign}${Math.abs(v).toFixed(2)}R`;
 }
 
-const TYPE_BADGE_LABEL: Record<string, string> = {
-  spread: "SPR",
-  trade: "TRD",
-  sale: "SAL",
-  airdrop: "AIR",
+const TYPE_BADGE_KEY: Record<string, MessageKey> = {
+  spread:         "wizard.cardPreview.typeBadge.spread",
+  trade:          "wizard.cardPreview.typeBadge.trade",
+  sale:           "wizard.cardPreview.typeBadge.sale",
+  airdrop:        "wizard.cardPreview.typeBadge.airdrop",
+  yield_position: "wizard.cardPreview.typeBadge.yieldPosition",
+  option:         "wizard.cardPreview.typeBadge.option",
 };
 
 export async function TopTradesTable({ title, rows, tone }: Props) {
@@ -133,7 +135,7 @@ export async function TopTradesTable({ title, rows, tone }: Props) {
                   <TableCell className="font-serif text-[13px] text-text">
                     <Link href={a.href} className="flex items-center gap-2">
                       <span className="font-mono text-[9px] uppercase tracking-[0.14em] text-text-tertiary">
-                        {TYPE_BADGE_LABEL[a.type] ?? "—"}
+                        {TYPE_BADGE_KEY[a.type] ? t(TYPE_BADGE_KEY[a.type]) : "—"}
                       </span>
                       {a.name}
                     </Link>

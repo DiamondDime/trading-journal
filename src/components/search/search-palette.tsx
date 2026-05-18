@@ -345,7 +345,7 @@ function ResultsList({
                 {item.title}
               </span>
               <span className="flex items-center gap-2 font-mono text-[10px] uppercase tracking-[0.12em] text-text-tertiary">
-                <span>{TYPE_BADGE[item.type]}</span>
+                <span>{t(TYPE_BADGE_KEY[item.type])}</span>
                 {item.primarySymbol && (
                   <>
                     <span>·</span>
@@ -393,11 +393,11 @@ function KbdHint({ label, keys }: { label: string; keys: string[] }) {
   );
 }
 
-const TYPE_BADGE: Record<ActivityType, string> = {
-  spread:         'SPREAD',
-  trade:          'TRADE',
-  sale:           'SALE',
-  airdrop:        'AIRDROP',
-  yield_position: 'YIELD',
-  option:         'OPTION',
-};
+const TYPE_BADGE_KEY = {
+  spread:         'wizard.cardPreview.typeBadge.spread',
+  trade:          'wizard.cardPreview.typeBadge.trade',
+  sale:           'wizard.cardPreview.typeBadge.sale',
+  airdrop:        'wizard.cardPreview.typeBadge.airdrop',
+  yield_position: 'wizard.cardPreview.typeBadge.yieldPosition',
+  option:         'wizard.cardPreview.typeBadge.option',
+} as const satisfies Record<ActivityType, Parameters<ReturnType<typeof useT>>[0]>;
