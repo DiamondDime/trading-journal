@@ -10,7 +10,7 @@ import {
   CheckCheck,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { useT } from "@/lib/i18n/client";
+import { useT, useLocale } from "@/lib/i18n/client";
 import type { NotificationRow, NotificationKind } from "@/lib/db/notifications";
 
 interface NotificationsDropdownProps {
@@ -104,6 +104,7 @@ function NotificationItem({
   onDismiss,
 }: NotificationItemProps) {
   const t = useT();
+  const locale = useLocale();
   const isRead = row.readAt != null;
 
   function handleClick() {
@@ -156,7 +157,7 @@ function NotificationItem({
         </div>
 
         <p className="mt-1 font-mono text-[9px] text-text-tertiary">
-          {relativeTime(row.createdAt)}
+          {relativeTime(row.createdAt, locale)}
         </p>
       </div>
     </div>
@@ -238,18 +239,21 @@ function KindLabel({ kind }: { kind: NotificationKind }) {
 }
 
 // ---------------------------------------------------------------------------
-// Relative time (client-side, no locale dep for simplicity)
+// Relative time — Intl.RelativeTimeFormat so RU users see Cyrillic copy
 // ---------------------------------------------------------------------------
 
-function relativeTime(iso: string): string {
+function relativeTime(iso: string, locale: string): string {
+  const intlLocale = locale === "ru" ? "ru-RU" : "en-US";
   const ms = Date.now() - Date.parse(iso);
+  if (!Number.isFinite(ms)) return "—";
   const sec = Math.max(0, Math.floor(ms / 1000));
-  if (sec < 90) return "just now";
+  const rtf = new Intl.RelativeTimeFormat(intlLocale, { numeric: "auto", style: "short" });
+  if (sec < 90) return rtf.format(-sec, "second");
   const min = Math.floor(sec / 60);
-  if (min < 60) return `${min}m ago`;
+  if (min < 60) return rtf.format(-min, "minute");
   const hr = Math.floor(min / 60);
-  if (hr < 24) return `${hr}h ago`;
+  if (hr < 24) return rtf.format(-hr, "hour");
   const day = Math.floor(hr / 24);
-  if (day < 30) return `${day}d ago`;
-  return `${Math.floor(day / 30)}mo ago`;
+  if (day < 30) return rtf.format(-day, "day");
+  return rtf.format(-Math.floor(day / 30), "month");
 }

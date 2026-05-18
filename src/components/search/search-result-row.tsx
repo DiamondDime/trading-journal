@@ -3,24 +3,31 @@ import { ArrowUpRight } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { searchHrefFor, type SearchResultItem } from '@/lib/search/types';
 import type { ActivityStatus, HeadlineFormat } from '@/types/canonical';
+import { getT, getLocale } from '@/lib/i18n/server';
 
 /**
  * One row of search output. Mirrors the visual rhythm of `SpreadListCard`
  * (font-serif title, mono dot/serial, headline metric on the right) so a
  * search result feels native to the rest of the journal.
  *
- * Server component — no client features needed. Headlines and time labels
- * are formatted here once and shipped as plain text.
+ * Async server component — pulls localized status + activity labels +
+ * relative-time copy through the dictionary; falls back to Intl helpers
+ * for time strings.
  */
-export function SearchResultRow({
+export async function SearchResultRow({
   item,
-  intlLocale = 'en-US',
+  intlLocale,
 }: {
   item: SearchResultItem;
   intlLocale?: string;
 }) {
+  const t = await getT();
+  const locale = await getLocale();
+  const effectiveIntlLocale = intlLocale ?? (locale === 'ru' ? 'ru-RU' : 'en-US');
   const href = searchHrefFor(item.type, item.id);
-  const status = STATUS_STYLES[item.status];
+  const dotClass = STATUS_DOT[item.status];
+  const statusLabel = t(statusKey(item.status));
+  const typeLabel = t(typeKey(item.type));
   const tone = headlineTone(item.headlineValue, item.headlineFormat);
 
   return (
@@ -35,14 +42,14 @@ export function SearchResultRow({
       <div className="flex flex-1 flex-col gap-2 min-w-0">
         <div className="flex items-center gap-2 text-[11px]">
           <span className="inline-flex items-center gap-1.5 text-text-tertiary">
-            <span className={cn('h-1.5 w-1.5 rounded-full', status.dot)} />
+            <span className={cn('h-1.5 w-1.5 rounded-full', dotClass)} />
             <span className="uppercase tracking-[0.12em] font-medium">
-              {status.label}
+              {statusLabel}
             </span>
           </span>
           <span className="font-mono text-text-tertiary">·</span>
           <span className="font-mono text-text-tertiary uppercase tracking-[0.14em]">
-            {TYPE_LABEL[item.type]}
+            {typeLabel}
           </span>
         </div>
 
@@ -79,7 +86,7 @@ export function SearchResultRow({
             {formatHeadline(item.headlineValue, item.headlineFormat)}
           </p>
           <p className="mt-1 font-mono text-[10px] uppercase tracking-[0.14em] text-text-tertiary">
-            {item.openedAt ? formatRelative(item.openedAt, intlLocale) : '—'}
+            {item.openedAt ? formatRelative(item.openedAt, effectiveIntlLocale) : '—'}
           </p>
         </div>
       </div>
@@ -89,27 +96,49 @@ export function SearchResultRow({
 
 // ─── formatting helpers ───────────────────────────────────────────────────
 
-const STATUS_STYLES: Record<ActivityStatus, { dot: string; label: string }> = {
-  open:         { dot: 'bg-up',            label: 'Open' },
-  pending:      { dot: 'bg-warn',          label: 'Pending' },
-  winding_down: { dot: 'bg-warn',          label: 'Winding down' },
-  unwinding:    { dot: 'bg-warn',          label: 'Unwinding' },
-  orphaned:     { dot: 'bg-down',          label: 'Orphaned' },
-  vesting:      { dot: 'bg-warn',          label: 'Vesting' },
-  claimed:      { dot: 'bg-text-tertiary', label: 'Claimed' },
-  liquidated:   { dot: 'bg-down',          label: 'Liquidated' },
-  expired:      { dot: 'bg-text-tertiary', label: 'Expired' },
-  closed:       { dot: 'bg-text-tertiary', label: 'Closed' },
+const STATUS_DOT: Record<ActivityStatus, string> = {
+  open:         'bg-up',
+  pending:      'bg-warn',
+  winding_down: 'bg-warn',
+  unwinding:    'bg-warn',
+  orphaned:     'bg-down',
+  vesting:      'bg-warn',
+  claimed:      'bg-text-tertiary',
+  liquidated:   'bg-down',
+  expired:      'bg-text-tertiary',
+  closed:       'bg-text-tertiary',
 };
 
-const TYPE_LABEL: Record<SearchResultItem['type'], string> = {
-  spread:         'Spread',
-  trade:          'Trade',
-  sale:           'Sale',
-  airdrop:        'Airdrop',
-  yield_position: 'Yield',
-  option:         'Option',
-};
+function statusKey(s: ActivityStatus):
+  | 'status.open' | 'status.pending' | 'status.winding_down' | 'status.unwinding'
+  | 'status.orphaned' | 'status.vesting' | 'status.claimed' | 'status.liquidated'
+  | 'status.expired' | 'status.closed' {
+  switch (s) {
+    case 'open':         return 'status.open';
+    case 'pending':      return 'status.pending';
+    case 'winding_down': return 'status.winding_down';
+    case 'unwinding':    return 'status.unwinding';
+    case 'orphaned':     return 'status.orphaned';
+    case 'vesting':      return 'status.vesting';
+    case 'claimed':      return 'status.claimed';
+    case 'liquidated':   return 'status.liquidated';
+    case 'expired':      return 'status.expired';
+    case 'closed':       return 'status.closed';
+  }
+}
+
+function typeKey(t: SearchResultItem['type']):
+  | 'activity.spread' | 'activity.trade' | 'activity.sale'
+  | 'activity.airdrop' | 'activity.yieldPosition' | 'activity.option' {
+  switch (t) {
+    case 'spread':         return 'activity.spread';
+    case 'trade':          return 'activity.trade';
+    case 'sale':           return 'activity.sale';
+    case 'airdrop':        return 'activity.airdrop';
+    case 'yield_position': return 'activity.yieldPosition';
+    case 'option':         return 'activity.option';
+  }
+}
 
 /**
  * Render the headline metric per HeadlineFormat. Mirrors the rules in
@@ -158,15 +187,18 @@ function headlineTone(
 }
 
 /**
- * "3d ago" / "2mo ago" — short, mono-friendly. Falls back to a localised
- * date if older than ~12 months so the row stays legible.
+ * "3d ago" / "2 мес назад" / "2y ago" via Intl.RelativeTimeFormat so the
+ * copy matches the user's resolved locale. Falls back to a localised
+ * absolute date once the gap exceeds ~24 months so the row stays legible.
  */
 function formatRelative(iso: string, intlLocale: string): string {
   const ts = Date.parse(iso);
   if (!Number.isFinite(ts)) return '—';
   const diffMs = Date.now() - ts;
-  if (diffMs < 0) return new Date(ts).toLocaleDateString(intlLocale, { month: 'short', day: 'numeric' });
+  if (diffMs < 0)
+    return new Date(ts).toLocaleDateString(intlLocale, { month: 'short', day: 'numeric' });
 
+  const rtf = new Intl.RelativeTimeFormat(intlLocale, { numeric: 'auto', style: 'short' });
   const sec = Math.floor(diffMs / 1000);
   const min = Math.floor(sec / 60);
   const hr = Math.floor(min / 60);
@@ -174,11 +206,11 @@ function formatRelative(iso: string, intlLocale: string): string {
   const mo = Math.floor(day / 30);
   const yr = Math.floor(day / 365);
 
-  if (sec < 60) return 'just now';
-  if (min < 60) return `${min}m ago`;
-  if (hr < 24)  return `${hr}h ago`;
-  if (day < 30) return `${day}d ago`;
-  if (mo < 12)  return `${mo}mo ago`;
-  if (yr < 2)   return `${yr}y ago`;
+  if (sec < 60) return rtf.format(-sec, 'second');
+  if (min < 60) return rtf.format(-min, 'minute');
+  if (hr < 24)  return rtf.format(-hr,  'hour');
+  if (day < 30) return rtf.format(-day, 'day');
+  if (mo < 12)  return rtf.format(-mo,  'month');
+  if (yr < 2)   return rtf.format(-yr,  'year');
   return new Date(ts).toLocaleDateString(intlLocale, { month: 'short', year: 'numeric' });
 }
