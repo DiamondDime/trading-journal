@@ -39,7 +39,9 @@ type TFn = Awaited<ReturnType<typeof getT>>;
  */
 export const dynamic = "force-dynamic";
 
-const ACTIVITY_TYPE_ORDER: ActivityType[] = ["spread", "trade", "sale", "airdrop"];
+const ACTIVITY_TYPE_ORDER: ActivityType[] = [
+  "spread", "trade", "sale", "airdrop", "yield_position", "option",
+];
 
 // Spread subtype display order — mirrors src/lib/data/archive-data.ts UI vocab
 // but the DB column uses canonical names. We map at the boundary.
@@ -58,6 +60,8 @@ const ACTIVITY_TYPE_I18N_KEY: Record<ActivityType, MessageKey> = {
   trade: "activity.trade",
   sale: "activity.sale",
   airdrop: "activity.airdrop",
+  yield_position: "activity.yieldPosition",
+  option: "activity.option",
 };
 
 function activityTypeLabel(t: TFn, type: ActivityType): string {
@@ -111,17 +115,21 @@ export default async function ActivityMixPage() {
 
   // Helper accessors so the rest of the page reads like the old typeCounts /
   // typeNetPnl split — keeps the diff focused on the new winRate column.
-  const typeCounts = {
-    spread: typeAggs.spread.count,
-    trade: typeAggs.trade.count,
-    sale: typeAggs.sale.count,
-    airdrop: typeAggs.airdrop.count,
+  const typeCounts: Record<ActivityType, number> = {
+    spread:         typeAggs.spread.count,
+    trade:          typeAggs.trade.count,
+    sale:           typeAggs.sale.count,
+    airdrop:        typeAggs.airdrop.count,
+    yield_position: typeAggs.yield_position.count,
+    option:         typeAggs.option.count,
   };
-  const typeNetPnl = {
-    spread: typeAggs.spread.netPnl,
-    trade: typeAggs.trade.netPnl,
-    sale: typeAggs.sale.netPnl,
-    airdrop: typeAggs.airdrop.netPnl,
+  const typeNetPnl: Record<ActivityType, number> = {
+    spread:         typeAggs.spread.netPnl,
+    trade:          typeAggs.trade.netPnl,
+    sale:           typeAggs.sale.netPnl,
+    airdrop:        typeAggs.airdrop.netPnl,
+    yield_position: typeAggs.yield_position.netPnl,
+    option:         typeAggs.option.netPnl,
   };
 
   if (totals.count < MIN_FOR_ANALYTICS) {

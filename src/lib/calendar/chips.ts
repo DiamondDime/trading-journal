@@ -32,6 +32,8 @@ const TYPE_LETTERS = {
   trade: "T",
   sale: "Sa",
   airdrop: "A",
+  yield_position: "Y",
+  option: "O",
 } as const;
 
 const TYPE_HREF_PREFIX = {
@@ -39,6 +41,8 @@ const TYPE_HREF_PREFIX = {
   trade: "/trades/",
   sale: "/sales/",
   airdrop: "/airdrops/",
+  yield_position: "/yield-positions/",
+  option: "/options/",
 } as const;
 
 /**

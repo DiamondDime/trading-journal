@@ -97,7 +97,7 @@ type Overlay = Pick<
 const OVERLAY: Record<string, Overlay> = {
   binance: {
     requiresPassphrase: false,
-    logoUrl: "/exchanges/binance.svg",
+    logoUrl: "/exchanges/binance.png",
     referralUrl: null,
     referralBlurb: "Deepest perp book · lowest fees with VIP tier",
     rebatePct: null,
@@ -107,7 +107,7 @@ const OVERLAY: Record<string, Overlay> = {
   },
   bybit: {
     requiresPassphrase: false,
-    logoUrl: "/exchanges/bybit.svg",
+    logoUrl: "/exchanges/bybit.png",
     referralUrl: "https://partner.bybit.com/b/94654",
     referralBlurb: "Strong funding rates for cash-and-carry",
     rebatePct: 20,
@@ -121,7 +121,7 @@ const OVERLAY: Record<string, Overlay> = {
   },
   okx: {
     requiresPassphrase: true,
-    logoUrl: "/exchanges/okx.svg",
+    logoUrl: "/exchanges/okx.png",
     referralUrl: "https://okx.com/ru-ae/join/44845570",
     referralBlurb: "Multi-asset margin · tight perp spreads",
     rebatePct: 20,
@@ -135,7 +135,7 @@ const OVERLAY: Record<string, Overlay> = {
   },
   bitget: {
     requiresPassphrase: true,
-    logoUrl: "/exchanges/bitget.svg",
+    logoUrl: "/exchanges/bitget.png",
     referralUrl:
       "https://www.bitgetapp.com/ru/referral/register?clacCode=QA7PEZ1K&from=%2Fru%2Fevents%2Freferral-all-program&source=events&utmSource=PremierInviter",
     referralBlurb: "Aggressive maker rebates on perps",
@@ -150,7 +150,7 @@ const OVERLAY: Record<string, Overlay> = {
   },
   kucoin: {
     requiresPassphrase: true,
-    logoUrl: "/exchanges/kucoin.svg",
+    logoUrl: "/exchanges/kucoin.png",
     referralUrl: "https://www.kucoin.com/ucenter/signup?utm_source=app_g_Share",
     referralBlurb: "Long-tail altcoin perps",
     rebatePct: 40,
@@ -164,7 +164,7 @@ const OVERLAY: Record<string, Overlay> = {
   },
   phemex: {
     requiresPassphrase: true,
-    logoUrl: "/exchanges/phemex.svg",
+    logoUrl: "/exchanges/phemex.png",
     referralUrl: "https://phemex.com/register?referralCode=BU8YF9&scene=referral",
     referralBlurb: "Low-latency inverse perps",
     rebatePct: 40,
@@ -178,7 +178,7 @@ const OVERLAY: Record<string, Overlay> = {
   },
   bingx: {
     requiresPassphrase: false,
-    logoUrl: "/exchanges/bingx.svg",
+    logoUrl: "/exchanges/bingx.png",
     referralUrl: "https://bingxdao.com/invite/2XFCXB/",
     referralBlurb: "Copy-trading focused · friendly funding",
     rebatePct: 30,
@@ -192,7 +192,7 @@ const OVERLAY: Record<string, Overlay> = {
   },
   mexc: {
     requiresPassphrase: false,
-    logoUrl: "/exchanges/mexc.svg",
+    logoUrl: "/exchanges/mexc.png",
     referralUrl: "https://promote.mexc.com/a/2DkdpyPG",
     referralBlurb: "Widest altcoin coverage",
     rebatePct: 50,
@@ -206,7 +206,7 @@ const OVERLAY: Record<string, Overlay> = {
   },
   gate: {
     requiresPassphrase: false,
-    logoUrl: "/exchanges/gate.svg",
+    logoUrl: "/exchanges/gate.png",
     referralUrl:
       "https://www.gate.com/referral/registry?ref=VQVAVQ0KBQ&ref_type=103&page=superRebate",
     referralBlurb: "Deep alt-perp listings · Super Rebate program",
@@ -221,7 +221,7 @@ const OVERLAY: Record<string, Overlay> = {
   },
   htx: {
     requiresPassphrase: false,
-    logoUrl: "/exchanges/htx.svg",
+    logoUrl: "/exchanges/htx.png",
     referralUrl: "https://www.htx.com.ph/invite/ru-ru/1f?invite_code=9vxje223",
     referralBlurb: "Long-history exchange · regulated SG entity",
     rebatePct: 50,
@@ -255,7 +255,7 @@ const OVERLAY: Record<string, Overlay> = {
   },
   hyperliquid: {
     requiresPassphrase: false,
-    logoUrl: "/exchanges/hyperliquid.svg",
+    logoUrl: "/exchanges/hyperliquid.png",
     referralUrl: null,
     referralBlurb: "On-chain perps · zero gas, EVM custody",
     rebatePct: null,
@@ -265,7 +265,7 @@ const OVERLAY: Record<string, Overlay> = {
   },
   aster: {
     requiresPassphrase: false,
-    logoUrl: "/exchanges/aster.svg",
+    logoUrl: "/exchanges/aster.png",
     referralUrl: null,
     referralBlurb: "Cross-chain perp DEX",
     rebatePct: null,
@@ -275,7 +275,7 @@ const OVERLAY: Record<string, Overlay> = {
   },
   okx_dex: {
     requiresPassphrase: false,
-    logoUrl: "/exchanges/okx.svg",
+    logoUrl: "/exchanges/okx.png",
     referralUrl: null,
     referralBlurb: "OKX on-chain venue · spot + perp",
     rebatePct: null,
@@ -343,14 +343,15 @@ export function filterReferralExchanges(
 }
 
 /**
- * Returns referral-eligible exchanges sorted by priority (low = first).
- * Used by the `/partners` marketing page to render the persuasion grid in
- * a deliberate order rather than alphabetical.
+ * Returns ALL active catalog exchanges sorted so referral-eligible ones lead
+ * (lowest `priority` first), with non-referral venues trailing. Used by the
+ * `/partners` page so every exchange the journal supports gets a logo card,
+ * not just the ones with active referrals. Cards without a referralUrl
+ * render without the "Sign up" CTA — the marketing pitch only fires for
+ * actual partners.
  */
 export function getPartnerCatalog(
   all: CatalogExchange[],
 ): CatalogExchange[] {
-  return filterReferralExchanges(all).sort(
-    (a, b) => a.priority - b.priority,
-  );
+  return [...all].sort((a, b) => a.priority - b.priority);
 }

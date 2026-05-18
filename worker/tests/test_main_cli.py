@@ -207,5 +207,13 @@ class TestRunOnceNoConnections:
                 return await worker_main.run_once("postgres://stub/x", 30)
 
         result = asyncio.run(_go())
-        assert result == {"connections_synced": 0, "fills_added": 0}
+        # Empty-cycle summary shape includes funding + position counters as
+        # of W3a — the aggregator and funding-events ingestion ride on the
+        # same cycle as fill ingestion.
+        assert result == {
+            "connections_synced": 0,
+            "fills_added": 0,
+            "funding_added": 0,
+            "positions_inserted": 0,
+        }
         mock_conn.close.assert_called_once()

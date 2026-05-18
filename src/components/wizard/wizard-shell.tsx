@@ -1,9 +1,17 @@
 import { WizardStepper } from "./wizard-stepper";
 import { getT } from "@/lib/i18n/server";
 
-// Activity types that the wizard supports. Subset of ActivityType — the entry
-// step (/add) renders a chooser, so it doesn't pass a `type`.
-export type WizardType = "spread" | "trade" | "sale" | "airdrop";
+// Activity types that the wizard supports. Subset of ActivityType plus
+// "movement" (event_log, not part of activity supertype). The entry step
+// (/add) renders a chooser, so it doesn't pass a `type`.
+export type WizardType =
+  | "spread"
+  | "trade"
+  | "sale"
+  | "airdrop"
+  | "yield_position"
+  | "option"
+  | "movement";
 
 export interface WizardShellProps {
   /** Activity type being added. Omit on the type-picker step. */

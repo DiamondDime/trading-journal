@@ -45,10 +45,13 @@ export async function logAirdrop(formData: FormData): Promise<void> {
 
     if (editId) {
       isEdit = true;
-      const claimIso = new Date(input.claimDate).toISOString();
-      const tokens = Number(input.tokensClaimed);
-      const valueAtClaim = Number(input.usdValueAtClaim);
-      const currentPrice = Number(input.currentPriceUsd);
+      // v5: status='pending' airdrops can edit without a claim_date yet.
+      // For the edit path, fall back to opened_at (today) when fields are
+      // absent; the Wave-2D wizard rewrite will surface a richer pending UX.
+      const claimIso = new Date(input.claimDate ?? new Date().toISOString()).toISOString();
+      const tokens = Number(input.tokensClaimed ?? '0');
+      const valueAtClaim = Number(input.usdValueAtClaim ?? '0');
+      const currentPrice = Number(input.currentPriceUsd ?? '0');
       const currentValue = tokens * currentPrice;
       const realized = valueAtClaim;
       const netPnl = currentValue;

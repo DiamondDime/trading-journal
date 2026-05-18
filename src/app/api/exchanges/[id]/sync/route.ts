@@ -37,7 +37,13 @@ export const GET = withAuth(async (_req, { params, userId }) => {
   const { id } = await params;
   if (!UUID_RE.test(id)) return errors.notFound();
 
-  const [current, recent] = await Promise.all([
+  // The worker queue drain (W3a §3) flips queued → running → succeeded/failed
+  // in real time. We surface:
+  //   - current_job: the queued/running row, if any
+  //   - last_terminal_job: the most recent succeeded/failed (so the UI can
+  //     show "last sync 30s ago, 12 fills" without polling)
+  //   - recent_jobs: last 10 rows in any state
+  const [current, lastTerminal, recent] = await Promise.all([
     sql`
       SELECT * FROM public.sync_jobs
       WHERE exchange_connection_id = ${id}::uuid AND user_id = ${userId}::uuid
@@ -47,9 +53,20 @@ export const GET = withAuth(async (_req, { params, userId }) => {
     sql`
       SELECT * FROM public.sync_jobs
       WHERE exchange_connection_id = ${id}::uuid AND user_id = ${userId}::uuid
+        AND state IN ('succeeded','failed')
+      ORDER BY finished_at DESC NULLS LAST, created_at DESC
+      LIMIT 1
+    `,
+    sql`
+      SELECT * FROM public.sync_jobs
+      WHERE exchange_connection_id = ${id}::uuid AND user_id = ${userId}::uuid
       ORDER BY created_at DESC LIMIT 10
     `,
   ]);
 
-  return ok({ current_job: current[0] ?? null, recent_jobs: recent });
+  return ok({
+    current_job: current[0] ?? null,
+    last_terminal_job: lastTerminal[0] ?? null,
+    recent_jobs: recent,
+  });
 });

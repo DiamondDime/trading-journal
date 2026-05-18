@@ -59,7 +59,7 @@ from __future__ import annotations
 import asyncio
 import re
 from collections.abc import AsyncIterator
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from decimal import Decimal, InvalidOperation
 from typing import Any
 
@@ -131,7 +131,7 @@ def _ms_to_dt(ms: int | float | str | None, *, field: str) -> datetime:
     if ms is None:
         raise AdapterInvalidDataError(f"Missing timestamp field: {field}")
     try:
-        return datetime.fromtimestamp(int(float(ms)) / 1000.0, tz=timezone.utc)
+        return datetime.fromtimestamp(int(float(ms)) / 1000.0, tz=UTC)
     except (ValueError, TypeError, OSError) as exc:
         raise AdapterInvalidDataError(
             f"Cannot parse timestamp {field!r}={ms!r}"
@@ -466,6 +466,13 @@ class CcxtUniversalAdapter(ExchangeAdapter):
     def __init__(self, config: VenueConfig) -> None:
         self.config = config
 
+        # Optional pre-flight filter: orchestration code (main.py) populates
+        # this with the set of ccxt symbols the user is actually active in
+        # (sticky cache + currently-open positions + nonzero balances). When
+        # set, ``_fill_generator`` only iterates symbols in the filter.
+        # ``None`` = scan every active market on the venue (full discovery).
+        self.symbol_filter: set[str] | None = None
+
         # ABC requires these as class-level attrs — but each instance
         # needs venue-specific values. We set them on the instance,
         # which Python's MRO resolves before falling back to the class.
@@ -551,7 +558,7 @@ class CcxtUniversalAdapter(ExchangeAdapter):
     async def _close_safely(client: Any) -> None:
         try:
             await client.close()
-        except Exception:  # noqa: BLE001 — defensive close; we don't care why
+        except Exception:
             log.debug("ccxt.close_error", exc_info=True)
 
     # ------------------------------------------------------------------
@@ -631,7 +638,7 @@ class CcxtUniversalAdapter(ExchangeAdapter):
 
         except AdapterError:
             raise
-        except Exception as exc:  # noqa: BLE001 — we map then re-raise
+        except Exception as exc:
             mapped = _map_ccxt_error(exc, venue=self.config.code)
             if isinstance(mapped, AdapterAuthError | AdapterPermissionError):
                 return ConnectionStatusResult(
@@ -759,6 +766,13 @@ class CcxtUniversalAdapter(ExchangeAdapter):
                         }
                         if m_type not in equivalents.get(market_type, {market_type}):
                             continue
+                    # Targeted-scan optimisation (W3a §4): if orchestration
+                    # has populated ``symbol_filter`` with the user's known
+                    # active symbols, skip everything else. Binance has
+                    # ~1500 markets per type; scanning them all costs ~2K
+                    # auth'd calls per sync.
+                    if self.symbol_filter is not None and symbol not in self.symbol_filter:
+                        continue
 
                     instrument = _normalize_instrument(
                         symbol, market_info, self.exchange
@@ -849,6 +863,80 @@ class CcxtUniversalAdapter(ExchangeAdapter):
 
             finally:
                 await self._close_safely(client)
+
+    # ------------------------------------------------------------------
+    # Targeted-symbol discovery (W3a §4 — rate-limit relief)
+    # ------------------------------------------------------------------
+
+    async def discover_active_symbols(
+        self,
+        credentials: Credentials,
+    ) -> set[str]:
+        """Discover ccxt symbols the user is currently active on.
+
+        Aggregates from:
+        - ``fetch_positions()`` → derivatives the user has open positions in
+        - ``fetch_balance()``  → currencies with nonzero free/used balance,
+          mapped back to candidate symbols by querying ``client.markets``
+
+        The result is a SUPER-SET hint, not authoritative: a user might
+        have closed a position since their last fill, so the orchestration
+        layer should always merge with ``sync_state.last_seen_symbols``
+        (the sticky cache that grows monotonically).
+
+        Returns an empty set if neither call returns data. The caller
+        falls back to a full scan in that case.
+        """
+        if not isinstance(credentials, ApiKeyCredentials):
+            return set()
+
+        symbols: set[str] = set()
+
+        for market_type in self.config.market_types:
+            client = self._build_client(credentials, market_type=market_type)
+            try:
+                try:
+                    await client.load_markets()
+                except Exception:
+                    continue
+                markets: dict[str, dict[str, Any]] = client.markets or {}
+
+                # Positions — derivatives only
+                if market_type in {"swap", "future", "delivery", "futures"}:
+                    try:
+                        positions: list[dict[str, Any]] = await client.fetch_positions()
+                    except (ccxt_async.NotSupported, AttributeError):
+                        positions = []
+                    except Exception:
+                        positions = []
+                    for p in positions:
+                        sym = p.get("symbol")
+                        if isinstance(sym, str) and sym in markets:
+                            symbols.add(sym)
+
+                # Balance — discover currencies with nonzero exposure, then
+                # map each currency back to every ccxt symbol where it's
+                # the BASE asset. This is intentionally loose: the user may
+                # hold USDT without having traded it on this venue, so we
+                # only treat the discovered set as a HINT.
+                try:
+                    balance: dict[str, Any] = await client.fetch_balance()
+                except Exception:
+                    balance = {}
+                total = balance.get("total") or {}
+                if isinstance(total, dict):
+                    held_currencies = {
+                        c for c, v in total.items() if v and float(v) > 0
+                    }
+                    if held_currencies:
+                        for sym, info in markets.items():
+                            base = info.get("base")
+                            if isinstance(base, str) and base in held_currencies:
+                                symbols.add(sym)
+            finally:
+                await self._close_safely(client)
+
+        return symbols
 
     # ------------------------------------------------------------------
     # fetch_funding_events

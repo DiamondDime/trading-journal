@@ -63,6 +63,8 @@ const TYPE_LABELS: Record<ActivityType, string> = {
   trade: "Trades",
   sale: "Sales",
   airdrop: "Airdrops",
+  yield_position: "Yield",
+  option: "Options",
 };
 
 export function DashboardActions({

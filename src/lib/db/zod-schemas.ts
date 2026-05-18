@@ -48,6 +48,13 @@ export const CreateExchangeConnectionBody = z.object({
       chain: z.string().optional(),
     }),
   ]),
+  /**
+   * Required when connecting to an exchange that does not expose a
+   * permission-introspection endpoint (BingX/MEXC/Phemex). The worker
+   * returns ``withdraw:unverified`` for those venues; without this flag
+   * the POST handler refuses to persist the connection as active.
+   */
+  attest_read_only: z.boolean().optional(),
 });
 
 // Per-leg intended price the trader can set at open (for slippage review).
@@ -94,6 +101,17 @@ export const CreateSpreadBody = z.object({
         message: `variant ${val.variant} is not valid for spread_type ${val.spread_type}`,
       });
     }
+  }
+  // cash_carry basis-variant requires the expected convergence date so the
+  // post-trade review can compute basis-converged-vs-expectations.
+  if (val.spread_type === 'cash_carry'
+      && val.variant === 'basis'
+      && !val.expected_basis_convergence_date) {
+    ctx.addIssue({
+      code: 'custom',
+      path: ['expected_basis_convergence_date'],
+      message: 'basis-variant cash_carry requires expected_basis_convergence_date',
+    });
   }
 });
 // Silence unused-import lint: LegIntent is exported below for callers that
@@ -164,16 +182,47 @@ const DecimalSchema = z.string().regex(
   'must be a decimal string (e.g. "1234.56" or "-0.01")',
 );
 
-export const ActivityTypeSchema = z.enum(['spread', 'trade', 'sale', 'airdrop']);
+export const ActivityTypeSchema = z.enum([
+  'spread', 'trade', 'sale', 'airdrop', 'yield_position', 'option',
+]);
 
 export const ActivityStatusSchema = z.enum([
-  'pending', 'open', 'winding_down', 'orphaned',
+  'pending', 'open', 'winding_down', 'unwinding', 'orphaned',
   'vesting', 'claimed', 'liquidated', 'expired', 'closed',
 ]);
 
-export const SaleKindSchema = z.enum(['ido', 'launchpad', 'premarket', 'otc']);
+export const SaleKindSchema = z.enum([
+  'ido', 'launchpad', 'premarket', 'otc',
+  'ieo', 'private_round', 'otc_allocation', 'vesting_claim',
+]);
 
-export const HeadlineKindSchema = z.enum(['realized_apr', 'mtm_multiplier']);
+export const TradeKindSchema = z.enum([
+  'spot', 'perp', 'dated_future', 'option', 'otc', 'nft',
+]);
+
+export const YieldKindSchema = z.enum([
+  'stake', 'lend', 'farm', 'lp', 'validator', 'mining',
+]);
+
+export const OptionSubtypeKindSchema = z.enum(['single_leg', 'option_spread']);
+export const OptionSideSchema        = z.enum(['long', 'short']);
+export const OptionCpKindSchema      = z.enum(['call', 'put']);
+export const OptionSpreadStyleSchema = z.enum([
+  'vertical', 'iron_condor', 'calendar', 'strangle', 'butterfly', 'custom',
+]);
+
+export const MovementEventKindSchema = z.enum([
+  'bridge', 'convert', 'transfer', 'deposit', 'withdrawal',
+  'nft_trade', 'loss', 'other',
+]);
+
+export const HeadlineKindSchema = z.enum([
+  'realized_apr', 'mtm_multiplier', 'apy_pct', 'realized_pnl_usd',
+]);
+
+export const HeadlineFormatSchema = z.enum([
+  'apr_pct', 'apy_pct', 'mtm_x', 'usd', 'bps',
+]);
 
 export const InstrumentKindSchema = z.enum(['spot', 'perp', 'dated_future', 'option']);
 
@@ -223,6 +272,9 @@ export const ActivitySchema = z.object({
   net_pnl_usd:          DecimalSchema.nullable(),
   regime_tags:          z.array(z.string()),
   custom_tags:          z.array(z.string()),
+  tax_taxable:          z.boolean(),
+  tax_jurisdiction:     z.string().nullable(),
+  strategy_tag:         z.string().nullable(),
   created_at:           z.string().datetime(),
   updated_at:           z.string().datetime(),
   deleted_at:           z.string().datetime().nullable(),
@@ -256,20 +308,28 @@ export const ActivitySpreadSchema = z.object({
 
 // activity_trade subtype row.
 export const ActivityTradeSchema = z.object({
-  activity_id:     z.string().uuid(),
-  position_id:     z.string().uuid(),
-  symbol:          z.string(),
-  exchange:        ExchangeCode,
-  instrument_kind: InstrumentKindSchema,
-  side:            PositionSide,
-  entry_thesis:    z.string().nullable(),
-  exit_plan:       z.string().nullable(),
-  target_price:    DecimalSchema.nullable(),
-  stop_price:      DecimalSchema.nullable(),
-  qty:             DecimalSchema,
-  avg_entry_price: DecimalSchema,
-  avg_exit_price:  DecimalSchema.nullable(),
-  realized_apr:    DecimalSchema.nullable(),
+  activity_id:          z.string().uuid(),
+  position_id:          z.string().uuid(),
+  symbol:               z.string(),
+  exchange:             ExchangeCode,
+  instrument_kind:      InstrumentKindSchema,
+  side:                 PositionSide,
+  entry_thesis:         z.string().nullable(),
+  exit_plan:            z.string().nullable(),
+  target_price:         DecimalSchema.nullable(),
+  stop_price:           DecimalSchema.nullable(),
+  qty:                  DecimalSchema,
+  avg_entry_price:      DecimalSchema,
+  avg_exit_price:       DecimalSchema.nullable(),
+  realized_apr:         DecimalSchema.nullable(),
+  kind:                 TradeKindSchema,
+  leverage:             DecimalSchema.nullable(),
+  margin_mode:          z.enum(['cross', 'isolated']).nullable(),
+  fees_entry_usd:       DecimalSchema.nullable(),
+  fees_exit_usd:        DecimalSchema.nullable(),
+  funding_paid_usd:     DecimalSchema.nullable(),
+  funding_received_usd: DecimalSchema.nullable(),
+  borrow_cost_usd:      DecimalSchema.nullable(),
 });
 
 // activity_sale subtype row.
@@ -290,6 +350,11 @@ export const ActivitySaleSchema = z.object({
   remaining_locked:    DecimalSchema.nullable(),
   current_price_usd:   DecimalSchema.nullable(),
   current_price_at:    z.string().datetime().nullable(),
+  claim_wallet:        z.string().nullable(),
+  fundraising_round:   z.enum(['seed', 'private', 'public', 'strategic', 'other']).nullable(),
+  allocation_method:   z.enum(['fcfs', 'lottery', 'staking', 'whitelist', 'other']).nullable(),
+  tier:                z.string().nullable(),
+  bonus_pct:           DecimalSchema.nullable(),
 });
 
 // activity_airdrop subtype row.
@@ -301,9 +366,13 @@ export const ActivityAirdropSchema = z.object({
   protocol:             z.string(),
   snapshot_date:        z.string().datetime().nullable(),
   eligibility_reason:   z.string().nullable(),
-  qty_received:         DecimalSchema,
+  qty_received:         DecimalSchema.nullable(),
   claim_date:           z.string().datetime().nullable(),
   claim_tx_hash:        z.string().nullable(),
+  claim_wallet:         z.string().nullable(),
+  gas_cost_usd:         DecimalSchema.nullable(),
+  claim_window_start:   z.string().datetime().nullable(),
+  claim_window_end:     z.string().datetime().nullable(),
   value_at_receipt_usd: DecimalSchema.nullable(),
   current_price_usd:    DecimalSchema.nullable(),
   current_price_at:     z.string().datetime().nullable(),
@@ -325,9 +394,14 @@ export const ActivityFeedRowSchema = z.object({
   net_pnl_usd:          DecimalSchema.nullable(),
   regime_tags:          z.array(z.string()),
   custom_tags:          z.array(z.string()),
+  strategy_tag:         z.string().nullable(),
+  tax_taxable:          z.boolean(),
+  tax_jurisdiction:     z.string().nullable(),
   headline_value:       DecimalSchema.nullable(),
   headline_kind:        HeadlineKindSchema,
+  headline_format:      HeadlineFormatSchema,
   primary_symbol:       z.string().nullable(),
+  card_subtitle:        z.string().nullable(),
   created_at:           z.string().datetime(),
   updated_at:           z.string().datetime(),
 });
@@ -380,28 +454,51 @@ const TradeSide = z.enum(['long', 'short']);
  * CreateTradeBody — mirrors /add/trade/fields. Validates manual-entry trades
  * before they hit createTrade(). Keys match the form's <input name="…">.
  *
+ * v5 adds:
+ *   - `kind` discriminator (spot/perp/dated_future/option/otc/nft)
+ *   - leverage + marginMode (NULL for spot)
+ *   - targetPrice + stopPrice + exitPlan (open-intent)
+ *   - feesEntry + feesExit (decomposed round-trip cost)
+ *   - fundingPaidUsd + fundingReceivedUsd (perp-only) + borrowCostUsd (margin)
+ *
  * Validation rules per spec:
  *   - entry_price > 0, exit_price > 0, quantity > 0
  *   - capital_deployed_usd >= 0
  *   - closed_at >= opened_at
+ *   - leverage > 0 when present
+ *   - marginMode only when kind != 'spot'
  */
 export const CreateTradeBody = z
   .object({
-    exchange:   TradeExchange,
-    symbol:     z.string().min(1).max(40),
-    instrument: TradeInstrument,
-    side:       TradeSide,
-    capital:    NonNegativeDecimal,
-    qty:        PositiveDecimal,
-    entryPrice: PositiveDecimal,
-    exitPrice:  PositiveDecimal,
-    fees:       NonNegativeDecimal.optional().default('0'),
-    openedAt:   z.string().min(1),  // datetime-local string
-    closedAt:   z.string().min(1),
-    note:       z.string().max(4000).optional().default(''),
-    regimeTags: TagListString,
+    exchange:            TradeExchange,
+    symbol:              z.string().min(1).max(40),
+    instrument:          TradeInstrument,
+    side:                TradeSide,
+    capital:             NonNegativeDecimal,
+    qty:                 PositiveDecimal,
+    entryPrice:          PositiveDecimal,
+    exitPrice:           PositiveDecimal,
+    fees:                NonNegativeDecimal.optional().default('0'),
+    openedAt:            z.string().min(1),  // datetime-local string
+    closedAt:            z.string().min(1),
+    note:                z.string().max(4000).optional().default(''),
+    regimeTags:          TagListString,
     // Pass-through fields from earlier wizard steps. Not validated as content.
-    source:     z.string().max(80).optional(),
+    source:              z.string().max(80).optional(),
+    // v5 trade-kind discriminator + leverage context
+    kind:                TradeKindSchema.optional().default('spot'),
+    leverage:            PositiveDecimal.optional(),
+    marginMode:          z.enum(['cross', 'isolated']).optional(),
+    // v5 open-intent
+    targetPrice:         PositiveDecimal.optional(),
+    stopPrice:           PositiveDecimal.optional(),
+    exitPlan:            z.string().max(2000).optional(),
+    // v5 cost decomposition
+    feesEntry:           NonNegativeDecimal.optional(),
+    feesExit:            NonNegativeDecimal.optional(),
+    fundingPaidUsd:      NonNegativeDecimal.optional(),
+    fundingReceivedUsd:  NonNegativeDecimal.optional(),
+    borrowCostUsd:       NonNegativeDecimal.optional(),
   })
   .strict()
   .superRefine((val, ctx) => {
@@ -420,24 +517,44 @@ export const CreateTradeBody = z
         message: 'closed_at must be >= opened_at',
       });
     }
+    // marginMode only makes sense for non-spot kinds. (kind defaults to 'spot'.)
+    if (val.marginMode !== undefined && val.kind === 'spot') {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['marginMode'],
+        message: 'marginMode is not valid for spot trades',
+      });
+    }
   });
 
 export type CreateTradeInput = z.input<typeof CreateTradeBody>;
 export type CreateTradeData = z.output<typeof CreateTradeBody>;
 
 /**
- * CreateSaleBody — mirrors /add/sale/fields. Captures an IDO/launchpad/
- * premarket/OTC allocation manually.
+ * CreateSaleBody — mirrors /add/sale/fields. Captures an allocation manually.
+ *
+ * v5 expands saleKind to include ieo/private_round/otc_allocation/vesting_claim
+ * and adds optional round/tier/wallet/bonus context. tokenChain enables the
+ * wallet-paste claim fetcher to pick the right explorer.
+ *
+ * The discriminated union over saleKind keeps the per-kind required-field
+ * differences (e.g. vesting_claim doesn't need usdPaid > 0) cleanly typed.
  *
  * Rules:
  *   - usd_paid > 0, tokens_allocated > 0, current_price_usd >= 0
  *   - tge_unlock_pct in [0, 100]
+ *   - bonus_pct in [-100, 500]
  */
-export const CreateSaleBody = z
+const SaleBaseBody = z
   .object({
-    saleKind:               SaleKindSchema,
     venue:                  z.string().min(1).max(80),
     asset:                  z.string().min(1).max(40),
+    tokenChain:             z.string().max(40).optional(),
+    claimWallet:            z.string().max(80).optional(),
+    fundraisingRound:       z.enum(['seed', 'private', 'public', 'strategic', 'other']).optional(),
+    allocationMethod:       z.enum(['fcfs', 'lottery', 'staking', 'whitelist', 'other']).optional(),
+    tier:                   z.string().max(40).optional(),
+    bonusPct:               z.coerce.number().min(-100).max(500).optional(),
     usdPaid:                PositiveDecimal,
     tokensAllocated:        PositiveDecimal,
     tgeDate:                z.string().min(1),  // YYYY-MM-DD
@@ -448,8 +565,18 @@ export const CreateSaleBody = z
     openedAt:               z.string().min(1),  // datetime-local
     note:                   z.string().max(4000).optional().default(''),
     regimeTags:             TagListString,
-  })
-  .strict();
+  });
+
+export const CreateSaleBody = z.discriminatedUnion('saleKind', [
+  SaleBaseBody.extend({ saleKind: z.literal('ido') }).strict(),
+  SaleBaseBody.extend({ saleKind: z.literal('launchpad') }).strict(),
+  SaleBaseBody.extend({ saleKind: z.literal('premarket') }).strict(),
+  SaleBaseBody.extend({ saleKind: z.literal('otc') }).strict(),
+  SaleBaseBody.extend({ saleKind: z.literal('ieo') }).strict(),
+  SaleBaseBody.extend({ saleKind: z.literal('private_round') }).strict(),
+  SaleBaseBody.extend({ saleKind: z.literal('otc_allocation') }).strict(),
+  SaleBaseBody.extend({ saleKind: z.literal('vesting_claim') }).strict(),
+]);
 
 export type CreateSaleInput = z.input<typeof CreateSaleBody>;
 export type CreateSaleData = z.output<typeof CreateSaleBody>;
@@ -458,21 +585,61 @@ export type CreateSaleData = z.output<typeof CreateSaleBody>;
  * CreateAirdropBody — mirrors /add/airdrop/fields. Captures a retro / loyalty
  * token drop. Cost basis is always $0; net_pnl is current_value.
  *
- * Rules:
- *   - tokens_claimed > 0, current_price_usd >= 0, usd_value_at_claim >= 0
+ * v5 makes the wizard reach the `pending` status:
+ *   - status === 'pending' (eligibility known, no claim yet) → tokensClaimed
+ *     and claimDate optional. Trader is registering the watchlist entry.
+ *   - status === 'claimed' (or omitted) → tokensClaimed > 0, claimDate required.
+ *
+ * Adds tokenChain, snapshotDate, claimTxHash, claimWallet, eligibilityReason,
+ * gasCostUsd, claimWindowStart/End to support the wallet-paste auto-import +
+ * watchlist alerts.
  */
 export const CreateAirdropBody = z
   .object({
-    protocol:        z.string().min(1).max(80),
-    asset:           z.string().min(1).max(40),
-    tokensClaimed:   PositiveDecimal,
-    claimDate:       z.string().min(1),  // YYYY-MM-DD
-    usdValueAtClaim: NonNegativeDecimal,
-    currentPriceUsd: NonNegativeDecimal,
-    note:            z.string().max(4000).optional().default(''),
-    regimeTags:      TagListString,
+    status:             z.enum(['pending', 'claimed']).optional().default('claimed'),
+    protocol:           z.string().min(1).max(80),
+    asset:              z.string().min(1).max(40),
+    tokenChain:         z.string().max(40).optional(),
+    snapshotDate:       z.string().optional(), // YYYY-MM-DD (allow empty)
+    eligibilityReason:  z.string().max(2000).optional(),
+    tokensClaimed:      PositiveDecimal.optional(),
+    claimDate:          z.string().optional(),
+    claimTxHash:        z.string().max(80).optional(),
+    claimWallet:        z.string().max(80).optional(),
+    gasCostUsd:         NonNegativeDecimal.optional(),
+    claimWindowStart:   z.string().optional(),
+    claimWindowEnd:     z.string().optional(),
+    usdValueAtClaim:    NonNegativeDecimal.optional(),
+    currentPriceUsd:    NonNegativeDecimal.optional(),
+    note:               z.string().max(4000).optional().default(''),
+    regimeTags:         TagListString,
   })
-  .strict();
+  .strict()
+  .superRefine((val, ctx) => {
+    if (val.status === 'claimed') {
+      if (!val.tokensClaimed) {
+        ctx.addIssue({
+          code: 'custom',
+          path: ['tokensClaimed'],
+          message: 'tokensClaimed is required when status is claimed',
+        });
+      }
+      if (!val.claimDate) {
+        ctx.addIssue({
+          code: 'custom',
+          path: ['claimDate'],
+          message: 'claimDate is required when status is claimed',
+        });
+      }
+      if (!val.usdValueAtClaim) {
+        ctx.addIssue({
+          code: 'custom',
+          path: ['usdValueAtClaim'],
+          message: 'usdValueAtClaim is required when status is claimed',
+        });
+      }
+    }
+  });
 
 export type CreateAirdropInput = z.input<typeof CreateAirdropBody>;
 export type CreateAirdropData = z.output<typeof CreateAirdropBody>;
@@ -505,12 +672,348 @@ export const ListActivitiesQuery = z.object({
  */
 export const UpdateActivityBody = z
   .object({
-    name:        z.string().min(1).max(120).optional(),
-    regime_tags: z.array(z.string().max(40)).max(20).optional(),
-    custom_tags: z.array(z.string().max(40)).max(20).optional(),
-    status:      ActivityStatusSchema.optional(),
+    name:             z.string().min(1).max(120).optional(),
+    regime_tags:      z.array(z.string().max(40)).max(20).optional(),
+    custom_tags:      z.array(z.string().max(40)).max(20).optional(),
+    status:           ActivityStatusSchema.optional(),
+    strategy_tag:     z.string().max(60).nullable().optional(),
+    tax_taxable:      z.coerce.boolean().optional(),
+    tax_jurisdiction: z.string().max(60).nullable().optional(),
   })
   .strict();
+
+// ============================================================================
+// Yield position schemas (v5)
+//
+// CreateYieldPositionBody is a discriminated union over `kind` so each
+// yield kind's required-field shape is independently typed. kind_meta
+// payload validation is delegated to the per-kind YieldMeta schemas below
+// — each branch composes the base body with the appropriate kind_meta
+// schema so a stake position can't accidentally land with lp-shaped meta.
+// ============================================================================
+
+const YieldStakeMeta = z.object({
+  kind:             z.literal('stake'),
+  validatorAddress: z.string().max(80).optional(),
+  operator:         z.string().max(80).optional(),
+});
+
+const YieldLendMeta = z.object({
+  kind:     z.literal('lend'),
+  rateKind: z.enum(['variable', 'fixed']),
+  ltv:      z.number().min(0).max(100).optional(),
+});
+
+const YieldFarmMeta = z.object({
+  kind:        z.literal('farm'),
+  pairA:       z.string().min(1).max(40),
+  pairB:       z.string().min(1).max(40),
+  amountA:     PositiveDecimal,
+  amountB:     PositiveDecimal,
+  poolFeeTier: z.string().max(20).optional(),
+  rewardToken: z.string().min(1).max(40),
+});
+
+const YieldLpMeta = z.object({
+  kind:         z.literal('lp'),
+  pairA:        z.string().min(1).max(40),
+  pairB:        z.string().min(1).max(40),
+  amountA:      PositiveDecimal,
+  amountB:      PositiveDecimal,
+  poolFeeTier:  z.string().min(1).max(20),
+  rangeLower:   PositiveDecimal.optional(),
+  rangeUpper:   PositiveDecimal.optional(),
+  concentrated: z.coerce.boolean(),
+});
+
+const YieldValidatorMeta = z.object({
+  kind:             z.literal('validator'),
+  validatorAddress: z.string().min(1).max(80),
+  commissionPct:    z.coerce.number().min(0).max(100),
+});
+
+const YieldMiningMeta = z.object({
+  kind:                    z.literal('mining'),
+  hashrateThs:             z.coerce.number().nonnegative(),
+  electricityCostUsdKwh:   z.coerce.number().nonnegative(),
+  pool:                    z.string().min(1).max(80),
+  expectedDailyRevenueUsd: z.coerce.number().nonnegative(),
+});
+
+export const YieldKindMetaSchema = z.discriminatedUnion('kind', [
+  YieldStakeMeta,
+  YieldLendMeta,
+  YieldFarmMeta,
+  YieldLpMeta,
+  YieldValidatorMeta,
+  YieldMiningMeta,
+]);
+
+const YieldPositionBase = z.object({
+  protocol:           z.string().min(1).max(80),
+  venue:              z.string().max(40).optional(),
+  chain:              z.string().max(40).optional(),
+  asset:              z.string().min(1).max(40),
+  amount:             PositiveDecimal,
+  amount_usd_at_open: NonNegativeDecimal.optional(),
+  expected_apy_pct:   z.coerce.number().min(0).max(10000).optional(),
+  rewards_token:      z.string().max(40).optional(),
+  fees_protocol_usd:  NonNegativeDecimal.optional().default('0'),
+  fees_gas_usd:       NonNegativeDecimal.optional().default('0'),
+  status:             z.enum(['open', 'unwinding', 'closed']).optional().default('open'),
+  opened_at:          z.string().min(1),
+  closed_at:          z.string().optional(),
+  name:               z.string().min(1).max(120).optional(),
+  regime_tags:        z.array(z.string().max(40)).max(20).optional().default([]),
+  custom_tags:        z.array(z.string().max(40)).max(20).optional().default([]),
+  strategy_tag:       z.string().max(60).optional(),
+  tax_taxable:        z.coerce.boolean().optional().default(false),
+  tax_jurisdiction:   z.string().max(60).optional(),
+});
+
+/**
+ * CreateYieldPositionBody — POST /api/activities/yield. Discriminated by
+ * `kind`. Each kind extends the base with a matching kind_meta payload.
+ */
+export const CreateYieldPositionBody = z.discriminatedUnion('kind', [
+  YieldPositionBase.extend({
+    kind:      z.literal('stake'),
+    kind_meta: YieldStakeMeta,
+  }).strict(),
+  YieldPositionBase.extend({
+    kind:      z.literal('lend'),
+    kind_meta: YieldLendMeta,
+  }).strict(),
+  YieldPositionBase.extend({
+    kind:      z.literal('farm'),
+    kind_meta: YieldFarmMeta,
+  }).strict(),
+  YieldPositionBase.extend({
+    kind:      z.literal('lp'),
+    kind_meta: YieldLpMeta,
+  }).strict(),
+  YieldPositionBase.extend({
+    kind:      z.literal('validator'),
+    kind_meta: YieldValidatorMeta,
+  }).strict(),
+  YieldPositionBase.extend({
+    kind:      z.literal('mining'),
+    kind_meta: YieldMiningMeta,
+  }).strict(),
+]);
+
+export type CreateYieldPositionData = z.infer<typeof CreateYieldPositionBody>;
+
+/**
+ * UpdateYieldPositionBody — PATCH /api/activities/yield/[id]. Every field
+ * optional. `kind` cannot change (it would invalidate kind_meta). Status
+ * is the most common edit; rewards_accrued/claimed get updated when the
+ * trader logs a claim.
+ */
+export const UpdateYieldPositionBody = z
+  .object({
+    name:              z.string().min(1).max(120).optional(),
+    status:            z.enum(['open', 'unwinding', 'closed']).optional(),
+    closed_at:         z.string().datetime().optional(),
+    rewards_accrued:   NonNegativeDecimal.optional(),
+    rewards_claimed:   NonNegativeDecimal.optional(),
+    rewards_usd_value: NonNegativeDecimal.optional(),
+    realized_apy_pct:  z.coerce.number().optional(),
+    current_price_usd: NonNegativeDecimal.optional(),
+    current_price_at:  z.string().datetime().optional(),
+    fees_protocol_usd: NonNegativeDecimal.optional(),
+    fees_gas_usd:      NonNegativeDecimal.optional(),
+    regime_tags:       z.array(z.string().max(40)).max(20).optional(),
+    custom_tags:       z.array(z.string().max(40)).max(20).optional(),
+    strategy_tag:      z.string().max(60).optional(),
+    tax_taxable:       z.coerce.boolean().optional(),
+    tax_jurisdiction:  z.string().max(60).optional(),
+  })
+  .strict();
+
+export type UpdateYieldPositionData = z.infer<typeof UpdateYieldPositionBody>;
+
+// ============================================================================
+// Option schemas (v5)
+//
+// Option activities have N legs (1 for single_leg, 2-8 for spreads). The
+// option-leg shape is exported so the wizard's `legs` step can validate
+// each row independently before the final commit.
+// ============================================================================
+
+/**
+ * OptionLegBody — one row in the legs array of CreateOptionBody. Mirrors
+ * activity_option_leg.
+ */
+export const OptionLegBody = z
+  .object({
+    leg_index:                  z.coerce.number().int().nonnegative(),
+    exchange:                   ExchangeCode,
+    underlying:                 z.string().min(1).max(40),
+    expiry:                     z.string().min(1), // YYYY-MM-DD
+    strike:                     PositiveDecimal,
+    option_kind:                OptionCpKindSchema,
+    side:                       OptionSideSchema,
+    contracts:                  PositiveDecimal,
+    premium_per_contract:       PositiveDecimal,
+    premium_total_usd:          NonNegativeDecimal.optional(),
+    iv:                         z.coerce.number().nonnegative().optional(),
+    delta:                      z.coerce.number().optional(),
+    gamma:                      z.coerce.number().optional(),
+    theta:                      z.coerce.number().optional(),
+    vega:                       z.coerce.number().optional(),
+    rho:                        z.coerce.number().optional(),
+    filled_at:                  z.string().optional(),
+    closed_at:                  z.string().optional(),
+    close_premium_per_contract: NonNegativeDecimal.optional(),
+    fees_usd:                   NonNegativeDecimal.optional().default('0'),
+  })
+  .strict();
+
+export type OptionLegInput = z.input<typeof OptionLegBody>;
+export type OptionLegData  = z.output<typeof OptionLegBody>;
+
+/**
+ * CreateOptionBody — POST /api/activities/option. Top-level + nested legs.
+ * subtype === 'single_leg' requires exactly 1 leg; 'option_spread' requires
+ * 2-8 legs and a non-null spread_style.
+ */
+export const CreateOptionBody = z
+  .object({
+    subtype:           OptionSubtypeKindSchema,
+    spread_style:      OptionSpreadStyleSchema.optional(),
+    underlying:        z.string().min(1).max(40),
+    exchange:          ExchangeCode,
+    total_premium_usd: NonNegativeDecimal.optional().default('0'),
+    net_premium_usd:   SignedDecimal.optional(),
+    max_profit_usd:    SignedDecimal.optional(),
+    max_loss_usd:      SignedDecimal.optional(),
+    breakeven_lower:   PositiveDecimal.optional(),
+    breakeven_upper:   PositiveDecimal.optional(),
+    iv_at_open:        z.coerce.number().nonnegative().optional(),
+    entry_thesis:      z.string().max(4000).optional(),
+    exit_plan:         z.string().max(2000).optional(),
+    target_price:      PositiveDecimal.optional(),
+    stop_price:        PositiveDecimal.optional(),
+    status:            z.enum(['open', 'unwinding', 'expired', 'closed']).optional().default('open'),
+    opened_at:         z.string().min(1),
+    closed_at:         z.string().optional(),
+    name:              z.string().min(1).max(120).optional(),
+    regime_tags:       z.array(z.string().max(40)).max(20).optional().default([]),
+    custom_tags:       z.array(z.string().max(40)).max(20).optional().default([]),
+    strategy_tag:      z.string().max(60).optional(),
+    tax_taxable:       z.coerce.boolean().optional().default(false),
+    tax_jurisdiction:  z.string().max(60).optional(),
+    legs:              z.array(OptionLegBody).min(1).max(8),
+  })
+  .strict()
+  .superRefine((val, ctx) => {
+    if (val.subtype === 'single_leg' && val.legs.length !== 1) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['legs'],
+        message: 'single_leg requires exactly 1 leg',
+      });
+    }
+    if (val.subtype === 'option_spread') {
+      if (val.legs.length < 2) {
+        ctx.addIssue({
+          code: 'custom',
+          path: ['legs'],
+          message: 'option_spread requires at least 2 legs',
+        });
+      }
+      if (!val.spread_style) {
+        ctx.addIssue({
+          code: 'custom',
+          path: ['spread_style'],
+          message: 'option_spread requires spread_style',
+        });
+      }
+    }
+    if (val.subtype === 'single_leg' && val.spread_style) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['spread_style'],
+        message: 'spread_style must be null for single_leg',
+      });
+    }
+  });
+
+export type CreateOptionInput = z.input<typeof CreateOptionBody>;
+export type CreateOptionData  = z.output<typeof CreateOptionBody>;
+
+/**
+ * UpdateOptionBody — PATCH /api/activities/option/[id]. Mutable fields only;
+ * subtype / spread_style cannot change once committed (the leg shape is tied
+ * to the subtype). Legs get edited via the dedicated leg endpoint.
+ */
+export const UpdateOptionBody = z
+  .object({
+    name:             z.string().min(1).max(120).optional(),
+    status:           z.enum(['open', 'unwinding', 'expired', 'closed']).optional(),
+    closed_at:        z.string().datetime().optional(),
+    realized_pnl_usd: SignedDecimal.optional(),
+    entry_thesis:     z.string().max(4000).optional(),
+    exit_plan:        z.string().max(2000).optional(),
+    target_price:     PositiveDecimal.optional(),
+    stop_price:       PositiveDecimal.optional(),
+    regime_tags:      z.array(z.string().max(40)).max(20).optional(),
+    custom_tags:      z.array(z.string().max(40)).max(20).optional(),
+    strategy_tag:     z.string().max(60).optional(),
+    tax_taxable:      z.coerce.boolean().optional(),
+    tax_jurisdiction: z.string().max(60).optional(),
+  })
+  .strict();
+
+export type UpdateOptionData = z.infer<typeof UpdateOptionBody>;
+
+// ============================================================================
+// Event log schemas (v5)
+//
+// event_log lives outside the activity supertype — it's an accounting
+// table for treasury movements. Bodies are kept thin: the trader picks a
+// kind and fills in the fields that apply to that kind (the UI is the
+// gatekeeper; Postgres only enforces NOT NULL on user_id/kind/occurred_at).
+// ============================================================================
+
+export const CreateEventLogBody = z
+  .object({
+    kind:                MovementEventKindSchema,
+    occurred_at:         z.string().min(1),
+    asset:               z.string().max(40).optional(),
+    amount:              SignedDecimal.optional(),
+    usd_value:           SignedDecimal.optional(),
+    from_venue:          z.string().max(80).optional(),
+    to_venue:            z.string().max(80).optional(),
+    tx_hash:             z.string().max(120).optional(),
+    chain:               z.string().max(40).optional(),
+    fee_usd:             NonNegativeDecimal.optional(),
+    description:         z.string().max(4000).optional(),
+    related_activity_id: z.string().uuid().optional(),
+  })
+  .strict();
+
+export type CreateEventLogData = z.infer<typeof CreateEventLogBody>;
+
+export const UpdateEventLogBody = z
+  .object({
+    kind:                MovementEventKindSchema.optional(),
+    occurred_at:         z.string().datetime().optional(),
+    asset:               z.string().max(40).nullable().optional(),
+    amount:              SignedDecimal.nullable().optional(),
+    usd_value:           SignedDecimal.nullable().optional(),
+    from_venue:          z.string().max(80).nullable().optional(),
+    to_venue:            z.string().max(80).nullable().optional(),
+    tx_hash:             z.string().max(120).nullable().optional(),
+    chain:               z.string().max(40).nullable().optional(),
+    fee_usd:             NonNegativeDecimal.nullable().optional(),
+    description:         z.string().max(4000).nullable().optional(),
+    related_activity_id: z.string().uuid().nullable().optional(),
+  })
+  .strict();
+
+export type UpdateEventLogData = z.infer<typeof UpdateEventLogBody>;
 
 // ============================================================================
 // Note schemas

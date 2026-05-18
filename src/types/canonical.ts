@@ -24,14 +24,25 @@ export type ExternalOrderId    = string & { readonly __brand: 'ExternalOrderId' 
 
 // ---------- Activity (v2) branded IDs ----------
 // The supertype `activity` row's id. Each subtype table (activity_spread,
-// activity_trade, activity_sale, activity_airdrop) uses the SAME UUID as its
-// primary key — there's a strict 1:1 between activity and its subtype row.
-// So the subtype IDs are type aliases for ActivityId rather than distinct brands.
-export type ActivityId         = string & { readonly __brand: 'ActivityId' };
-export type ActivitySpreadId   = ActivityId;
-export type ActivityTradeId    = ActivityId;
-export type ActivitySaleId     = ActivityId;
-export type ActivityAirdropId  = ActivityId;
+// activity_trade, activity_sale, activity_airdrop, activity_yield_position,
+// activity_option) uses the SAME UUID as its primary key — there's a strict
+// 1:1 between activity and its subtype row. So the subtype IDs are type
+// aliases for ActivityId rather than distinct brands.
+export type ActivityId               = string & { readonly __brand: 'ActivityId' };
+export type ActivitySpreadId         = ActivityId;
+export type ActivityTradeId          = ActivityId;
+export type ActivitySaleId           = ActivityId;
+export type ActivityAirdropId        = ActivityId;
+export type ActivityYieldPositionId  = ActivityId;
+export type ActivityOptionId         = ActivityId;
+
+// Option legs have their own distinct UUIDs — there's an N:1 from
+// activity_option_leg to activity_option, so the leg id is NOT a type alias.
+export type ActivityOptionLegId = string & { readonly __brand: 'ActivityOptionLegId' };
+
+// event_log rows are independent of activity (1:N at most, optional back-pointer
+// via related_activity_id).
+export type EventLogId = string & { readonly __brand: 'EventLogId' };
 
 // ---------- Money / quantity primitives ----------
 /** Arbitrary-precision decimal as string. f64 silently rounds at 15-16 sig digits. */
@@ -179,53 +190,151 @@ export type FundingDirection = typeof FundingDirection[keyof typeof FundingDirec
 
 // ---------- Activity (v2) enums ----------
 // Top-level discriminator. Each activity row joins to exactly one subtype table
-// (activity_spread / activity_trade / activity_sale / activity_airdrop) based
-// on this value.
+// (activity_spread / activity_trade / activity_sale / activity_airdrop /
+//  activity_yield_position / activity_option) based on this value.
 export const ActivityType = {
-  SPREAD:  'spread',
-  TRADE:   'trade',
-  SALE:    'sale',
-  AIRDROP: 'airdrop',
+  SPREAD:         'spread',
+  TRADE:          'trade',
+  SALE:           'sale',
+  AIRDROP:        'airdrop',
+  YIELD_POSITION: 'yield_position',
+  OPTION:         'option',
 } as const;
 export type ActivityType = typeof ActivityType[keyof typeof ActivityType];
 
 // Shared lifecycle state space across all activity types. Each subtype uses a
 // subset — see the chk_activity_status_by_type CHECK constraint in the SQL.
-//   spread:  open | winding_down | orphaned | expired | closed
-//   trade:   open | liquidated | closed
-//   sale:    pending | vesting | closed
-//   airdrop: pending | claimed | closed
+//   spread:         open | winding_down | orphaned | expired | closed
+//   trade:          open | liquidated | closed
+//   sale:           pending | vesting | closed
+//   airdrop:        pending | claimed | closed
+//   yield_position: open | unwinding | closed
+//   option:         open | unwinding | expired | closed
 export const ActivityStatus = {
   PENDING:      'pending',       // sale: allocation paid pre-TGE; airdrop: eligible not claimed
-  OPEN:         'open',          // trade: position active; spread: legs open
+  OPEN:         'open',          // trade/spread/yield/option: position active
   WINDING_DOWN: 'winding_down',  // spread: some legs closed
+  UNWINDING:    'unwinding',     // yield_position / option: closing in progress
   ORPHANED:     'orphaned',      // spread: one leg open with no hedge (alert state)
   VESTING:      'vesting',       // sale: some claimed, more to vest
   CLAIMED:      'claimed',       // airdrop: tokens received
   LIQUIDATED:   'liquidated',    // trade: position was liquidated
-  EXPIRED:      'expired',       // spread: dated future settled
+  EXPIRED:      'expired',       // spread/option: dated settlement reached
   CLOSED:       'closed',        // terminal: fully done
 } as const;
 export type ActivityStatus = typeof ActivityStatus[keyof typeof ActivityStatus];
 
-// Sub-discriminator for activity_sale.sale_kind.
+// Sub-discriminator for activity_sale.sale_kind. v5 adds the 4 new round /
+// IEO / OTC-allocation / vesting-claim flavours.
 export const SaleKind = {
-  IDO:       'ido',
-  LAUNCHPAD: 'launchpad',
-  PREMARKET: 'premarket',
-  OTC:       'otc',
+  IDO:             'ido',
+  LAUNCHPAD:       'launchpad',
+  PREMARKET:       'premarket',
+  OTC:             'otc',
+  IEO:             'ieo',
+  PRIVATE_ROUND:   'private_round',
+  OTC_ALLOCATION:  'otc_allocation',
+  VESTING_CLAIM:   'vesting_claim',
 } as const;
 export type SaleKind = typeof SaleKind[keyof typeof SaleKind];
+
+// Sub-discriminator on activity_trade.kind. v5 adds the broader trade kinds
+// (otc/nft) and explicit dated_future + option sub-types for legacy positions
+// the trader wants to journal without creating a full activity_option entry.
+export const TradeKind = {
+  SPOT:         'spot',
+  PERP:         'perp',
+  DATED_FUTURE: 'dated_future',
+  OPTION:       'option',
+  OTC:          'otc',
+  NFT:          'nft',
+} as const;
+export type TradeKind = typeof TradeKind[keyof typeof TradeKind];
+
+// Sub-discriminator on activity_yield_position.kind. Determines which fields
+// the wizard surfaces and which YieldKindMeta shape the kind_meta JSON
+// payload must conform to.
+export const YieldKind = {
+  STAKE:     'stake',
+  LEND:      'lend',
+  FARM:      'farm',
+  LP:        'lp',
+  VALIDATOR: 'validator',
+  MINING:    'mining',
+} as const;
+export type YieldKind = typeof YieldKind[keyof typeof YieldKind];
+
+// Sub-discriminator on activity_option.subtype.
+export const OptionSubtypeKind = {
+  SINGLE_LEG:    'single_leg',
+  OPTION_SPREAD: 'option_spread',
+} as const;
+export type OptionSubtypeKind = typeof OptionSubtypeKind[keyof typeof OptionSubtypeKind];
+
+// Per-leg side on activity_option_leg.side.
+export const OptionSide = {
+  LONG:  'long',
+  SHORT: 'short',
+} as const;
+export type OptionSide = typeof OptionSide[keyof typeof OptionSide];
+
+// Per-leg call/put on activity_option_leg.option_kind.
+export const OptionCpKind = {
+  CALL: 'call',
+  PUT:  'put',
+} as const;
+export type OptionCpKind = typeof OptionCpKind[keyof typeof OptionCpKind];
+
+// Activity-level spread style on activity_option.spread_style (only when
+// activity_option.subtype === 'option_spread').
+export const OptionSpreadStyle = {
+  VERTICAL:    'vertical',
+  IRON_CONDOR: 'iron_condor',
+  CALENDAR:    'calendar',
+  STRANGLE:    'strangle',
+  BUTTERFLY:   'butterfly',
+  CUSTOM:      'custom',
+} as const;
+export type OptionSpreadStyle = typeof OptionSpreadStyle[keyof typeof OptionSpreadStyle];
+
+// event_log.kind. NOT part of the activity supertype — these are accounting /
+// treasury movements that need to be journaled but aren't strategy events.
+export const MovementEventKind = {
+  BRIDGE:     'bridge',
+  CONVERT:    'convert',
+  TRANSFER:   'transfer',
+  DEPOSIT:    'deposit',
+  WITHDRAWAL: 'withdrawal',
+  NFT_TRADE:  'nft_trade',
+  LOSS:       'loss',
+  OTHER:      'other',
+} as const;
+export type MovementEventKind = typeof MovementEventKind[keyof typeof MovementEventKind];
 
 // Drives the unified-feed card headline. v_activity_feed emits one of these per
 // row to tell the renderer how to format the headline_value column.
 //   realized_apr     → spread, trade
 //   mtm_multiplier   → sale, airdrop (current_value / cost_basis)
+//   apy_pct          → yield_position (realized if closed, expected if open)
+//   realized_pnl_usd → option (realized P&L; max_profit comparison up to UI)
 export const HeadlineKind = {
-  REALIZED_APR:    'realized_apr',
-  MTM_MULTIPLIER:  'mtm_multiplier',
+  REALIZED_APR:     'realized_apr',
+  MTM_MULTIPLIER:   'mtm_multiplier',
+  APY_PCT:          'apy_pct',
+  REALIZED_PNL_USD: 'realized_pnl_usd',
 } as const;
 export type HeadlineKind = typeof HeadlineKind[keyof typeof HeadlineKind];
+
+// Display-format hint for v_activity_feed.headline_format. The UI uses this
+// to pick a number formatter (percentage vs USD vs bps vs multiplier).
+export const HeadlineFormat = {
+  APR_PCT: 'apr_pct',
+  APY_PCT: 'apy_pct',
+  MTM_X:   'mtm_x',
+  USD:     'usd',
+  BPS:     'bps',
+} as const;
+export type HeadlineFormat = typeof HeadlineFormat[keyof typeof HeadlineFormat];
 
 // ---------- Instrument descriptor ----------
 export interface Instrument {
@@ -610,12 +719,64 @@ export interface ClaimEvent {
   tx_hash?: string;
 }
 
+/**
+ * activity_yield_position.kind_meta (jsonb). Discriminated by `kind` to
+ * mirror the column-side yield_kind enum. Validated app-side via Zod
+ * (CreateYieldPositionBody) since Postgres enforces only the JSON shape.
+ *
+ * Decimals stay strings to honour the project's "never f64 for money" rule.
+ */
+export type YieldKindMeta =
+  | {
+      kind: 'stake';
+      validatorAddress?: string;
+      operator?: string;
+    }
+  | {
+      kind: 'lend';
+      rateKind: 'variable' | 'fixed';
+      ltv?: number;
+    }
+  | {
+      kind: 'farm';
+      pairA: string;
+      pairB: string;
+      amountA: Decimal;
+      amountB: Decimal;
+      poolFeeTier?: string;
+      rewardToken: string;
+    }
+  | {
+      kind: 'lp';
+      pairA: string;
+      pairB: string;
+      amountA: Decimal;
+      amountB: Decimal;
+      poolFeeTier: string;
+      rangeLower?: Decimal;
+      rangeUpper?: Decimal;
+      concentrated: boolean;
+    }
+  | {
+      kind: 'validator';
+      validatorAddress: string;
+      commissionPct: number;
+    }
+  | {
+      kind: 'mining';
+      hashrateThs: number;
+      electricityCostUsdKwh: number;
+      pool: string;
+      expectedDailyRevenueUsd: number;
+    };
+
 // ---------- Activity (v2) interfaces ----------
 
 /**
  * Supertype for all journaled activities. Joins to exactly one of
- * activity_spread / activity_trade / activity_sale / activity_airdrop based on
- * `type`. Holds shared lifecycle + denormalized aggregate columns.
+ * activity_spread / activity_trade / activity_sale / activity_airdrop /
+ * activity_yield_position / activity_option based on `type`. Holds shared
+ * lifecycle + denormalized aggregate columns + tax / strategy attribution.
  */
 export interface Activity {
   id:                   ActivityId;
@@ -632,6 +793,13 @@ export interface Activity {
   net_pnl_usd:          Decimal | null;
   regime_tags:          string[];
   custom_tags:          string[];
+  /** v5: tax classification flag — true if the trader expects this activity
+   *  to generate a taxable event in their jurisdiction. */
+  tax_taxable:          boolean;
+  /** v5: free-form jurisdiction hint (e.g. "US", "EU/DE", "AE"). */
+  tax_jurisdiction:     string | null;
+  /** v5: strategy rollup grouping (e.g. "ETH basis carry Q1"). */
+  strategy_tag:         string | null;
   created_at:           Iso8601;
   updated_at:           Iso8601;
   deleted_at:           Iso8601 | null;
@@ -671,28 +839,43 @@ export interface ActivitySpread {
 /**
  * Trade subtype columns. A journaled Position promoted to a Trade activity
  * with thesis/exit-plan notes. position_id is 1:1 with the underlying Position.
+ * v5 adds the trade kind discriminator + leverage/margin context + fees
+ * decomposition.
  */
 export interface ActivityTrade {
-  activity_id:     ActivityTradeId;
-  position_id:     PositionId;
-  symbol:          string;
-  exchange:        Exchange;
-  instrument_kind: InstrumentKind;
-  side:            PositionSide;
-  entry_thesis:    string | null;
-  exit_plan:       string | null;
-  target_price:    Decimal | null;
-  stop_price:      Decimal | null;
-  qty:             Decimal;
-  avg_entry_price: Decimal;
-  avg_exit_price:  Decimal | null;
-  realized_apr:    Decimal | null;
+  activity_id:          ActivityTradeId;
+  position_id:          PositionId;
+  symbol:               string;
+  exchange:             Exchange;
+  instrument_kind:      InstrumentKind;
+  side:                 PositionSide;
+  entry_thesis:         string | null;
+  exit_plan:            string | null;
+  target_price:         Decimal | null;
+  stop_price:           Decimal | null;
+  qty:                  Decimal;
+  avg_entry_price:      Decimal;
+  avg_exit_price:       Decimal | null;
+  realized_apr:         Decimal | null;
+  /** v5: trade kind discriminator (spot/perp/dated_future/option/otc/nft). */
+  kind:                 TradeKind;
+  /** v5: effective leverage at open (NULL for spot). */
+  leverage:             Decimal | null;
+  /** v5: margin mode at open (cross/isolated, NULL for spot). */
+  margin_mode:          'cross' | 'isolated' | null;
+  /** v5: USD fees paid on entry fills (separate from exit for review chart). */
+  fees_entry_usd:       Decimal | null;
+  fees_exit_usd:        Decimal | null;
+  funding_paid_usd:     Decimal | null;
+  funding_received_usd: Decimal | null;
+  borrow_cost_usd:      Decimal | null;
 }
 
 /**
- * Sale subtype columns. IDO / launchpad / premarket / OTC token sale.
- * Always manually entered. effective_price_usd is a generated column
- * (usd_paid / tokens_allocated). vesting_schedule + claim_events are jsonb.
+ * Sale subtype columns. IDO / launchpad / premarket / OTC / IEO / private
+ * round / OTC allocation / vesting claim. Always manually entered.
+ * effective_price_usd is a generated column (usd_paid / tokens_allocated).
+ * vesting_schedule + claim_events are jsonb.
  */
 export interface ActivitySale {
   activity_id:         ActivitySaleId;
@@ -712,12 +895,26 @@ export interface ActivitySale {
   /** Last-known token price in USD. Drives the MTM headline on v_activity_feed. */
   current_price_usd:   Decimal | null;
   current_price_at:    Iso8601 | null;
+  /** v5: wallet the claim landed in. Used by the wallet-paste auto-import. */
+  claim_wallet:        string | null;
+  /** v5: fundraising round (seed/private/public/strategic/other). */
+  fundraising_round:   'seed' | 'private' | 'public' | 'strategic' | 'other' | null;
+  /** v5: allocation method (fcfs/lottery/staking/whitelist/other). */
+  allocation_method:   'fcfs' | 'lottery' | 'staking' | 'whitelist' | 'other' | null;
+  /** v5: tier within the round (e.g. "Tier 1", "VIP"). */
+  tier:                string | null;
+  /** v5: bonus % vs the public price (negative = discount, positive = premium). */
+  bonus_pct:           Decimal | null;
 }
 
 /**
  * Airdrop subtype columns. Tokens received from a protocol drop.
  * Always manually entered. current_price_usd + current_price_at are refreshed
  * over time so the MTM multiplier on v_activity_feed stays current.
+ *
+ * v5 loosens qty_received to nullable so the pre-claim watchlist
+ * (status=pending) is reachable, and adds claim-window + wallet context for
+ * the auto-import flow.
  */
 export interface ActivityAirdrop {
   activity_id:          ActivityAirdropId;
@@ -727,18 +924,140 @@ export interface ActivityAirdrop {
   protocol:             string;
   snapshot_date:        Iso8601 | null;
   eligibility_reason:   string | null;
-  qty_received:         Decimal;
+  qty_received:         Decimal | null;
   claim_date:           Iso8601 | null;
   claim_tx_hash:        string | null;
+  /** v5: wallet the claim landed in. Used by the wallet-paste auto-import. */
+  claim_wallet:         string | null;
+  /** v5: USD cost of the claim transaction (gas). Subtracts from net P&L. */
+  gas_cost_usd:         Decimal | null;
+  /** v5: claim window start — drives the watchlist alert. */
+  claim_window_start:   Iso8601 | null;
+  /** v5: claim window end — drives the "expiring in N days" alert. */
+  claim_window_end:     Iso8601 | null;
   value_at_receipt_usd: Decimal | null;
   current_price_usd:    Decimal | null;
   current_price_at:     Iso8601 | null;
 }
 
 /**
+ * Yield position subtype columns (v5). One activity per yield-bearing
+ * position: stake / lend / farm / lp / validator / mining. JOIN to activity
+ * for shared lifecycle + aggregates. kind_meta is the discriminated-union
+ * jsonb payload (validated app-side via YieldKindMeta).
+ */
+export interface ActivityYieldPosition {
+  activity_id:        ActivityYieldPositionId;
+  kind:               YieldKind;
+  protocol:           string;
+  venue:              string | null;
+  chain:              string | null;
+  asset:              string;
+  amount:             Decimal;
+  amount_usd_at_open: Decimal | null;
+  expected_apy_pct:   Decimal | null;
+  realized_apy_pct:   Decimal | null;
+  rewards_token:      string | null;
+  rewards_accrued:    Decimal;
+  rewards_claimed:    Decimal;
+  rewards_usd_value:  Decimal | null;
+  fees_protocol_usd:  Decimal;
+  fees_gas_usd:       Decimal;
+  kind_meta:          YieldKindMeta | null;
+  current_price_usd:  Decimal | null;
+  current_price_at:   Iso8601 | null;
+  updated_at:         Iso8601;
+}
+
+/**
+ * Option activity header (v5). Holds the cross-leg summary (net premium,
+ * max profit, breakevens). Individual legs live in activity_option_leg.
+ */
+export interface ActivityOption {
+  activity_id:       ActivityOptionId;
+  subtype:           OptionSubtypeKind;
+  spread_style:      OptionSpreadStyle | null;
+  underlying:        string;
+  exchange:          Exchange;
+  total_premium_usd: Decimal;
+  net_premium_usd:   Decimal | null;
+  realized_pnl_usd:  Decimal | null;
+  max_profit_usd:    Decimal | null;
+  max_loss_usd:      Decimal | null;
+  breakeven_lower:   Decimal | null;
+  breakeven_upper:   Decimal | null;
+  iv_at_open:        Decimal | null;
+  entry_thesis:      string | null;
+  exit_plan:         string | null;
+  target_price:      Decimal | null;
+  stop_price:        Decimal | null;
+  updated_at:        Iso8601;
+}
+
+/**
+ * One leg of an option position. Single-leg activity_option has exactly 1
+ * row; spreads have 2-8 rows. leg_index orders them for the trader.
+ */
+export interface ActivityOptionLeg {
+  id:                          ActivityOptionLegId;
+  activity_id:                 ActivityOptionId;
+  leg_index:                   number;
+  exchange:                    Exchange;
+  underlying:                  string;
+  expiry:                      Iso8601;  // date
+  strike:                      Decimal;
+  option_kind:                 OptionCpKind;
+  side:                        OptionSide;
+  contracts:                   Decimal;
+  premium_per_contract:        Decimal;
+  premium_total_usd:           Decimal | null;
+  iv:                          Decimal | null;
+  delta:                       Decimal | null;
+  gamma:                       Decimal | null;
+  theta:                       Decimal | null;
+  vega:                        Decimal | null;
+  rho:                         Decimal | null;
+  filled_at:                   Iso8601 | null;
+  closed_at:                   Iso8601 | null;
+  close_premium_per_contract:  Decimal | null;
+  fees_usd:                    Decimal;
+  created_at:                  Iso8601;
+  updated_at:                  Iso8601;
+}
+
+/**
+ * event_log row (v5). NOT an activity — accounting / treasury movements
+ * (bridge, convert, transfer, deposit, withdrawal, NFT trade, loss, other)
+ * journaled for cost-basis reconciliation and tax lots. Optional back-pointer
+ * to the activity that triggered the movement (e.g. withdrawal funding a sale).
+ */
+export interface EventLog {
+  id:                  EventLogId;
+  user_id:             UserId;
+  kind:                MovementEventKind;
+  occurred_at:         Iso8601;
+  asset:               string | null;
+  amount:              Decimal | null;
+  usd_value:           Decimal | null;
+  from_venue:          string | null;
+  to_venue:            string | null;
+  tx_hash:             string | null;
+  chain:               string | null;
+  fee_usd:             Decimal | null;
+  description:         string | null;
+  related_activity_id: ActivityId | null;
+  created_at:          Iso8601;
+  updated_at:          Iso8601;
+}
+
+/**
  * Output shape of the v_activity_feed view. One row per non-deleted activity
- * with polymorphic headline_value + headline_kind columns driving the unified
- * feed's activity-agnostic card rendering, plus a primary_symbol hint.
+ * with polymorphic headline_value + headline_kind + headline_format columns
+ * driving the unified feed's activity-agnostic card rendering, plus a
+ * primary_symbol hint and a short card_subtitle.
+ *
+ * v5 adds strategy_tag, tax_taxable, tax_jurisdiction surface columns and
+ * the card_subtitle / headline_format fields.
  */
 export interface ActivityFeedRow {
   id:                   ActivityId;
@@ -755,9 +1074,14 @@ export interface ActivityFeedRow {
   net_pnl_usd:          Decimal | null;
   regime_tags:          string[];
   custom_tags:          string[];
+  strategy_tag:         string | null;
+  tax_taxable:          boolean;
+  tax_jurisdiction:     string | null;
   headline_value:       Decimal | null;
   headline_kind:        HeadlineKind;
+  headline_format:      HeadlineFormat;
   primary_symbol:       string | null;
+  card_subtitle:        string | null;
   created_at:           Iso8601;
   updated_at:           Iso8601;
 }

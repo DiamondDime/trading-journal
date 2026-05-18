@@ -85,7 +85,13 @@ function asHeadlineKind(kind: string, type: ActivityType): HeadlineKind {
 
 function makeSerial(id: string, type: ActivityType): { serial: string; serialNum: number } {
   const head = id.slice(0, 4).toUpperCase();
-  const letter = type === "trade" ? "T" : type === "sale" ? "S" : type === "airdrop" ? "A" : "";
+  const letter =
+    type === "trade"          ? "T"
+  : type === "sale"           ? "S"
+  : type === "airdrop"        ? "A"
+  : type === "yield_position" ? "Y"
+  : type === "option"         ? "O"
+  : "";
   // Derive a numeric ordering key from the hex prefix — used only by the
   // archive's "Sort by #" column. Stable, monotonic-ish, no clashes.
   const serialNum = parseInt(head, 16);
@@ -294,15 +300,35 @@ export function feedRowToActivity(
         multiplier,
       };
     }
+    case "yield_position":
+    case "option": {
+      // v5: yield_position + option detail pages render off their own
+      // canonical interfaces, not the legacy archive-row union. The list
+      // pages call dedicated adapters; the polymorphic fallback used by
+      // /spreads/archive is intentionally not supported for these new
+      // types (cast back to a Trade-shaped row so the list at least renders
+      // a card with the right name + headline).
+      return {
+        ...base,
+        type: "trade",
+        symbol: row.primarySymbol ?? "",
+        exchange: "—",
+        side: "long",
+        instrument: "spot",
+        asset,
+      };
+    }
   }
 }
 
 function hrefFor(id: string, type: ActivityType): string {
   switch (type) {
-    case "trade":   return `/trades/${id}`;
-    case "spread":  return `/spreads/${id}`;
-    case "sale":    return `/sales/${id}`;
-    case "airdrop": return `/airdrops/${id}`;
+    case "trade":          return `/trades/${id}`;
+    case "spread":         return `/spreads/${id}`;
+    case "sale":           return `/sales/${id}`;
+    case "airdrop":        return `/airdrops/${id}`;
+    case "yield_position": return `/yield-positions/${id}`;
+    case "option":         return `/options/${id}`;
   }
 }
 

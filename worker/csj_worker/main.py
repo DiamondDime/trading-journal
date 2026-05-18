@@ -27,25 +27,26 @@ import logging
 import os
 import signal
 import sys
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from typing import NoReturn
 
 import psycopg
 
 from csj_worker import db as dbx
 from csj_worker import excursions as excx
+from csj_worker import positions_aggregator as agg
 from csj_worker.adapters import ExchangeAdapter, get_adapter
 from csj_worker.adapters.base import (
     AdapterAuthError,
     AdapterError,
     AdapterPermissionError,
     AdapterRateLimitedError,
+    AdapterUnsupportedError,
 )
 from csj_worker.crypto import get_master_key
 from csj_worker.logging_config import configure_logging, mask_secret
 from csj_worker.matcher import MatcherConfig, match_spreads
 from csj_worker.types import ConnectionStatus, Credentials
-
 
 # ---------------------------------------------------------------------------
 # Settings
@@ -153,13 +154,78 @@ async def sync_one_connection(
     await conn.commit()
 
     # Sync window
-    now = datetime.now(tz=timezone.utc)
+    now = datetime.now(tz=UTC)
     since = row.last_sync_at or (now - timedelta(days=lookback_days))
     until = now
 
     fills_added = 0
+    funding_added = 0
     last_fill_at: datetime | None = row.last_fill_at
+    last_funding_at: datetime | None = await dbx.get_last_funding_at(conn, row.id)
     pages = 0
+
+    # Targeted-symbol scan (W3a §4): only relevant for the universal adapter.
+    # We populate ``adapter.symbol_filter`` with the union of:
+    #   1. ``sync_state.last_seen_symbols`` (sticky cache, only grows)
+    #   2. ``discover_active_symbols()`` (currently-open positions + nonzero balances)
+    # On a 30-day rotation we deliberately wipe the cache and do a full scan
+    # to catch new pairs the user picked up via the venue's UI.
+    sync_state = await dbx.get_sync_state(conn, row.id)
+    new_symbols: set[str] = set()
+    if hasattr(adapter, "symbol_filter") and hasattr(adapter, "discover_active_symbols"):
+        # Cast to known type; ``symbol_filter`` is only present on
+        # ``CcxtUniversalAdapter``.
+        from datetime import datetime as _dt  # local alias keeps top-level clean
+
+        full_scan_at_iso = sync_state.get("full_scan_at")
+        full_scan_at: _dt | None = None
+        if isinstance(full_scan_at_iso, str):
+            try:
+                full_scan_at = _dt.fromisoformat(full_scan_at_iso)
+            except ValueError:
+                full_scan_at = None
+
+        # 30-day full-scan rotation. None == never scanned yet → always do full.
+        do_full_scan = (
+            full_scan_at is None
+            or (now - full_scan_at) > timedelta(days=30)
+        )
+
+        sticky_list = sync_state.get("last_seen_symbols") or []
+        sticky: set[str] = set(s for s in sticky_list if isinstance(s, str))
+
+        if do_full_scan:
+            adapter.symbol_filter = None  # type: ignore[attr-defined]
+            log.info(
+                "sync.symbol_scan.full",
+                extra={**base_ctx, "sticky_size": len(sticky)},
+            )
+        else:
+            try:
+                discovered = await adapter.discover_active_symbols(credentials)
+            except Exception:
+                log.exception("sync.symbol_discovery.failed", extra=base_ctx)
+                discovered = set()
+            filter_set = sticky | discovered
+            if filter_set:
+                adapter.symbol_filter = filter_set  # type: ignore[attr-defined]
+                log.info(
+                    "sync.symbol_scan.targeted",
+                    extra={
+                        **base_ctx,
+                        "sticky_size": len(sticky),
+                        "discovered_size": len(discovered),
+                        "filter_size": len(filter_set),
+                    },
+                )
+            else:
+                # Empty filter would skip everything; fall back to full scan.
+                adapter.symbol_filter = None  # type: ignore[attr-defined]
+                log.warning(
+                    "sync.symbol_scan.empty_fallback",
+                    extra=base_ctx,
+                )
+                do_full_scan = True
 
     try:
         async for page in adapter.fetch_fills(credentials, since=since, until=until):
@@ -174,6 +240,10 @@ async def sync_one_connection(
             )
             await conn.commit()
             fills_added += inserted
+            # Track every symbol we received a fill for — feeds the sticky
+            # last_seen_symbols cache.
+            for f in page:
+                new_symbols.add(f.instrument.raw_symbol)
             page_last = max(f.filled_at for f in page)
             if last_fill_at is None or page_last > last_fill_at:
                 last_fill_at = page_last
@@ -187,6 +257,40 @@ async def sync_one_connection(
                     "page_last": page_last.isoformat(),
                 },
             )
+
+        # Funding events — separate watermark per connection. Adapters that
+        # don't support funding history raise AdapterUnsupportedError, which
+        # we treat as "skip" (not a hard failure).
+        funding_since = last_funding_at or since
+        try:
+            async for fev_page in adapter.fetch_funding_events(
+                credentials, since=funding_since, until=until
+            ):
+                if not fev_page:
+                    continue
+                inserted_fev = await dbx.insert_funding_events(
+                    conn,
+                    user_id=row.user_id,
+                    exchange_connection_id=row.id,
+                    events=fev_page,
+                )
+                await conn.commit()
+                funding_added += inserted_fev
+                page_last_fev = max(e.occurred_at for e in fev_page)
+                if last_funding_at is None or page_last_fev > last_funding_at:
+                    last_funding_at = page_last_fev
+                log.info(
+                    "sync.funding_page_committed",
+                    extra={
+                        **base_ctx,
+                        "rows": len(fev_page),
+                        "inserted": inserted_fev,
+                        "page_last": page_last_fev.isoformat(),
+                    },
+                )
+        except AdapterUnsupportedError:
+            # Spot-only venues, etc.
+            log.info("sync.funding_unsupported", extra=base_ctx)
 
     except AdapterAuthError as exc:
         await conn.rollback()
@@ -242,15 +346,34 @@ async def sync_one_connection(
     await dbx.mark_connection_synced(
         conn, row.id, fills_added=fills_added, last_fill_at=last_fill_at
     )
+    if last_funding_at is not None:
+        await dbx.update_last_funding_at(conn, row.id, last_funding_at)
+
+    # Persist sticky last_seen_symbols + full_scan_at watermark.
+    if new_symbols or (adapter.symbol_filter is None if hasattr(adapter, "symbol_filter") else False):
+        existing_list = (sync_state.get("last_seen_symbols") or [])
+        existing_set = {s for s in existing_list if isinstance(s, str)}
+        merged = sorted(existing_set | new_symbols)
+        sync_state["last_seen_symbols"] = merged
+        # If we just performed a full scan, stamp the rotation watermark.
+        if hasattr(adapter, "symbol_filter") and adapter.symbol_filter is None:
+            sync_state["full_scan_at"] = now.isoformat()
+        await dbx.update_sync_state(conn, row.id, sync_state)
     await conn.commit()
 
     log.info(
         "sync.complete",
-        extra={**base_ctx, "fills_added": fills_added, "pages": pages},
+        extra={
+            **base_ctx,
+            "fills_added": fills_added,
+            "funding_added": funding_added,
+            "pages": pages,
+        },
     )
     return {
         "status": "ok",
         "fills_added": fills_added,
+        "funding_added": funding_added,
         "pages": pages,
         "last_fill_at": last_fill_at.isoformat() if last_fill_at else None,
     }
@@ -361,10 +484,211 @@ async def run_matcher_for_all_users(conn: psycopg.AsyncConnection) -> None:
 # ---------------------------------------------------------------------------
 
 
+async def _aggregate_and_link_for_users(
+    conn: psycopg.AsyncConnection,
+    user_ids: list[str],
+) -> dict[str, int]:
+    """Run positions aggregator + funding-event linker for the given users.
+
+    Aggregator builds positions rows from unmatched fills; linker then
+    sets ``funding_events.position_id`` to whatever position was open at
+    each funding tick. Migration 005's trigger recomputes position
+    aggregates automatically once fills.position_id flips.
+    """
+    log = logging.getLogger("csj_worker.aggregator")
+    totals: dict[str, int] = {
+        "positions_inserted": 0,
+        "fills_attached": 0,
+        "funding_linked": 0,
+    }
+    for user_id in user_ids:
+        try:
+            agg_result = await agg.aggregate_positions(conn, user_id=user_id)
+            await conn.commit()
+            totals["positions_inserted"] += agg_result["positions_inserted"]
+            totals["fills_attached"] += agg_result["fills_attached"]
+            funding_linked = await agg.link_funding_events(conn, user_id=user_id)
+            await conn.commit()
+            totals["funding_linked"] += funding_linked
+            log.info(
+                "aggregator.user_complete",
+                extra={"user_id": user_id, **agg_result, "funding_linked": funding_linked},
+            )
+        except Exception:
+            await conn.rollback()
+            log.exception(
+                "aggregator.user_failed",
+                extra={"user_id": user_id},
+            )
+    return totals
+
+
+async def _distinct_user_ids(conn: psycopg.AsyncConnection) -> list[str]:
+    """Distinct user ids across active connections — used to scope the
+    aggregator + matcher to "users who synced this cycle"."""
+    async with conn.cursor() as cur:
+        await cur.execute(
+            "select distinct user_id::text"
+            " from public.exchange_connections"
+            " where deleted_at is null"
+        )
+        return [r[0] for r in await cur.fetchall()]
+
+
+async def _process_sync_job(
+    conn: psycopg.AsyncConnection,
+    job: dbx.SyncJobRow,
+    *,
+    lookback_days: int,
+) -> dict[str, object]:
+    """Run sync_one_connection for the job's connection, persist sync_jobs state.
+
+    On success: aggregator + funding-linker for the job's user, then matcher.
+    On failure: mark the sync_jobs row failed with a reason code.
+
+    Returns the same shape ``sync_one_connection`` does for telemetry.
+    """
+    log = logging.getLogger("csj_worker.sync_job")
+    row = await dbx.get_connection_for_job(conn, job)
+    if row is None:
+        await dbx.mark_sync_job_failed(
+            conn,
+            job_id=job.id,
+            error_code="connection_missing",
+            error_message="connection row not found",
+        )
+        await conn.commit()
+        return {"status": "error", "reason": "connection_missing"}
+
+    result = await sync_one_connection(conn, row, lookback_days=lookback_days)
+
+    fills_added = int(result.get("fills_added", 0) or 0)
+    funding_added = int(result.get("funding_added", 0) or 0)
+
+    if result.get("status") == "ok":
+        # Aggregate + link funding for this user, then run the matcher.
+        await _aggregate_and_link_for_users(conn, [row.user_id])
+        await run_matcher_for_user(conn, row.user_id)
+        await dbx.mark_sync_job_succeeded(
+            conn,
+            job_id=job.id,
+            fills_pulled=fills_added,
+            funding_pulled=funding_added,
+        )
+        await conn.commit()
+        log.info(
+            "sync_job.succeeded",
+            extra={"job_id": job.id, "fills_added": fills_added, "funding_added": funding_added},
+        )
+    else:
+        reason = str(result.get("reason") or "unknown")
+        await dbx.mark_sync_job_failed(
+            conn,
+            job_id=job.id,
+            error_code=reason,
+            error_message=reason,
+            fills_pulled=fills_added,
+            funding_pulled=funding_added,
+        )
+        await conn.commit()
+        log.warning(
+            "sync_job.failed",
+            extra={"job_id": job.id, "reason": reason},
+        )
+
+    return result
+
+
+async def drain_sync_jobs(
+    database_url: str,
+    lookback_days: int,
+    *,
+    batch_limit: int = 10,
+) -> dict[str, int]:
+    """Single drain of the sync_jobs queue.
+
+    Claims up to ``batch_limit`` queued rows, runs them sequentially, and
+    returns aggregate counters. Caller owns the DB connection lifecycle —
+    this opens / closes its own.
+    """
+    log = logging.getLogger("csj_worker.queue")
+    summary = {"jobs_run": 0, "jobs_failed": 0, "fills_added": 0, "funding_added": 0}
+
+    conn = await dbx.open_async_conn(database_url)
+    try:
+        # Mark stuck running jobs as failed before claiming new ones.
+        try:
+            orphaned = await dbx.recover_orphaned_sync_jobs(conn)
+            await conn.commit()
+            if orphaned:
+                log.warning("queue.recovered_orphans", extra={"count": orphaned})
+        except Exception:
+            await conn.rollback()
+            log.exception("queue.recover_orphans_failed")
+
+        try:
+            jobs = await dbx.claim_queued_sync_jobs(conn, limit=batch_limit)
+            await conn.commit()
+        except Exception:
+            await conn.rollback()
+            log.exception("queue.claim_failed")
+            return summary
+
+        if not jobs:
+            return summary
+
+        log.info("queue.drain.start", extra={"job_count": len(jobs)})
+        for job in jobs:
+            try:
+                result = await _process_sync_job(
+                    conn, job, lookback_days=lookback_days
+                )
+            except Exception:
+                # Defensive: always mark the job failed so it doesn't
+                # rot in 'running' state.
+                await conn.rollback()
+                try:
+                    await dbx.mark_sync_job_failed(
+                        conn,
+                        job_id=job.id,
+                        error_code="worker_exception",
+                        error_message="unhandled exception",
+                    )
+                    await conn.commit()
+                except Exception:
+                    await conn.rollback()
+                log.exception("queue.job_crashed", extra={"job_id": job.id})
+                summary["jobs_failed"] += 1
+                continue
+
+            if result.get("status") == "ok":
+                summary["jobs_run"] += 1
+                summary["fills_added"] += int(result.get("fills_added", 0) or 0)
+                summary["funding_added"] += int(result.get("funding_added", 0) or 0)
+            else:
+                summary["jobs_failed"] += 1
+    finally:
+        await conn.close()
+
+    log.info("queue.drain.complete", extra=summary)
+    return summary
+
+
 async def run_once(database_url: str, lookback_days: int) -> dict[str, object]:
-    """Sync every eligible connection then run the matcher. Returns a summary."""
+    """Sync every eligible connection then run aggregator + matcher.
+
+    "Eligible" = status in (active, rate_limited) AND not currently syncing.
+    The hybrid loop (``run_daemon``) ALSO drains the sync_jobs queue on a
+    tighter cadence; ``run_once`` is the cycle-level fallback that runs
+    every poll_interval_seconds.
+    """
     log = logging.getLogger("csj_worker.cycle")
-    summary: dict[str, object] = {"connections_synced": 0, "fills_added": 0}
+    summary: dict[str, object] = {
+        "connections_synced": 0,
+        "fills_added": 0,
+        "funding_added": 0,
+        "positions_inserted": 0,
+    }
 
     conn = await dbx.open_async_conn(database_url)
     try:
@@ -376,6 +700,7 @@ async def run_once(database_url: str, lookback_days: int) -> dict[str, object]:
         connections = await dbx.list_syncable_connections(conn)
         log.info("cycle.start", extra={"connection_count": len(connections)})
 
+        synced_user_ids: set[str] = set()
         if not connections:
             log.info("cycle.no_connections")
         for row in connections:
@@ -387,6 +712,17 @@ async def run_once(database_url: str, lookback_days: int) -> dict[str, object]:
                 summary["fills_added"] = (
                     int(summary["fills_added"]) + int(result.get("fills_added", 0))
                 )
+                summary["funding_added"] = (
+                    int(summary["funding_added"]) + int(result.get("funding_added", 0))
+                )
+                synced_user_ids.add(row.user_id)
+
+        # Build positions from unmatched fills, link funding events to them.
+        if synced_user_ids:
+            agg_totals = await _aggregate_and_link_for_users(
+                conn, sorted(synced_user_ids)
+            )
+            summary["positions_inserted"] = agg_totals["positions_inserted"]
 
         # Matcher always runs — produces zero candidates if no positions yet.
         await run_matcher_for_all_users(conn)
@@ -543,6 +879,87 @@ async def run_backfill_excursions(
 
 
 # ---------------------------------------------------------------------------
+# Connect-time validation
+# ---------------------------------------------------------------------------
+
+
+async def test_connection(
+    database_url: str,
+    connection_id: str,
+) -> dict[str, object]:
+    """Validate a connection's credentials by running adapter.connect().
+
+    Returns ``{"ok": bool, "health": str, "permissions": [...], "message": str?}``.
+    Does NOT persist anything — the Next.js handler decides whether to flip
+    ``status`` to 'active' or reject.
+
+    Idempotent and free of side effects (modulo a single read-only API call
+    against the venue).
+    """
+    log = logging.getLogger("csj_worker.test_connection")
+    conn = await dbx.open_async_conn(database_url)
+    try:
+        row = await dbx.get_connection(conn, connection_id)
+        if row is None:
+            return {"ok": False, "error": "connection_not_found"}
+
+        adapter = _get_adapter(row.exchange_code)
+        if adapter is None:
+            return {
+                "ok": False,
+                "error": "adapter_not_implemented",
+                "message": f"No adapter for exchange {row.exchange_code!r}",
+            }
+
+        credentials = dbx.decrypt_connection_credentials(row)
+        if credentials is None:
+            return {"ok": False, "error": "missing_credentials"}
+
+        try:
+            result = await adapter.connect(credentials)
+        except AdapterAuthError as exc:
+            log.warning(
+                "test.auth_failed",
+                extra={"connection_id": connection_id, "error_msg": str(exc)[:200]},
+            )
+            return {"ok": False, "error": "auth_failed", "message": str(exc)[:500]}
+        except AdapterPermissionError as exc:
+            return {"ok": False, "error": "permission", "message": str(exc)[:500]}
+        except AdapterRateLimitedError as exc:
+            return {"ok": False, "error": "rate_limited", "message": str(exc)[:500]}
+        except AdapterError as exc:
+            return {
+                "ok": False,
+                "error": exc.code.value,
+                "message": str(exc)[:500],
+            }
+        except Exception as exc:
+            log.exception("test.unexpected_error", extra={"connection_id": connection_id})
+            return {
+                "ok": False,
+                "error": "unexpected",
+                "message": f"{type(exc).__name__}: {exc}"[:500],
+            }
+
+        # Determine ok-ness from health.
+        health = result.health.value
+        ok = health == "ok"
+        permissions = list(result.permissions)
+        # If any permission ends with ':unverified' we surface that for the
+        # UI to require user attestation.
+        unverified = [p for p in permissions if p.endswith(":unverified")]
+        return {
+            "ok": ok,
+            "health": health,
+            "permissions": permissions,
+            "unverified": unverified,
+            "message": result.message,
+        }
+    finally:
+        await conn.close()
+
+
+# ---------------------------------------------------------------------------
 # Matcher-only mode
 # ---------------------------------------------------------------------------
 
@@ -568,13 +985,20 @@ async def run_daemon(
     *,
     poll_interval_seconds: int,
     lookback_days: int,
+    queue_poll_seconds: int = 5,
 ) -> None:
-    """Long-running daemon: ``run_once`` on an interval until shutdown.
+    """Hybrid loop: drains sync_jobs queue every few seconds AND runs the
+    full ``run_once`` cycle on the wider interval.
 
-    Shutdown:
-    - SIGTERM / SIGINT set ``stop_event``. We finish the current cycle, then exit.
-    - On wait, we ``asyncio.wait`` the stop_event with a timeout so we wake
-      either when the interval elapses OR on signal.
+    - ``queue_poll_seconds`` (default 5s) — drain ``sync_jobs`` queue once;
+      this is how "Sync now" buttons in the UI surface a result within ~30s.
+    - ``poll_interval_seconds`` (default 300s) — the scheduled sync cycle
+      that re-syncs every active connection and re-runs the matcher.
+
+    Both ticks run on the same coroutine so we never have two cycles running
+    at once. Shutdown:
+    - SIGTERM / SIGINT set ``stop_event``. The current tick completes,
+      then we exit.
     """
     log = logging.getLogger("csj_worker.daemon")
     stop_event = asyncio.Event()
@@ -596,21 +1020,40 @@ async def run_daemon(
         "daemon.start",
         extra={
             "poll_interval_seconds": poll_interval_seconds,
+            "queue_poll_seconds": queue_poll_seconds,
             "lookback_days": lookback_days,
         },
     )
 
+    last_cycle = 0.0  # asyncio loop monotonic time of last run_once
+
     while not stop_event.is_set():
-        try:
-            await run_once(database_url, lookback_days)
-        except Exception:
-            # A cycle should never crash the daemon. Log and continue.
-            log.exception("daemon.cycle_crashed")
+        now = loop.time()
+
+        # Full cycle on the wider interval.
+        if now - last_cycle >= poll_interval_seconds:
+            try:
+                await run_once(database_url, lookback_days)
+            except Exception:
+                # A cycle should never crash the daemon. Log and continue.
+                log.exception("daemon.cycle_crashed")
+            last_cycle = loop.time()
+
         if stop_event.is_set():
             break
+
+        # Queue drain every queue_poll_seconds.
         try:
-            await asyncio.wait_for(stop_event.wait(), timeout=poll_interval_seconds)
-        except asyncio.TimeoutError:
+            await drain_sync_jobs(database_url, lookback_days)
+        except Exception:
+            log.exception("daemon.queue_drain_crashed")
+
+        if stop_event.is_set():
+            break
+
+        try:
+            await asyncio.wait_for(stop_event.wait(), timeout=queue_poll_seconds)
+        except TimeoutError:
             pass
 
     log.info("daemon.stopped")
@@ -665,6 +1108,30 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Re-fetch and overwrite even if a kline_backfill row exists",
     )
 
+    # W3a: connect-time validation. Called by the Next.js POST /api/exchanges
+    # handler synchronously (via HTTP) or out-of-band via this CLI.
+    p_test = sub.add_parser(
+        "test-connection",
+        help="Validate a connection's credentials (calls adapter.connect()).",
+    )
+    p_test.add_argument("--connection-id", required=True, help="UUID of the connection")
+
+    p_http = sub.add_parser(
+        "http-server",
+        help="Run the worker HTTP server (connect-test endpoint).",
+    )
+    p_http.add_argument(
+        "--host",
+        default=os.environ.get("WORKER_HTTP_HOST", "127.0.0.1"),
+        help="Bind host (default: 127.0.0.1)",
+    )
+    p_http.add_argument(
+        "--port",
+        type=int,
+        default=_env_int("WORKER_HTTP_PORT", 7430),
+        help="Bind port (default: 7430)",
+    )
+
     return p
 
 
@@ -715,15 +1182,30 @@ def main(argv: list[str] | None = None) -> NoReturn:
                     force=args.force,
                 )
             )
+        elif args.cmd == "test-connection":
+            # Emit a single JSON line to stdout so callers (Next.js shell-exec
+            # or other CLI consumers) can parse the result.
+            import json as _json
+
+            result = asyncio.run(test_connection(database_url, args.connection_id))
+            print(_json.dumps(result), flush=True)
+            rc = 0 if result.get("ok") else 1
+        elif args.cmd == "http-server":
+            from csj_worker.http_server import run as run_http
+
+            asyncio.run(run_http(database_url, host=args.host, port=args.port))
+            rc = 0
         elif args.once:
             asyncio.run(run_once(database_url, args.lookback_days))
             rc = 0
         else:
             poll = _env_int("WORKER_POLL_INTERVAL_SECONDS", 300)
+            queue_poll = _env_int("WORKER_QUEUE_POLL_SECONDS", 5)
             asyncio.run(
                 run_daemon(
                     database_url,
                     poll_interval_seconds=poll,
+                    queue_poll_seconds=queue_poll,
                     lookback_days=args.lookback_days,
                 )
             )

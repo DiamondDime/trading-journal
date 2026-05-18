@@ -16,10 +16,9 @@ We pass Decimals back unchanged.
 
 from __future__ import annotations
 
-import json
 import logging
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from decimal import Decimal
 from typing import Any
 
@@ -33,11 +32,13 @@ from csj_worker.matcher.models import MatcherPosition, ProposedLeg, SpreadPropos
 from csj_worker.types import (
     ApiKeyCredentials,
     CanonicalFill,
+    CanonicalFundingEvent,
     CanonicalInstrument,
     ConnectionStatus,
     Credentials,
     Exchange,
     ExchangeKind,
+    FundingDirection,
     InstrumentKind,
     PositionSide,
     PositionStatus,
@@ -389,6 +390,316 @@ async def insert_fills(
 
 
 # ---------------------------------------------------------------------------
+# Funding-event persistence
+# ---------------------------------------------------------------------------
+
+
+async def insert_funding_events(
+    conn: psycopg.AsyncConnection,
+    *,
+    user_id: str,
+    exchange_connection_id: str,
+    events: list[CanonicalFundingEvent],
+) -> int:
+    """Insert a page of funding events idempotently. Returns inserted count.
+
+    Mirrors ``insert_fills`` — uses ``ON CONFLICT (exchange_connection_id,
+    raw_exchange_id) DO NOTHING`` so replays of the same page are no-ops.
+    Caller commits.
+
+    The ``amount`` column is SIGNED: positive == received, negative == paid.
+    Adapter emits absolute amount + a direction enum; we sign here.
+    """
+    if not events:
+        return 0
+
+    sql = """
+        insert into public.funding_events (
+            user_id,
+            exchange_connection_id,
+            raw_exchange_id,
+            instrument,
+            amount,
+            funding_rate,
+            position_qty,
+            currency,
+            event_time,
+            raw_payload
+        ) values (
+            %s::uuid, %s::uuid, %s, %s, %s, %s, %s, %s, %s, %s
+        )
+        on conflict (exchange_connection_id, raw_exchange_id) do nothing
+    """
+
+    inserted = 0
+    async with conn.cursor() as cur:
+        for ev in events:
+            signed_amount = (
+                ev.amount if ev.direction == FundingDirection.RECEIVED else -ev.amount
+            )
+            # raw_exchange_id: use the adapter-supplied external_id when present,
+            # else synthesize a stable composite (instrument + timestamp).
+            external_id = (
+                ev.external_id
+                or f"{ev.instrument.raw_symbol}-{int(ev.occurred_at.timestamp() * 1000)}"
+            )
+            await cur.execute(
+                sql,
+                (
+                    user_id,
+                    exchange_connection_id,
+                    external_id,
+                    ev.instrument.raw_symbol,
+                    signed_amount,
+                    ev.funding_rate,
+                    ev.position_qty,
+                    ev.amount_currency,
+                    ev.occurred_at,
+                    Json(ev.raw),
+                ),
+            )
+            inserted += cur.rowcount or 0
+    return inserted
+
+
+# ---------------------------------------------------------------------------
+# sync_state helpers (worker bookkeeping JSONB on exchange_connections)
+# ---------------------------------------------------------------------------
+
+
+async def get_sync_state(
+    conn: psycopg.AsyncConnection,
+    connection_id: str,
+) -> dict[str, Any]:
+    """Read the ``sync_state`` JSONB blob for a connection.
+
+    Migration 20260518000100 adds the column. Returns ``{}`` if NULL
+    (defensive against older DBs that may not have the column).
+    """
+    async with conn.cursor() as cur:
+        try:
+            await cur.execute(
+                "select sync_state from public.exchange_connections where id::text = %s",
+                (connection_id,),
+            )
+            row = await cur.fetchone()
+        except psycopg.errors.UndefinedColumn:
+            # Older DB without the column. Treat as empty.
+            await conn.rollback()
+            return {}
+    if not row:
+        return {}
+    return row[0] if isinstance(row[0], dict) else {}
+
+
+async def update_sync_state(
+    conn: psycopg.AsyncConnection,
+    connection_id: str,
+    state: dict[str, Any],
+) -> None:
+    """Persist the ``sync_state`` JSONB blob for a connection."""
+    async with conn.cursor() as cur:
+        try:
+            await cur.execute(
+                "update public.exchange_connections set sync_state = %s where id::text = %s",
+                (Json(state), connection_id),
+            )
+        except psycopg.errors.UndefinedColumn:
+            await conn.rollback()
+
+
+async def update_last_funding_at(
+    conn: psycopg.AsyncConnection,
+    connection_id: str,
+    last_funding_at: datetime,
+) -> None:
+    """Bump the funding-events watermark column."""
+    async with conn.cursor() as cur:
+        try:
+            await cur.execute(
+                "update public.exchange_connections set last_funding_at = greatest(last_funding_at, %s) where id::text = %s",
+                (last_funding_at, connection_id),
+            )
+        except psycopg.errors.UndefinedColumn:
+            await conn.rollback()
+
+
+async def get_last_funding_at(
+    conn: psycopg.AsyncConnection,
+    connection_id: str,
+) -> datetime | None:
+    """Read the funding-events watermark for a connection."""
+    async with conn.cursor() as cur:
+        try:
+            await cur.execute(
+                "select last_funding_at from public.exchange_connections where id::text = %s",
+                (connection_id,),
+            )
+            row = await cur.fetchone()
+        except psycopg.errors.UndefinedColumn:
+            await conn.rollback()
+            return None
+    if not row:
+        return None
+    return row[0]
+
+
+# ---------------------------------------------------------------------------
+# sync_jobs queue — claim + complete / fail
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class SyncJobRow:
+    """Projection of one ``sync_jobs`` row."""
+
+    id: str
+    user_id: str
+    exchange_connection_id: str
+    state: str  # 'queued' | 'running' | 'succeeded' | 'failed'
+    created_at: datetime
+    started_at: datetime | None
+    finished_at: datetime | None
+
+
+async def claim_queued_sync_jobs(
+    conn: psycopg.AsyncConnection,
+    *,
+    limit: int = 10,
+) -> list[SyncJobRow]:
+    """Atomically claim up to ``limit`` queued sync jobs and mark them running.
+
+    Uses ``SELECT ... FOR UPDATE SKIP LOCKED`` so multiple workers can
+    coexist without double-claiming. Returns the rows just transitioned
+    to ``running``; caller commits.
+    """
+    sql = """
+        with picked as (
+            select id
+              from public.sync_jobs
+             where state = 'queued'
+             order by created_at
+             limit %s
+             for update skip locked
+        )
+        update public.sync_jobs
+           set state = 'running',
+               started_at = coalesce(started_at, now())
+          from picked
+         where public.sync_jobs.id = picked.id
+        returning
+            public.sync_jobs.id::text as id,
+            public.sync_jobs.user_id::text as user_id,
+            public.sync_jobs.exchange_connection_id::text as exchange_connection_id,
+            public.sync_jobs.state::text as state,
+            public.sync_jobs.created_at as created_at,
+            public.sync_jobs.started_at as started_at,
+            public.sync_jobs.finished_at as finished_at
+    """
+    async with conn.cursor(row_factory=dict_row) as cur:
+        await cur.execute(sql, (limit,))
+        rows = await cur.fetchall()
+    return [
+        SyncJobRow(
+            id=r["id"],
+            user_id=r["user_id"],
+            exchange_connection_id=r["exchange_connection_id"],
+            state=r["state"],
+            created_at=r["created_at"],
+            started_at=r["started_at"],
+            finished_at=r["finished_at"],
+        )
+        for r in rows
+    ]
+
+
+async def mark_sync_job_succeeded(
+    conn: psycopg.AsyncConnection,
+    *,
+    job_id: str,
+    fills_pulled: int,
+    funding_pulled: int,
+) -> None:
+    """Mark a sync_jobs row as completed successfully. Caller commits."""
+    async with conn.cursor() as cur:
+        await cur.execute(
+            """
+            update public.sync_jobs
+               set state = 'succeeded',
+                   finished_at = now(),
+                   fills_pulled = %s,
+                   funding_pulled = %s
+             where id::text = %s
+            """,
+            (fills_pulled, funding_pulled, job_id),
+        )
+
+
+async def mark_sync_job_failed(
+    conn: psycopg.AsyncConnection,
+    *,
+    job_id: str,
+    error_code: str,
+    error_message: str,
+    fills_pulled: int = 0,
+    funding_pulled: int = 0,
+) -> None:
+    """Mark a sync_jobs row as failed. Caller commits.
+
+    ``error_message`` is truncated to 1KB defensively (secrets should
+    already be masked upstream but belt-and-braces).
+    """
+    safe_msg = (error_message or "")[:1000]
+    async with conn.cursor() as cur:
+        await cur.execute(
+            """
+            update public.sync_jobs
+               set state = 'failed',
+                   finished_at = now(),
+                   error_code = %s,
+                   error_message = %s,
+                   fills_pulled = %s,
+                   funding_pulled = %s
+             where id::text = %s
+            """,
+            (error_code, safe_msg, fills_pulled, funding_pulled, job_id),
+        )
+
+
+async def recover_orphaned_sync_jobs(
+    conn: psycopg.AsyncConnection,
+    *,
+    older_than_minutes: int = 10,
+) -> int:
+    """Mark stuck ``running`` sync_jobs as failed.
+
+    A job is considered orphaned if ``started_at`` is older than
+    ``older_than_minutes`` and the worker has restarted (no heartbeat
+    column in v1 — we use age as proxy). Returns rows updated.
+    """
+    sql = """
+        update public.sync_jobs
+           set state = 'failed',
+               finished_at = now(),
+               error_code = 'worker_restarted',
+               error_message = 'sync_job orphaned; worker likely restarted mid-run'
+         where state = 'running'
+           and started_at < now() - (%s::text || ' minutes')::interval
+    """
+    async with conn.cursor() as cur:
+        await cur.execute(sql, (str(older_than_minutes),))
+        return cur.rowcount or 0
+
+
+async def get_connection_for_job(
+    conn: psycopg.AsyncConnection,
+    job: SyncJobRow,
+) -> ConnectionRow | None:
+    """Load the ConnectionRow referenced by a sync_jobs entry."""
+    return await get_connection(conn, job.exchange_connection_id)
+
+
+# ---------------------------------------------------------------------------
 # Matcher I/O
 # ---------------------------------------------------------------------------
 
@@ -473,7 +784,7 @@ async def load_matcher_positions(
         if closed_at is not None:
             hold_seconds = int((closed_at - opened_at).total_seconds())
         else:
-            hold_seconds = int((datetime.now(tz=timezone.utc) - opened_at).total_seconds())
+            hold_seconds = int((datetime.now(tz=UTC) - opened_at).total_seconds())
 
         out.append(
             MatcherPosition(

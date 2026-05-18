@@ -14,7 +14,13 @@
 // here but should NOT be called by pages — they only operate on the in-
 // memory fixtures and are kept for /spreads/demo and the seed script.
 
-export type ActivityType = "spread" | "trade" | "sale" | "airdrop";
+export type ActivityType =
+  | "spread"
+  | "trade"
+  | "sale"
+  | "airdrop"
+  | "yield_position"
+  | "option";
 
 export type SpreadType =
   | "cash_carry"
@@ -101,6 +107,8 @@ export const ACTIVITY_TYPE_LABELS: Record<ActivityType, string> = {
   trade: "Trade",
   sale: "Sale",
   airdrop: "Airdrop",
+  yield_position: "Yield",
+  option: "Option",
 };
 
 export const SPREAD_TYPE_LABELS: Record<SpreadType, string> = {
@@ -930,13 +938,17 @@ export function getTotals(rows: Activity[] = ARCHIVE_DATA): ArchiveTotals {
 }
 
 export function getActivityTypeCounts(rows: Activity[] = ARCHIVE_DATA): Record<ActivityType, number> {
-  const counts: Record<ActivityType, number> = { spread: 0, trade: 0, sale: 0, airdrop: 0 };
+  const counts: Record<ActivityType, number> = {
+    spread: 0, trade: 0, sale: 0, airdrop: 0, yield_position: 0, option: 0,
+  };
   rows.forEach((r) => { counts[r.type] += 1; });
   return counts;
 }
 
 export function getActivityTypeNetPnl(rows: Activity[] = ARCHIVE_DATA): Record<ActivityType, number> {
-  const net: Record<ActivityType, number> = { spread: 0, trade: 0, sale: 0, airdrop: 0 };
+  const net: Record<ActivityType, number> = {
+    spread: 0, trade: 0, sale: 0, airdrop: 0, yield_position: 0, option: 0,
+  };
   rows.forEach((r) => { net[r.type] += r.netPnl; });
   return net;
 }

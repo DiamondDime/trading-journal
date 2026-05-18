@@ -210,3 +210,25 @@ class ExchangeAdapter(ABC):
         raise AdapterUnsupportedError(
             f"Adapter for {self.exchange.value} does not implement fetch_klines"
         )
+
+    # ----- Targeted-scan support (orchestration-side optimisation) -----
+    #
+    # Set by the orchestration layer in `main.py` to narrow ``fetch_fills``
+    # scans to the user's known-active symbols. ``None`` means "unfiltered —
+    # scan every market" which is the safe default. Adapters that respect
+    # this filter (currently the universal ccxt adapter) read it during
+    # their per-symbol scan loop. Other adapters can ignore it.
+    symbol_filter: set[str] | None = None
+
+    async def discover_active_symbols(
+        self,
+        credentials: Credentials,
+    ) -> set[str]:
+        """Return ccxt symbols the user is currently active on.
+
+        Used by the orchestration layer to narrow per-symbol fill scans.
+        Default returns an empty set — adapters that can probe their venue's
+        positions/balances/open-orders endpoints override this.
+        """
+        _ = credentials
+        return set()

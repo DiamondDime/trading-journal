@@ -335,6 +335,14 @@ export async function getActivity(
       subtype = { type: 'airdrop', row: rows[0] };
       break;
     }
+    case 'yield_position':
+    case 'option': {
+      // v5: yield_position + option detail loads land in Wave 2e/2f via their
+      // own dedicated routes (/yield-positions/[id] + /options/[id]). The
+      // generic getActivityDetail() stops here and returns null so the older
+      // /spreads/[id] route doesn't try to render an incompatible subtype.
+      return null;
+    }
   }
 
   return {
@@ -574,10 +582,18 @@ export async function createAirdrop(
   userId: string,
   input: CreateAirdropData,
 ): Promise<{ id: string }> {
-  const claimIso = new Date(input.claimDate).toISOString();
-  const tokens = parseDec(input.tokensClaimed);
-  const valueAtClaim = parseDec(input.usdValueAtClaim);
-  const currentPrice = parseDec(input.currentPriceUsd);
+  // v5: with the pending-watchlist branch the wizard can pass a body without
+  // claim_date / tokens / value_at_claim / current_price. The full claim flow
+  // (status='claimed') still requires them — superRefine in
+  // CreateAirdropBody enforces that. Here we coerce missing values to '0' /
+  // openedAt-ish for the supertype's NOT NULL columns; the W2D wizard will
+  // emit a pending-shaped POST that lands the row in status='pending'.
+  const claimIso = input.claimDate
+    ? new Date(input.claimDate).toISOString()
+    : new Date().toISOString();
+  const tokens = parseDec(input.tokensClaimed ?? '0');
+  const valueAtClaim = parseDec(input.usdValueAtClaim ?? '0');
+  const currentPrice = parseDec(input.currentPriceUsd ?? '0');
   const currentValue = tokens * currentPrice;
   // Cost basis = $0 by definition. realized_pnl_usd = value_at_claim
   // (the income event); net_pnl_usd = current_value (the MTM today).
@@ -1181,7 +1197,9 @@ export async function getActivityTypeCounts(
         : sql``}
     GROUP BY type
   `;
-  const counts: ActivityTypeCounts = { spread: 0, trade: 0, sale: 0, airdrop: 0 };
+  const counts: ActivityTypeCounts = {
+    spread: 0, trade: 0, sale: 0, airdrop: 0, yield_position: 0, option: 0,
+  };
   for (const r of rows) counts[r.type] = Number(r.count);
   return counts;
 }
@@ -1198,7 +1216,9 @@ export async function getActivityTypeNetPnl(
     WHERE user_id = ${userId}::uuid
     GROUP BY type
   `;
-  const net: ActivityTypeCounts = { spread: 0, trade: 0, sale: 0, airdrop: 0 };
+  const net: ActivityTypeCounts = {
+    spread: 0, trade: 0, sale: 0, airdrop: 0, yield_position: 0, option: 0,
+  };
   for (const r of rows) net[r.type] = Number(r.net ?? 0);
   return net;
 }
@@ -1242,10 +1262,12 @@ export async function getActivityTypeAggregations(
     GROUP BY type
   `;
   const out: ActivityTypeAggregations = {
-    spread:  { count: 0, netPnl: 0, winners: 0, losers: 0, capital: 0 },
-    trade:   { count: 0, netPnl: 0, winners: 0, losers: 0, capital: 0 },
-    sale:    { count: 0, netPnl: 0, winners: 0, losers: 0, capital: 0 },
-    airdrop: { count: 0, netPnl: 0, winners: 0, losers: 0, capital: 0 },
+    spread:         { count: 0, netPnl: 0, winners: 0, losers: 0, capital: 0 },
+    trade:          { count: 0, netPnl: 0, winners: 0, losers: 0, capital: 0 },
+    sale:           { count: 0, netPnl: 0, winners: 0, losers: 0, capital: 0 },
+    airdrop:        { count: 0, netPnl: 0, winners: 0, losers: 0, capital: 0 },
+    yield_position: { count: 0, netPnl: 0, winners: 0, losers: 0, capital: 0 },
+    option:         { count: 0, netPnl: 0, winners: 0, losers: 0, capital: 0 },
   };
   for (const r of rows) {
     out[r.type] = {
@@ -1794,7 +1816,9 @@ export async function getCapitalByActivityType(
     WHERE user_id = ${userId}::uuid
     GROUP BY type
   `;
-  const out: ActivityTypeCounts = { spread: 0, trade: 0, sale: 0, airdrop: 0 };
+  const out: ActivityTypeCounts = {
+    spread: 0, trade: 0, sale: 0, airdrop: 0, yield_position: 0, option: 0,
+  };
   for (const r of rows) out[r.type] = Number(r.capital ?? 0);
   return out;
 }
