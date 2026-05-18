@@ -334,12 +334,12 @@ export default async function TradeReviewPage(props: { searchParams: Search }) {
         <SummaryHeading>{t("wizard.trade.review.sections.trade")}</SummaryHeading>
         <WizardSummaryRow
           label={t("wizard.trade.review.labels.kind")}
-          value={kind}
+          value={t(`tradeKind.${kind}` as const)}
           editHref={editAllHref}
         />
         <WizardSummaryRow
           label={t("wizard.trade.review.labels.status")}
-          value={status}
+          value={t(`status.${status}` as const)}
           editHref={editAllHref}
         />
         <WizardSummaryRow
@@ -359,7 +359,13 @@ export default async function TradeReviewPage(props: { searchParams: Search }) {
         />
         <WizardSummaryRow
           label={t("wizard.trade.review.labels.side")}
-          value={v.side || "—"}
+          value={
+            v.side === "long"
+              ? t("side.long")
+              : v.side === "short"
+              ? t("side.short")
+              : "—"
+          }
           editHref={editAllHref}
           tone={v.side === "short" ? "down" : v.side === "long" ? "up" : "neutral"}
         />

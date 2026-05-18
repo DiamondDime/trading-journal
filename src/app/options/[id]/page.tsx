@@ -142,7 +142,18 @@ export default async function OptionDetailPage({
   const statusLabel = t(`status.${activity.status}`);
   const subtypeLabel =
     option.subtype === "option_spread" && option.spreadStyle
-      ? option.spreadStyle.replace(/_/g, " ")
+      ? t(
+          (() => {
+            switch (option.spreadStyle) {
+              case "vertical":    return "optionSpreadStyle.vertical";
+              case "iron_condor": return "optionSpreadStyle.iron_condor";
+              case "calendar":    return "optionSpreadStyle.calendar";
+              case "strangle":    return "optionSpreadStyle.strangle";
+              case "butterfly":   return "optionSpreadStyle.butterfly";
+              default:            return "optionSpreadStyle.custom";
+            }
+          })(),
+        )
       : t("wizard.option.kinds.singleLeg.title");
 
   return (

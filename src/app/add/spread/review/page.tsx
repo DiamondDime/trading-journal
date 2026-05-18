@@ -45,6 +45,26 @@ const MATCHER_TO_DB_TYPE: Record<MatcherSpreadType,
   dex_cex: "dex_cex_arb",
 };
 
+// Translate a leg side / instrument kind enum value to a localized label.
+function sideKey(s: string): "side.long" | "side.short" | "side.buy" | "side.sell" {
+  switch (s) {
+    case "short": return "side.short";
+    case "buy":   return "side.buy";
+    case "sell":  return "side.sell";
+    default:      return "side.long";
+  }
+}
+function instrumentKindKey(
+  k: string,
+): "instrumentKind.spot" | "instrumentKind.perp" | "instrumentKind.dated_future" | "instrumentKind.option" {
+  switch (k) {
+    case "spot":         return "instrumentKind.spot";
+    case "dated_future": return "instrumentKind.dated_future";
+    case "option":       return "instrumentKind.option";
+    default:             return "instrumentKind.perp";
+  }
+}
+
 // Field names round-tripped through the GET-form submit on /fields. Stays in
 // sync with that page's input names + the action's decoder.
 const SPREAD_FIELDS = [
@@ -399,7 +419,7 @@ export default async function SpreadReviewPage(props: { searchParams: Search }) 
             label={t("wizard.spread.review.rows.status")}
             value={
               <span className="font-mono text-[11px] uppercase tracking-[0.14em] text-text">
-                {status.replace("_", " ")}
+                {t(`status.${status}` as const)}
               </span>
             }
             editHref={editAllHref}
@@ -499,7 +519,7 @@ export default async function SpreadReviewPage(props: { searchParams: Search }) 
                             {l.symbol}
                           </span>
                           <span className="font-mono text-[9px] uppercase tracking-[0.12em] text-text-tertiary">
-                            {l.instrumentKind}
+                            {t(instrumentKindKey(l.instrumentKind))}
                           </span>
                         </div>
                       </TableCell>
@@ -513,7 +533,7 @@ export default async function SpreadReviewPage(props: { searchParams: Search }) 
                             l.side === "long" ? "text-up" : "text-down",
                           )}
                         >
-                          {l.side}
+                          {t(sideKey(l.side))}
                         </span>
                       </TableCell>
                       <TableCell className="text-right font-mono text-[11px] tabular-nums text-text-secondary">
@@ -603,7 +623,7 @@ export default async function SpreadReviewPage(props: { searchParams: Search }) 
                             {l.symbol || "—"}
                           </span>
                           <span className="font-mono text-[9px] uppercase tracking-[0.12em] text-text-tertiary">
-                            {l.instrumentType}
+                            {t(instrumentKindKey(l.instrumentType))}
                           </span>
                         </div>
                       </TableCell>
@@ -617,7 +637,7 @@ export default async function SpreadReviewPage(props: { searchParams: Search }) 
                             l.side === "long" ? "text-up" : "text-down",
                           )}
                         >
-                          {l.side}
+                          {t(sideKey(l.side))}
                         </span>
                       </TableCell>
                       <TableCell className="text-right font-mono text-[11px] tabular-nums text-text-secondary">

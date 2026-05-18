@@ -1,5 +1,7 @@
 import type { ActivityType, ActivityStatus } from "@/types/canonical";
 import { cn } from "@/lib/utils";
+import { getT } from "@/lib/i18n/server";
+import type { MessageKey } from "@/lib/i18n/resolve";
 
 /**
  * Preview subtype payload — only the fields the headline + subtitle need.
@@ -66,26 +68,26 @@ const STATUS_DOT: Record<ActivityStatus, string> = {
   liquidated:   "bg-down",
 };
 
-const STATUS_LABEL: Record<ActivityStatus, string> = {
-  open:         "Open",
-  winding_down: "Winding down",
-  unwinding:    "Unwinding",
-  orphaned:     "Orphaned",
-  closed:       "Closed",
-  expired:      "Expired",
-  claimed:      "Claimed",
-  vesting:      "Vesting",
-  pending:      "Pending",
-  liquidated:   "Liquidated",
+const STATUS_KEY: Record<ActivityStatus, MessageKey> = {
+  open:         "status.open",
+  winding_down: "status.winding_down",
+  unwinding:    "status.unwinding",
+  orphaned:     "status.orphaned",
+  closed:       "status.closed",
+  expired:      "status.expired",
+  claimed:      "status.claimed",
+  vesting:      "status.vesting",
+  pending:      "status.pending",
+  liquidated:   "status.liquidated",
 };
 
-const TYPE_BADGE: Record<ActivityType, string> = {
-  spread:         "SPREAD",
-  trade:          "TRADE",
-  sale:           "SALE",
-  airdrop:        "AIRDROP",
-  yield_position: "YIELD",
-  option:         "OPTION",
+const TYPE_BADGE_KEY: Record<ActivityType, MessageKey> = {
+  spread:         "wizard.cardPreview.typeBadge.spread",
+  trade:          "wizard.cardPreview.typeBadge.trade",
+  sale:           "wizard.cardPreview.typeBadge.sale",
+  airdrop:        "wizard.cardPreview.typeBadge.airdrop",
+  yield_position: "wizard.cardPreview.typeBadge.yieldPosition",
+  option:         "wizard.cardPreview.typeBadge.option",
 };
 
 /**
@@ -168,7 +170,7 @@ function computeHeadline(
  * to SpreadListCard so the user sees exactly what /spreads/archive will
  * show after submit. Server component.
  */
-export function WizardCardPreview({
+export async function WizardCardPreview({
   activityType,
   subtype,
   name,
@@ -176,6 +178,7 @@ export function WizardCardPreview({
   serial,
   className,
 }: WizardCardPreviewProps) {
+  const t = await getT();
   const { label, unit, tone } = computeHeadline(activityType, subtype);
   const toneClass =
     tone === "up" ? "text-up" : tone === "down" ? "text-down" : "text-text";
@@ -194,7 +197,7 @@ export function WizardCardPreview({
           <span className="inline-flex items-center gap-1.5 text-text-tertiary">
             <span className={cn("h-1.5 w-1.5 rounded-full", STATUS_DOT[status])} />
             <span className="uppercase tracking-[0.12em] font-medium">
-              {STATUS_LABEL[status]}
+              {t(STATUS_KEY[status])}
             </span>
           </span>
           {serial && (
@@ -205,7 +208,7 @@ export function WizardCardPreview({
           )}
         </div>
         <h3 className="font-serif text-[17px] font-medium leading-tight text-text">
-          {name || "Untitled activity"}
+          {name || t("wizard.cardPreview.untitledActivity")}
         </h3>
         {(subtype.subtitle || subtype.symbol) && (
           <p className="flex items-center gap-1.5 text-[12px] text-text-tertiary truncate">
@@ -222,7 +225,7 @@ export function WizardCardPreview({
 
       <div className="flex flex-col items-end justify-between">
         <span className="font-mono text-[9px] uppercase tracking-[0.16em] text-text-tertiary">
-          {TYPE_BADGE[activityType]}
+          {t(TYPE_BADGE_KEY[activityType])}
         </span>
         <div className="text-right">
           <p

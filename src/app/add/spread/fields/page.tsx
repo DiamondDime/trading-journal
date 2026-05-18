@@ -807,7 +807,7 @@ export default async function SpreadFieldsPage(props: { searchParams: Search }) 
                       defaultChecked={defaults.variantCanonical === v}
                       className="sr-only"
                     />
-                    {v.replace("_", " ")}
+                    {t(`wizard.spread.fields.variantCanonical.${v}` as const)}
                   </label>
                 ))}
               </div>
@@ -844,7 +844,7 @@ export default async function SpreadFieldsPage(props: { searchParams: Search }) 
                   required
                   className="sr-only"
                 />
-                {s.replace("_", " ")}
+                {t(`status.${s}` as const)}
               </label>
             ))}
           </div>

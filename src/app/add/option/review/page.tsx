@@ -73,6 +73,22 @@ function parseNum(s: string): number {
   return Number.isFinite(n) ? n : 0;
 }
 
+// Narrow a raw spread_style value to its typed label key. Falls back to
+// "custom" if the value doesn't match a known style — defensive against
+// bad GET-param round-trips.
+function spreadStyleKey(
+  s: string,
+): "optionSpreadStyle.vertical" | "optionSpreadStyle.iron_condor" | "optionSpreadStyle.calendar" | "optionSpreadStyle.strangle" | "optionSpreadStyle.butterfly" | "optionSpreadStyle.custom" {
+  switch (s) {
+    case "vertical":    return "optionSpreadStyle.vertical";
+    case "iron_condor": return "optionSpreadStyle.iron_condor";
+    case "calendar":    return "optionSpreadStyle.calendar";
+    case "strangle":    return "optionSpreadStyle.strangle";
+    case "butterfly":   return "optionSpreadStyle.butterfly";
+    default:            return "optionSpreadStyle.custom";
+  }
+}
+
 function fmtUsd(n: number, signed = false): string {
   if (!Number.isFinite(n)) return "—";
   const abs = Math.abs(n).toLocaleString("en-US", {
@@ -263,7 +279,9 @@ export default async function OptionReviewPage(props: {
     getStr(sp, "name") ||
     (underlying !== "—"
       ? `${underlying.toUpperCase()} ${
-          isSpread && spreadStyle ? spreadStyle.replace(/_/g, " ") : "single leg"
+          isSpread && spreadStyle
+            ? t(spreadStyleKey(spreadStyle))
+            : t("wizard.option.review.singleLegLabel")
         }`
       : "—");
 
@@ -322,7 +340,7 @@ export default async function OptionReviewPage(props: {
           <p className="mt-2 font-mono text-[13px] text-text-secondary">
             {underlying.toUpperCase()} ·{" "}
             {isSpread && spreadStyle
-              ? spreadStyle.replace(/_/g, " ")
+              ? t(spreadStyleKey(spreadStyle))
               : t("wizard.option.review.singleLegLabel")}
             {" · "}
             {t("wizard.option.review.legCount", { count: legs.length })}
@@ -492,7 +510,7 @@ export default async function OptionReviewPage(props: {
           {isSpread && (
             <WizardSummaryRow
               label={t("wizard.option.review.rows.spreadStyle")}
-              value={spreadStyle ? spreadStyle.replace(/_/g, " ") : "—"}
+              value={spreadStyle ? t(spreadStyleKey(spreadStyle)) : "—"}
               editHref={editAllHref}
             />
           )}
@@ -560,8 +578,8 @@ export default async function OptionReviewPage(props: {
             symbol: underlying,
             subtitle:
               isSpread && spreadStyle
-                ? `Option · ${spreadStyle.replace(/_/g, " ")}`
-                : "Option · single_leg",
+                ? `${t("wizard.option.review.subtitleOption")} · ${t(spreadStyleKey(spreadStyle))}`
+                : `${t("wizard.option.review.subtitleOption")} · ${t("wizard.option.review.singleLegLabel")}`,
           }}
         />
       </section>

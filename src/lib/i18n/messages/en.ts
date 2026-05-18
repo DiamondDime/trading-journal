@@ -212,6 +212,28 @@ export const en = {
     buy: 'Buy',
     sell: 'Sell',
   },
+  instrumentKind: {
+    spot: 'Spot',
+    perp: 'Perp',
+    dated_future: 'Future',
+    option: 'Option',
+  },
+  tradeKind: {
+    spot: 'Spot',
+    perp: 'Perp',
+    dated_future: 'Future',
+    option: 'Option',
+    otc: 'OTC',
+    nft: 'NFT',
+  },
+  optionSpreadStyle: {
+    vertical:    'Vertical',
+    iron_condor: 'Iron condor',
+    calendar:    'Calendar',
+    strangle:    'Strangle',
+    butterfly:   'Butterfly',
+    custom:      'Custom',
+  },
   regime: {
     bull: 'Bull',
     bear: 'Bear',
@@ -1439,6 +1461,17 @@ export const en = {
     },
   },
   wizard: {
+    cardPreview: {
+      untitledActivity: 'Untitled activity',
+      typeBadge: {
+        spread:        'SPREAD',
+        trade:         'TRADE',
+        sale:          'SALE',
+        airdrop:       'AIRDROP',
+        yieldPosition: 'YIELD',
+        option:        'OPTION',
+      },
+    },
     shell: {
       newActivity: 'New activity',
       stepCounter: 'Step {step} of {total}',
@@ -1684,6 +1717,10 @@ export const en = {
         variantCanonical: {
           legend: 'Variant',
           aria: 'Canonical variant',
+          funding:     'Funding',
+          basis:       'Basis',
+          same_venue:  'Same venue',
+          cross_venue: 'Cross venue',
         },
         status: {
           legend: 'Status',
@@ -2882,6 +2919,7 @@ export const en = {
         heroDebit: 'debit',
         heroCredit: 'credit',
         singleLegLabel: 'single leg',
+        subtitleOption: 'Option',
         legCount: '{count} legs',
         dteValue: '{dte}d DTE',
         expired: 'expired',

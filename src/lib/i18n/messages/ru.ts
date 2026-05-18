@@ -214,6 +214,28 @@ export const ru: MessageDict = {
     buy: 'Покупка',
     sell: 'Продажа',
   },
+  instrumentKind: {
+    spot: 'Спот',
+    perp: 'Перп',
+    dated_future: 'Фьючерс',
+    option: 'Опцион',
+  },
+  tradeKind: {
+    spot: 'Спот',
+    perp: 'Перп',
+    dated_future: 'Фьючерс',
+    option: 'Опцион',
+    otc: 'OTC',
+    nft: 'NFT',
+  },
+  optionSpreadStyle: {
+    vertical:    'Вертикальный',
+    iron_condor: 'Айрон-кондор',
+    calendar:    'Календарный',
+    strangle:    'Стрэнгл',
+    butterfly:   'Бабочка',
+    custom:      'Кастомный',
+  },
   regime: {
     bull: 'Бычий',
     bear: 'Медвежий',
@@ -1458,6 +1480,17 @@ export const ru: MessageDict = {
     },
   },
   wizard: {
+    cardPreview: {
+      untitledActivity: 'Без названия',
+      typeBadge: {
+        spread:        'СПРЕД',
+        trade:         'СДЕЛКА',
+        sale:          'ПРОДАЖА',
+        airdrop:       'AIRDROP',
+        yieldPosition: 'ЙИЛД',
+        option:        'ОПЦИОН',
+      },
+    },
     shell: {
       newActivity: 'Новая активность',
       stepCounter: 'Шаг {step} из {total}',
@@ -1711,6 +1744,10 @@ export const ru: MessageDict = {
         variantCanonical: {
           legend: 'Вариант',
           aria: 'Канонический вариант',
+          funding:     'Фандинг',
+          basis:       'Базис',
+          same_venue:  'Одна площадка',
+          cross_venue: 'Кросс-площадки',
         },
         status: {
           legend: 'Статус',
@@ -2835,6 +2872,7 @@ export const ru: MessageDict = {
         heroDebit: 'дебит',
         heroCredit: 'кредит',
         singleLegLabel: 'одна нога',
+        subtitleOption: 'Опцион',
         legCount: '{count} ног',
         dteValue: '{dte}д DTE',
         expired: 'истёк',
