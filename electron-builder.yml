@@ -58,6 +58,12 @@ asarUnpack:
 compression: maximum
 artifactName: ${productName}-${version}-${os}-${arch}.${ext}
 
+# Skip @electron/rebuild — we have no native node deps that need recompiling
+# (PGlite is WASM, postgres.js is pure JS). The rebuild step was triggering
+# `not a file` errors on macOS specifically when probing the project root.
+npmRebuild: false
+nodeGypRebuild: false
+
 mac:
   category: public.app-category.finance
   target:
@@ -65,24 +71,14 @@ mac:
       arch:
         - x64
         - arm64
-  hardenedRuntime: true
+  hardenedRuntime: false
   gatekeeperAssess: false
-  entitlements: electron/build/entitlements.mac.plist
-  entitlementsInherit: electron/build/entitlements.mac.plist
-  # TODO: configure once you have a Developer ID cert.
-  # identity: null disables signing entirely — leave commented so
-  # electron-builder uses whatever cert is in your CSC_* env vars.
-  # identity: null
-  # notarize: false
+  # No signing in CI (no Developer ID cert configured). The flags above are
+  # also disabled because hardenedRuntime needs signing to be meaningful.
+  identity: null
+  notarize: false
 
 dmg:
-  contents:
-    - x: 130
-      y: 220
-    - x: 410
-      y: 220
-      type: link
-      path: /Applications
   sign: false
 
 # ============================================================================
