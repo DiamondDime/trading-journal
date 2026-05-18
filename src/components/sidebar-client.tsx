@@ -31,6 +31,7 @@ import { cn } from "@/lib/utils";
 import { useT } from "@/lib/i18n/client";
 import { LocaleSwitcher } from "@/components/locale-switcher";
 import { PortfolioSidebarWidget } from "@/components/balances/portfolio-sidebar-widget";
+import { NotificationsBell } from "@/components/notifications/bell";
 import type { SidebarCounts } from "@/lib/db/sidebar-counts";
 
 /**
@@ -199,22 +200,22 @@ export function SidebarClient({ counts, portfolio }: SidebarClientProps) {
         </div>
       )}
 
-      {/* Search — placeholder for the global ⌘K palette wired by the search
-          agent in `src/components/search/search-palette.tsx`. We keep the
-          input rendered so the visual position stays stable when the palette
-          mounts. */}
+      {/* Search + bell row */}
       <div className="px-3 pt-4 pb-2">
-        <div className="flex items-center gap-2 rounded-md border border-border bg-inset px-2.5 py-1.5 transition-colors hover:border-border-strong">
-          <Search className="h-3.5 w-3.5 text-text-tertiary" />
-          <input
-            type="text"
-            placeholder={t("sidebar.search")}
-            aria-label={t("sidebar.searchAria")}
-            className="flex-1 bg-transparent text-[12px] text-text placeholder:text-text-tertiary focus:outline-none"
-          />
-          <kbd className="hidden sm:inline-block font-mono text-[9px] text-text-tertiary border border-border rounded px-1 py-px">
-            ⌘K
-          </kbd>
+        <div className="flex items-center gap-2">
+          <div className="flex flex-1 items-center gap-2 rounded-md border border-border bg-inset px-2.5 py-1.5 transition-colors hover:border-border-strong">
+            <Search className="h-3.5 w-3.5 text-text-tertiary" />
+            <input
+              type="text"
+              placeholder={t("sidebar.search")}
+              aria-label={t("sidebar.searchAria")}
+              className="flex-1 bg-transparent text-[12px] text-text placeholder:text-text-tertiary focus:outline-none"
+            />
+            <kbd className="hidden sm:inline-block font-mono text-[9px] text-text-tertiary border border-border rounded px-1 py-px">
+              ⌘K
+            </kbd>
+          </div>
+          <NotificationsBell />
         </div>
       </div>
 

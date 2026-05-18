@@ -3320,6 +3320,21 @@ export const en = {
       delta24h: '{delta} 24h',
     },
   },
+  notifications: {
+    bellAria: 'Notifications',
+    title: 'Notifications',
+    empty: "You're all caught up.",
+    markAllRead: 'Mark all read',
+    kinds: {
+      deadline_t_minus_3: '3 days left',
+      deadline_t_minus_1: '1 day left',
+      deadline_today: 'Today',
+      deadline_overdue: 'Overdue',
+      drift_warning: 'Balance drift',
+    },
+    viewActivity: 'Open',
+    dismiss: 'Dismiss',
+  },
 } as const;
 
 /**

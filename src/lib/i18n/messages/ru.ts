@@ -3263,4 +3263,19 @@ export const ru: MessageDict = {
       delta24h: '{delta} 24ч',
     },
   },
+  notifications: {
+    bellAria: 'Уведомления',
+    title: 'Уведомления',
+    empty: 'Всё под контролем.',
+    markAllRead: 'Прочитать все',
+    kinds: {
+      deadline_t_minus_3: 'Осталось 3 дня',
+      deadline_t_minus_1: 'Остался 1 день',
+      deadline_today: 'Сегодня',
+      deadline_overdue: 'Просрочено',
+      drift_warning: 'Дрейф баланса',
+    },
+    viewActivity: 'Открыть',
+    dismiss: 'Закрыть',
+  },
 };

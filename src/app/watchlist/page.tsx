@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ArrowUpRight, BellOff } from "lucide-react";
+import { ArrowUpRight } from "lucide-react";
 import { requireUser } from "@/lib/auth/server";
 import { getT, getLocale } from "@/lib/i18n/server";
 import {
@@ -136,8 +136,6 @@ export default async function WatchlistPage() {
                 overdue: t("watchlist.countdown.overdue"),
                 openEnded: t("watchlist.countdown.openEnded"),
               }}
-              remindLabel={t("watchlist.remind.label")}
-              remindTooltip={t("watchlist.remind.tooltip")}
             />
           );
         })}
@@ -184,8 +182,6 @@ interface SectionProps {
     overdue: string;
     openEnded: string;
   };
-  remindLabel: string;
-  remindTooltip: string;
 }
 
 function WatchlistSection({
@@ -195,8 +191,6 @@ function WatchlistSection({
   emptyCopy,
   statusLabels,
   countdownT,
-  remindLabel,
-  remindTooltip,
 }: SectionProps) {
   return (
     <section
@@ -236,8 +230,6 @@ function WatchlistSection({
               intlLocale={intlLocale}
               statusLabels={statusLabels}
               countdownT={countdownT}
-              remindLabel={remindLabel}
-              remindTooltip={remindTooltip}
             />
           ))}
         </ul>
@@ -254,8 +246,6 @@ interface RowItemProps {
   intlLocale: string;
   statusLabels: SectionProps["statusLabels"];
   countdownT: SectionProps["countdownT"];
-  remindLabel: string;
-  remindTooltip: string;
 }
 
 function WatchlistRowItem({
@@ -264,8 +254,6 @@ function WatchlistRowItem({
   intlLocale,
   statusLabels,
   countdownT,
-  remindLabel,
-  remindTooltip,
 }: RowItemProps) {
   const status = row.status as keyof typeof statusLabels;
   const statusLabel = statusLabels[status] ?? row.status;
@@ -375,21 +363,7 @@ function WatchlistRowItem({
           </div>
         </Link>
 
-        {/* "Set reminder" affordance — UI stub, disabled until the v3 reminder
-            system lands. Lives outside the parent <Link> so the disabled
-            button does not look like a navigable target. */}
-        <div className="flex shrink-0 items-center">
-          <button
-            type="button"
-            disabled
-            title={remindTooltip}
-            aria-label={remindTooltip}
-            className="inline-flex items-center gap-1.5 rounded-sm border border-border bg-app px-2.5 py-1.5 font-mono text-[10px] uppercase tracking-[0.14em] text-text-tertiary opacity-60 cursor-not-allowed"
-          >
-            <BellOff className="h-3 w-3" />
-            <span>{remindLabel}</span>
-          </button>
-        </div>
+        {/* Notification bell in sidebar now handles deadline alerts. */}
       </div>
     </li>
   );
