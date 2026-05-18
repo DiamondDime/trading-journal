@@ -67,10 +67,6 @@ export const ru: MessageDict = {
     search: 'Поиск спредов, заметок…',
     searchAria: 'Поиск спредов и заметок',
     role: 'админ',
-    user: {
-      displayName: 'Андрей С.',
-      initials: 'АС',
-    },
   },
   header: {
     primaryNavAria: 'Основное',
@@ -1371,6 +1367,25 @@ export const ru: MessageDict = {
       timezone: 'Часовой пояс',
       baseCurrency: 'Базовая валюта',
       footer: 'Только чтение · v1',
+      editTitle: 'Редактировать профиль',
+      editSubtitle:
+        'Имя отображается в боковой панели. Часовой пояс и валюта влияют на каждую панель.',
+      placeholders: {
+        displayName: 'Ваше имя или ник',
+      },
+      actions: {
+        save: 'Сохранить изменения',
+        saving: 'Сохранение…',
+      },
+      status: {
+        saved: 'Сохранено в {time}',
+        error: 'Не удалось сохранить — попробуйте ещё раз.',
+      },
+      validation: {
+        displayNameTooLong: 'Имя должно быть не длиннее 64 символов.',
+        invalidTimezone: 'Выберите допустимый часовой пояс.',
+        invalidCurrency: 'Выберите допустимую валюту.',
+      },
     },
     mcp: {
       sectionHeading: 'MCP-мост',

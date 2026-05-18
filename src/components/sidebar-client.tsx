@@ -76,9 +76,16 @@ export interface SidebarClientProps {
   counts: SidebarCounts;
   /** Portfolio snapshot for the brand-area widget; null = no balances yet. */
   portfolio: SidebarPortfolioSummary | null;
+  /**
+   * Footer avatar copy. Pre-computed on the server from the profiles row so
+   * the sidebar never needs to know about i18n placeholders — both fall back
+   * to "—" when the profile is missing.
+   */
+  displayName: string;
+  initials: string;
 }
 
-export function SidebarClient({ counts, portfolio }: SidebarClientProps) {
+export function SidebarClient({ counts, portfolio, displayName, initials }: SidebarClientProps) {
   const pathname = usePathname();
   const t = useT();
 
@@ -371,7 +378,7 @@ export function SidebarClient({ counts, portfolio }: SidebarClientProps) {
       </nav>
 
       {/* Account footer */}
-      <SidebarFooter />
+      <SidebarFooter displayName={displayName} initials={initials} />
     </aside>
   );
 }
@@ -413,7 +420,7 @@ function SavedViewLink({
   );
 }
 
-function SidebarFooter() {
+function SidebarFooter({ displayName, initials }: { displayName: string; initials: string }) {
   const { theme, setTheme } = useTheme();
   const [mounted, setMounted] = React.useState(false);
   const t = useT();
@@ -427,11 +434,11 @@ function SidebarFooter() {
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2.5">
           <div className="flex h-8 w-8 items-center justify-center rounded-full bg-brand font-mono text-[11px] font-semibold text-white">
-            {t("sidebar.user.initials")}
+            {initials}
           </div>
           <div className="flex flex-col leading-tight">
             <span className="text-[12px] text-text font-medium">
-              {t("sidebar.user.displayName")}
+              {displayName}
             </span>
             <span className="font-mono text-[10px] text-text-tertiary">
               {t("sidebar.role")}

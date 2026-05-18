@@ -65,10 +65,6 @@ export const en = {
     search: 'Search spreads, notes…',
     searchAria: 'Search spreads and notes',
     role: 'admin',
-    user: {
-      displayName: 'Andrew S.',
-      initials: 'AS',
-    },
   },
   header: {
     primaryNavAria: 'Primary',
@@ -1352,6 +1348,25 @@ export const en = {
       timezone: 'Timezone',
       baseCurrency: 'Base currency',
       footer: 'Read-only · v1',
+      editTitle: 'Edit profile',
+      editSubtitle:
+        'Your display name appears in the sidebar. Time zone and base currency drive every dashboard.',
+      placeholders: {
+        displayName: 'Your name or handle',
+      },
+      actions: {
+        save: 'Save changes',
+        saving: 'Saving…',
+      },
+      status: {
+        saved: 'Saved {time}',
+        error: "Couldn't save — try again.",
+      },
+      validation: {
+        displayNameTooLong: 'Display name must be 64 characters or fewer.',
+        invalidTimezone: 'Pick a valid time zone.',
+        invalidCurrency: 'Pick a valid base currency.',
+      },
     },
     mcp: {
       sectionHeading: 'MCP bridge',

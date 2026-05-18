@@ -1,6 +1,7 @@
 import { sql } from "@/lib/db/client";
 import { getCurrentUser } from "@/lib/auth/server";
 import { getT } from "@/lib/i18n/server";
+import { ProfileForm } from "./profile-form";
 
 export const dynamic = "force-dynamic";
 
@@ -26,50 +27,34 @@ export default async function ProfileSettingsPage() {
   const user = await getCurrentUser();
   const profile = user ? await loadProfile(user.id) : null;
 
+  // Defensive defaults — shouldn't fire in single-user mode (APP_USER_ID is
+  // always set) but keep the UI rendering rather than crashing the layout.
+  const email = user?.email ?? profile?.email ?? "—";
+  const displayName = profile?.displayName ?? null;
+  const timezone = profile?.timezone ?? "Etc/UTC";
+  const baseCurrency = profile?.baseCurrency ?? "USD";
+
   return (
     <div className="space-y-8">
       <div>
         <h2 className="font-serif text-[24px] font-medium leading-tight text-text">
-          {t("common.profile")}
+          {t("settings.profile.editTitle")}
         </h2>
         <p className="mt-1 font-serif text-[13px] italic text-text-secondary">
-          {t("settings.profile.subtitle")}
+          {t("settings.profile.editSubtitle")}
         </p>
       </div>
 
-      <dl className="grid grid-cols-1 divide-y divide-border rounded-md border border-border bg-surface text-[13px]">
-        <FieldRow
-          label={t("settings.profile.displayName")}
-          value={profile?.displayName ?? "—"}
-        />
-        <FieldRow
-          label={t("settings.profile.email")}
-          value={user?.email ?? profile?.email ?? "—"}
-        />
-        <FieldRow
-          label={t("settings.profile.timezone")}
-          value={profile?.timezone ?? "—"}
-        />
-        <FieldRow
-          label={t("settings.profile.baseCurrency")}
-          value={profile?.baseCurrency ?? "—"}
-        />
-      </dl>
+      <ProfileForm
+        initialDisplayName={displayName}
+        initialTimezone={timezone}
+        initialBaseCurrency={baseCurrency}
+        email={email}
+      />
 
       <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-text-tertiary">
         {t("settings.profile.footer")}
       </p>
-    </div>
-  );
-}
-
-function FieldRow({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="flex items-center justify-between gap-6 px-5 py-3.5">
-      <dt className="font-mono text-[10px] uppercase tracking-[0.18em] text-text-tertiary">
-        {label}
-      </dt>
-      <dd className="font-mono text-[12px] text-text">{value}</dd>
     </div>
   );
 }
