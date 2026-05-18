@@ -2913,6 +2913,10 @@ export const en = {
         feeUsd: { label: 'Fee USD', placeholder: '12', helper: 'Network gas / withdrawal fee' },
         description: { label: 'Description', placeholder: 'Bridged from Ethereum to Arbitrum for an LP', helper: 'Free-form context' },
         relatedActivity: { label: 'Related activity', placeholder: '', helper: 'Optional UUID of a spread/trade/sale this funded' },
+        prefillDrift: {
+          label: 'Pre-filled from balance drift',
+          body: "We've filled in the asset and amount from the drift hint on /balances. Adjust the route + USD value before saving.",
+        },
         nav: {
           review: 'Review',
         },

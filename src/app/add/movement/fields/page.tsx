@@ -74,6 +74,14 @@ export default async function MovementFieldsPage(props: { searchParams: Search }
     relatedActivityId: getStr(sp, "relatedActivityId"),
   };
 
+  // Origin hint — when the user arrives here from the balances drift banner
+  // (`?prefill=drift`), surface a small inline note so they know why the asset
+  // + amount fields are already populated. URL params are the only signal;
+  // no DB lookup, no state. Keep the hint dismissable-by-edit (any change to
+  // the form clears it on submit — it's not threaded into review/submit).
+  const prefillSource = getStr(sp, "prefill");
+  const isDriftPrefill = prefillSource === "drift";
+
   return (
     <WizardShell
       type="movement"
@@ -83,6 +91,21 @@ export default async function MovementFieldsPage(props: { searchParams: Search }
       title={t("wizard.movement.fields.title", { kind: kindLabel })}
       subtitle={t(`wizard.movement.fields.subtitleByKind.${kindI18nKey}` as const)}
     >
+      {isDriftPrefill && (
+        <aside
+          role="status"
+          className="mb-7 rounded-md border border-warn/30 bg-warn/5 px-4 py-2.5 text-[12px] text-warn"
+        >
+          <span className="font-semibold uppercase tracking-[0.14em] text-[10px]">
+            {t("wizard.movement.fields.prefillDrift.label")}
+          </span>
+          {" — "}
+          <span className="font-serif italic">
+            {t("wizard.movement.fields.prefillDrift.body")}
+          </span>
+        </aside>
+      )}
+
       <form
         id="movement-fields-form"
         action="/add/movement/review"

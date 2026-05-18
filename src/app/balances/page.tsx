@@ -167,10 +167,28 @@ export default async function BalancesPage({ searchParams }: PageProps) {
  * balance disagrees with the journal's fills math by more than 0.5%.
  * Helps the user spot an unexpected transfer-in or a missed sync gap
  * before it becomes a tax-reconciliation headache.
+ *
+ * CTAs:
+ *   - "Investigate" → /settings/exchanges (existing, for re-syncing keys)
+ *   - "Log as movement" → /add/movement/fields pre-filled with the headliner
+ *     asset + absolute drift qty + kind=transfer. URL params are the wizard's
+ *     normal pre-fill path (same shape the review→edit link uses).
  */
 function DriftBanner({ drift }: { drift: DriftHint[] }) {
   const headliner = drift[0];
   const more = drift.length - 1;
+
+  // Drift qty is signed (reported - expected). The movement wizard takes a
+  // signed `amount`, but the user's mental model when clicking from a drift
+  // hint is "this much is unaccounted for" — so pre-fill the absolute value
+  // and let them flip the sign on the form if needed.
+  const absDriftQty = Math.abs(Number(headliner.driftQty));
+  const logMovementHref =
+    `/add/movement/fields?kind=transfer` +
+    `&asset=${encodeURIComponent(headliner.asset)}` +
+    `&amount=${Number.isFinite(absDriftQty) ? absDriftQty : ""}` +
+    `&prefill=drift`;
+
   return (
     <div className="flex flex-col gap-3 rounded-md border border-border border-l-4 border-l-signature bg-surface px-5 py-4 md:flex-row md:items-center md:justify-between">
       <div className="flex-1">
@@ -194,13 +212,22 @@ function DriftBanner({ drift }: { drift: DriftHint[] }) {
           </p>
         )}
       </div>
-      <Link
-        href="/settings/exchanges"
-        className="inline-flex items-center gap-2 self-start rounded-md border border-border bg-app px-4 py-2 font-mono text-[11px] uppercase tracking-[0.16em] text-text hover:border-border-strong md:self-auto"
-      >
-        Investigate
-        <ArrowRight className="h-3 w-3" />
-      </Link>
+      <div className="flex flex-col gap-2 self-start sm:flex-row sm:items-center md:self-auto">
+        <Link
+          href={logMovementHref}
+          className="inline-flex items-center gap-2 rounded-md border border-text bg-text px-4 py-2 font-mono text-[11px] uppercase tracking-[0.16em] text-app transition-opacity hover:opacity-90"
+        >
+          Log as movement
+          <ArrowRight className="h-3 w-3" />
+        </Link>
+        <Link
+          href="/settings/exchanges"
+          className="inline-flex items-center gap-2 rounded-md border border-border bg-app px-4 py-2 font-mono text-[11px] uppercase tracking-[0.16em] text-text hover:border-border-strong"
+        >
+          Investigate
+          <ArrowRight className="h-3 w-3" />
+        </Link>
+      </div>
     </div>
   );
 }

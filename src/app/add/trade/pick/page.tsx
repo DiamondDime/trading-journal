@@ -68,7 +68,14 @@ export default async function TradePickPage(props: { searchParams: Search }) {
   const t = await getT();
   const sp = await props.searchParams;
 
-  const source = getStr(sp, "source") === "auto" ? "auto" : "manual";
+  // `source` is set by step 1 (`/add/trade/source`) and forwarded through
+  // step 2 via a hidden input. If a user lands here without it (stale
+  // bookmark, direct paste, route walker), treat it as `auto` — that's the
+  // happy-path branch that actually shows the picker. The picker has a
+  // graceful empty state for users with no open positions, so this is
+  // strictly less surprising than silently 302-ing to /fields.
+  const rawSource = getStr(sp, "source");
+  const source: "auto" | "manual" = rawSource === "manual" ? "manual" : "auto";
   const kind = getStr(sp, "kind", "spot");
 
   // Re-route the cases where the picker is structurally inapplicable.
