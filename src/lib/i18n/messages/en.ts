@@ -862,12 +862,17 @@ export const en = {
         title: 'Spreads winding down',
         caption: 'One leg closed — the other awaits basis convergence or counter-fill.',
       },
+      yieldsPending: {
+        title: 'Yield positions pending',
+        caption: 'Planned but not yet entered. Confirm the stake/lend/farm before the conviction fades.',
+      },
     },
     deadlineLabels: {
       claimWindow: 'Claim window',
       nextUnlock: 'Next unlock',
       expiry: 'Expiry',
       convergence: 'Convergence',
+      entry: 'Planned entry',
     },
     countdown: {
       today: 'Today',
@@ -884,6 +889,7 @@ export const en = {
       salesVesting: 'No sales vesting or pending TGE.',
       optionsExpiring: 'No open option positions.',
       spreadsWinding: 'No spreads in winding-down state.',
+      yieldsPending: 'No yield positions waiting to be entered.',
       headline: 'Your watchlist is empty.',
       body: 'Log a pending airdrop, an open option, or a vesting sale and it will surface here ranked by urgency.',
       cta: 'Log activity →',

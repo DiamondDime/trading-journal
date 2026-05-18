@@ -32,7 +32,8 @@ export type WatchlistCategory =
   | 'airdrop_pending'
   | 'sale_pre_tge'
   | 'option_expiring'
-  | 'spread_winding_down';
+  | 'spread_winding_down'
+  | 'yield_pending';
 
 export interface WatchlistRow {
   /** Source activity id — drives the detail-page link. */
@@ -214,11 +215,35 @@ export async function listWatchlistItems(
         and f.type   = 'spread'
         and f.status = 'winding_down'
     ),
+    yields_pending as (
+      -- Yield positions the trader has set up but not yet entered. Status =
+      -- 'pending' was enabled by v5.1; the watchlist entry reminds them
+      -- "you planned to stake this — go pull the trigger". No natural
+      -- deadline (lockup applies after entry, not before), so the row
+      -- always sorts last in its bucket.
+      select
+        f.id,
+        f.name,
+        f.status,
+        f.type::text                              as type,
+        f.primary_symbol                          as primary_symbol,
+        f.card_subtitle                           as card_subtitle,
+        'yield_pending'::text                     as category,
+        null::date                                as deadline,
+        f.net_pnl_usd                             as net_pnl_usd,
+        f.capital_deployed_usd                    as capital_deployed_usd,
+        f.strategy_tag                            as strategy_tag
+      from public.v_activity_feed f
+      where f.user_id = ${userId}::uuid
+        and f.type   = 'yield_position'
+        and f.status = 'pending'
+    ),
     unioned as (
       select * from airdrops_pending
       union all select * from sales_pre_tge
       union all select * from options_open
       union all select * from spreads_winding
+      union all select * from yields_pending
     )
     select
       u.id,

@@ -35,6 +35,7 @@ const CATEGORY_ORDER: WatchlistCategory[] = [
   "sale_pre_tge",
   "option_expiring",
   "spread_winding_down",
+  "yield_pending",
 ];
 
 interface SectionDescriptor {
@@ -84,6 +85,12 @@ export default async function WatchlistPage() {
       title: t("watchlist.sections.spreadsWinding.title"),
       caption: t("watchlist.sections.spreadsWinding.caption"),
       deadlineLabel: t("watchlist.deadlineLabels.convergence"),
+    },
+    {
+      category: "yield_pending",
+      title: t("watchlist.sections.yieldsPending.title"),
+      caption: t("watchlist.sections.yieldsPending.caption"),
+      deadlineLabel: t("watchlist.deadlineLabels.entry"),
     },
   ];
 
@@ -147,7 +154,8 @@ function categoryEmptyKey(
   | "airdropsPending"
   | "salesVesting"
   | "optionsExpiring"
-  | "spreadsWinding" {
+  | "spreadsWinding"
+  | "yieldsPending" {
   switch (category) {
     case "airdrop_pending":
       return "airdropsPending";
@@ -157,6 +165,8 @@ function categoryEmptyKey(
       return "optionsExpiring";
     case "spread_winding_down":
       return "spreadsWinding";
+    case "yield_pending":
+      return "yieldsPending";
   }
 }
 
