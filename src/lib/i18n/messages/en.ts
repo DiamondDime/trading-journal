@@ -93,6 +93,8 @@ export const en = {
     title: 'Search',
     titleEmpty: 'Search the journal',
     hint: 'Find by name, symbol, tag, or strategy.',
+    emptyHint: 'Type something above to search across activities, notes, tags, and strategies.',
+    noResultsHint: "Nothing matched. Try a different term — or check the spelling.",
     placeholder: 'BTC, cash-and-carry, vesting…',
     inputAria: 'Search query',
     submit: 'Search',
