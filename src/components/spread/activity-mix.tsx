@@ -17,7 +17,14 @@ type Slice = {
   width: number;
 };
 
-const ACTIVITY_TYPE_ORDER: ActivityType[] = ["spread", "trade", "sale", "airdrop"];
+const ACTIVITY_TYPE_ORDER: ActivityType[] = [
+  "spread",
+  "trade",
+  "sale",
+  "airdrop",
+  "yield_position",
+  "option",
+];
 
 const SPREAD_SUBTYPE_ORDER: SpreadType[] = [
   "cash_carry",

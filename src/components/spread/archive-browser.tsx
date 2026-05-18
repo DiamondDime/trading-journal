@@ -53,7 +53,14 @@ type ViewMode = "table" | "cards";
 
 type OutcomeFilter = "all" | "winners" | "losers";
 
-const ACTIVITY_TYPE_ORDER: ActivityType[] = ["spread", "trade", "sale", "airdrop"];
+const ACTIVITY_TYPE_ORDER: ActivityType[] = [
+  "spread",
+  "trade",
+  "sale",
+  "airdrop",
+  "yield_position",
+  "option",
+];
 
 const TYPE_ORDER: SpreadType[] = [
   "cash_carry",
