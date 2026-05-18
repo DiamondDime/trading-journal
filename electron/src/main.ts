@@ -34,6 +34,9 @@ import { attachAutoUpdater } from './auto-update';
 // MCP token plumbing: idempotent loader for ~/.journal/mcp.json. Bridges the
 // standalone `trading-journal-mcp` npm package to the in-app HTTP API.
 import { loadOrCreateMcpToken } from './mcp-token';
+// Per-install identity: stable uuid + worker-auth secret persisted to
+// <userData>/journal.json. The Next.js subprocess needs both via env.
+import { loadOrProvisionUser, ensureProfileRow } from './user-provision';
 
 const isDev = process.env.DESKTOP_DEV === '1' || !app.isPackaged;
 const DEV_PORT = Number.parseInt(process.env.DESKTOP_DEV_PORT ?? '3000', 10);
@@ -132,6 +135,8 @@ function spawnNextServer(
   port: number,
   pgPort: number,
   mcpToken: string,
+  userId: string,
+  workerSecret: string,
 ): ChildProcess {
   const serverEntry = resolveStandaloneServerEntry();
   if (!existsSync(serverEntry)) {
@@ -166,6 +171,16 @@ function spawnNextServer(
       // source of truth is ~/.journal/mcp.json; we forward it here so the
       // Next.js subprocess doesn't need its own filesystem read.
       MCP_TOKEN: mcpToken,
+      // Per-install user identity. Without APP_USER_ID the Next.js side's
+      // requireUser() throws NOT_AUTHENTICATED on every request. Source of
+      // truth is <userData>/journal.json — see electron/src/user-provision.ts.
+      APP_USER_ID: userId,
+      // Shared secret with the Python sync daemon for /test-connection.
+      // We always set a non-empty value so the in-process worker client
+      // can authenticate; this also unblocks the local-only "exchange
+      // connect" form in production even before the worker is running.
+      // The daemon reads this same value from journal.json when it boots.
+      WORKER_HTTP_SECRET: workerSecret,
       // Don't inherit the parent process's ELECTRON_RUN_AS_NODE flag, etc.
       ELECTRON_RUN_AS_NODE: '1',
       NODE_ENV: 'production',
@@ -259,6 +274,19 @@ async function boot(): Promise<void> {
   desktopDb = await bootDesktopDb();
   console.log(`[main] PGlite ready at ${desktopDb.dataDir} (port ${desktopDb.port})`);
 
+  // Provision (or load) the per-install user id + worker secret. Persists to
+  // <userData>/journal.json. The id is stable across launches; the secret is
+  // generated once and reused so the worker daemon and Next.js subprocess
+  // share the same value.
+  const userData = app.getPath('userData');
+  const provisioned = await loadOrProvisionUser(userData);
+  await ensureProfileRow(desktopDb, provisioned.userId);
+  // SAFETY: log the id (debugging aid) but NEVER the workerSecret value.
+  console.log(
+    `[main] user provisioned ${provisioned.userId}` +
+      (provisioned.generated ? ' (fresh install)' : ' (existing)'),
+  );
+
   let targetPort: number;
   if (isDev) {
     // electron:dev runs `next dev` separately; just point at it.
@@ -271,7 +299,13 @@ async function boot(): Promise<void> {
   } else {
     targetPort = await findFreePort();
     console.log(`[main] spawning Next.js standalone on :${targetPort}`);
-    nextServer = spawnNextServer(targetPort, desktopDb.port, mcp.token);
+    nextServer = spawnNextServer(
+      targetPort,
+      desktopDb.port,
+      mcp.token,
+      provisioned.userId,
+      provisioned.workerSecret,
+    );
     await waitForServer(targetPort);
   }
 

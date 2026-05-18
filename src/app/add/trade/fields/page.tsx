@@ -134,7 +134,13 @@ export default async function TradeFieldsPage(props: { searchParams: Search }) {
     const { id: userId } = await requireUser();
     const row = await getTradeForEdit(userId, editId);
     if (row) {
-      const exchangeLabel = mapExchangeCodeToLabel(row.exchange);
+      // mapExchangeCodeToLabel returns null for codes the wizard doesn't
+      // list (e.g. a worker-imported `aster` row when Aster isn't in the
+      // picker). Surface the raw code wrapped in a sentinel so the form's
+      // <select> shows something the user can react to instead of silently
+      // selecting Binance.
+      const rawLabel = mapExchangeCodeToLabel(row.exchange);
+      const exchangeLabel = rawLabel ?? `— ${row.exchange} (not in picker) —`;
       const instrumentLabel =
         row.instrumentKind === "dated_future" ? "future" : row.instrumentKind;
       dbDefaults = {

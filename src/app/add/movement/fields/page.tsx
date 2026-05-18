@@ -51,6 +51,13 @@ export default async function MovementFieldsPage(props: { searchParams: Search }
     ? (rawKind as MovementEventKind)
     : "other";
 
+  // Edit-mode passthrough — when the user arrives from
+  // /movement-events/<id>?edit, this param carries the row id forward so
+  // logMovement() can UPDATE instead of INSERT a duplicate.
+  const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  const rawEditId = getStr(sp, "editId");
+  const editId = UUID_RE.test(rawEditId) ? rawEditId : "";
+
   const STEP_LABELS = [
     t("wizard.movement.stepLabels.kind"),
     t("wizard.movement.stepLabels.fields"),
@@ -113,6 +120,7 @@ export default async function MovementFieldsPage(props: { searchParams: Search }
         className="flex flex-col gap-7"
       >
         <input type="hidden" name="kind" value={kind} />
+        {editId && <input type="hidden" name="editId" value={editId} />}
 
         {/* ── When ─────────────────────────────────────────────────────── */}
         <SectionLabel>{t("wizard.movement.fields.section.when")}</SectionLabel>

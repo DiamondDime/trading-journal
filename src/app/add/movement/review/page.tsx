@@ -31,6 +31,9 @@ const VALID_KINDS: ReadonlySet<MovementEventKind> = new Set([
 ]);
 
 const MOVEMENT_FIELDS = [
+  // editId carries the row id forward in edit mode so logMovement() can
+  // UPDATE instead of INSERT a duplicate. Absent on fresh-create paths.
+  "editId",
   "kind",
   "occurredAt",
   "asset",

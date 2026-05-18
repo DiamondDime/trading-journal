@@ -72,8 +72,11 @@ export default async function MovementEventDetailPage({
   const serial = `E#${row.id.slice(0, 4).toUpperCase()}`;
 
   // Pre-fill the wizard for edit. The wizard renders fields/page.tsx from
-  // searchParams, so the same shape carries over.
+  // searchParams, so the same shape carries over. The `editId` param flips
+  // logMovement() into update-mode so re-submitting from this page UPDATEs
+  // the existing event_log row instead of inserting a duplicate.
   const editParams = new URLSearchParams();
+  editParams.set("editId", row.id);
   editParams.set("kind", row.kind);
   // datetime-local input wants YYYY-MM-DDTHH:mm (no seconds, no TZ).
   editParams.set(

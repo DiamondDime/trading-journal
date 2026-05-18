@@ -444,9 +444,30 @@ const TagListString = z
   )
   .pipe(z.array(z.string().max(40)).max(20));
 
-const TradeExchange = z.enum([
-  'Binance', 'Bybit', 'Hyperliquid', 'Coinbase', 'OKX', 'Other',
-]);
+/**
+ * Trade-wizard exchange labels — kept in sync with
+ * src/app/add/trade/db.ts EXCHANGE_LABEL_TO_CODE (the runtime authority).
+ *
+ * We don't import that map directly because src/app/add/trade/db.ts marks
+ * itself "server-only" and importing it here would pull the whole DB layer
+ * into client bundles. Sync is verified by tests/unit/zod-trade.test.ts.
+ *
+ * If you add a venue here, mirror it into EXCHANGE_LABEL_TO_CODE (and the
+ * picker in src/app/add/trade/fields/page.tsx EXCHANGES).
+ */
+const TRADE_EXCHANGE_LABELS = [
+  'Binance', 'Bybit', 'Hyperliquid', 'OKX', 'Deribit', 'Phemex',
+  'Bitget', 'MEXC', 'KuCoin', 'Kraken', 'Gate', 'BingX',
+] as const;
+const TRADE_EXCHANGE_SET: ReadonlySet<string> = new Set(TRADE_EXCHANGE_LABELS);
+
+const TradeExchange = z
+  .string()
+  .min(1)
+  .max(40)
+  .refine((v) => TRADE_EXCHANGE_SET.has(v), {
+    message: `Unknown exchange. Expected one of: ${TRADE_EXCHANGE_LABELS.join(', ')}.`,
+  });
 const TradeInstrument = z.enum(['perp', 'spot', 'future']);
 const TradeSide = z.enum(['long', 'short']);
 

@@ -48,9 +48,16 @@ export function mapExchangeLabelToCode(label: string): string {
   return code;
 }
 
-export function mapExchangeCodeToLabel(code: string): string {
+/**
+ * Reverse lookup: catalog code → wizard label. Returns `null` for codes that
+ * aren't in the mapping (e.g. a worker-imported `aster` row when the wizard
+ * doesn't list Aster). Callers MUST decide what to render in that case —
+ * silently falling back to "Binance" was the original v4 bug (Coinbase →
+ * Kraken misattribution); we surface the unknown value instead.
+ */
+export function mapExchangeCodeToLabel(code: string): string | null {
   const entry = Object.entries(EXCHANGE_LABEL_TO_CODE).find(([, v]) => v === code);
-  return entry?.[0] ?? "Binance";
+  return entry?.[0] ?? null;
 }
 
 // ─── Manual connection sentinel ─────────────────────────────────────────────
@@ -173,7 +180,11 @@ export async function listOpenPositionsForUser(
     return {
       positionId: r.id,
       exchangeCode: r.exchangeCode,
-      exchangeLabel: mapExchangeCodeToLabel(r.exchangeCode),
+      // Unknown codes (e.g. a venue the wizard doesn't list yet) render as a
+      // visible sentinel rather than silently misattributing to Binance. The
+      // picker card surfaces this so the user can't accidentally journal a
+      // trade against the wrong venue.
+      exchangeLabel: mapExchangeCodeToLabel(r.exchangeCode) ?? "— unknown —",
       symbol: r.symbol,
       instrument,
       side: r.side,

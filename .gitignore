@@ -67,3 +67,4 @@ playwright-report/
 # Electron build artifacts
 electron/dist/
 dist-electron/
+.audit-screenshots/

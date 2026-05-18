@@ -149,10 +149,13 @@ async function ensureDemoUser(): Promise<void> {
     ON CONFLICT (id) DO NOTHING
   `;
   // The on_auth_user_created trigger should have inserted the profile row.
-  // Verify + insert manually if absent (idempotent).
+  // Verify + insert manually if absent (idempotent). display_name is NULL —
+  // the sidebar's computeInitials() falls back to the first char of email,
+  // and a hardcoded "Demo Trader" leaks the seed source into every UI
+  // surface that renders the user's name. Let the user pick their own.
   await sql`
     INSERT INTO public.profiles (id, email, display_name)
-    VALUES (${DEMO_USER_ID}::uuid, ${DEMO_USER_EMAIL}, 'Demo Trader')
+    VALUES (${DEMO_USER_ID}::uuid, ${DEMO_USER_EMAIL}, NULL)
     ON CONFLICT (id) DO NOTHING
   `;
 }

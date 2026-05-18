@@ -3,8 +3,13 @@
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { requireUser } from "@/lib/auth/server";
-import { createEventLog } from "@/lib/db/events";
-import { CreateEventLogBody } from "@/lib/db/zod-schemas";
+import { createEventLog, updateEventLog } from "@/lib/db/events";
+import {
+  CreateEventLogBody,
+  UpdateEventLogBody,
+} from "@/lib/db/zod-schemas";
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 function stripNextInternals(
   entries: [string, FormDataEntryValue][],
@@ -50,21 +55,46 @@ function toZodInput(form: Record<string, string>): Record<string, unknown> {
  * Server action for the movement wizard's final submit. event_log is a
  * standalone table (NOT in activity supertype) so this skips the
  * activity-creation transaction altogether.
+ *
+ * Edit mode: when `editId=<uuid>` is in the FormData, this action calls
+ * updateEventLog() against the existing row instead of inserting a new
+ * one. The detail page (/movement-events/<id>) populates that hidden field
+ * when the user lands here via its Edit link.
  */
 export async function logMovement(formData: FormData): Promise<void> {
   let eventId: string | null = null;
+  let isEdit = false;
   let redirectError: string | null = null;
 
   // Keep the raw form payload around for the error-redirect round trip.
-  const cleaned: Record<string, string> = Object.fromEntries(
+  const cleanedAll: Record<string, string> = Object.fromEntries(
     stripNextInternals([...formData.entries()]),
   ) as Record<string, string>;
 
+  const editRaw = cleanedAll.editId ?? "";
+  const editId = UUID_RE.test(editRaw) ? editRaw : null;
+  // Don't echo editId back through error redirects as a top-level form key;
+  // the review page rebuilds it from MOVEMENT_FIELDS so the original
+  // cleanedAll (which already carries it) is what we want.
+  const cleaned: Record<string, string> = { ...cleanedAll };
+  delete cleaned.editId;
+
   try {
     const { id: userId } = await requireUser();
-    const input = CreateEventLogBody.parse(toZodInput(cleaned));
-    const { id } = await createEventLog(userId, input);
-    eventId = id;
+    if (editId) {
+      // UpdateEventLogBody is permissive (every field optional); reuse the
+      // same camelCase → snake_case mapping then drop undefined keys so the
+      // updateEventLog helper's `Object.keys` check doesn't over-write.
+      const partial = UpdateEventLogBody.parse(toZodInput(cleaned));
+      const ok = await updateEventLog(userId, editId, partial);
+      if (!ok) throw new Error("Movement event not found or not owned by you");
+      eventId = editId;
+      isEdit = true;
+    } else {
+      const input = CreateEventLogBody.parse(toZodInput(cleaned));
+      const { id } = await createEventLog(userId, input);
+      eventId = id;
+    }
   } catch (e) {
     redirectError = e instanceof Error ? e.message : String(e);
   }
@@ -73,11 +103,13 @@ export async function logMovement(formData: FormData): Promise<void> {
     // Invalidate the sidebar count + the list page.
     revalidatePath("/spreads");
     revalidatePath("/movement-events");
-    redirect(`/movement-events/${eventId}?from=wizard`);
+    revalidatePath(`/movement-events/${eventId}`);
+    const action = isEdit ? "edited" : "created";
+    redirect(`/movement-events/${eventId}?from=wizard&action=${action}`);
   } else {
     const qs = new URLSearchParams({
       error: redirectError ?? "Unknown error logging movement",
-      ...cleaned,
+      ...cleanedAll,
     }).toString();
     redirect(`/add/movement/review?${qs}`);
   }

@@ -115,9 +115,38 @@ export const POST = withAuth(async (req, { userId }) => {
   // Eager validation — ask the worker to run adapter.connect().
   const probe = await testConnectionViaWorker(connectionId);
 
+  // ── Worker-side failures: distinguish "worker not reachable" from
+  //    "worker says no". The former is the normal local-only / first-install
+  //    case (worker daemon not started yet) and MUST NOT roll back the
+  //    insert; the latter means the worker actively rejected the keys and
+  //    we should clean up so the user can retry.
+  const WORKER_INFRASTRUCTURE_ERRORS = new Set([
+    'worker_misconfigured',
+    'worker_unreachable',
+    'worker_timeout',
+  ]);
+
+  if (!probe.ok && WORKER_INFRASTRUCTURE_ERRORS.has(probe.error ?? '')) {
+    // Persist as pending with an explicit message. The sync daemon will
+    // pick this up and finish validation on its next cycle.
+    await sql`
+      UPDATE public.exchange_connections
+      SET status = 'pending',
+          status_message = 'Awaiting worker validation — start the sync daemon to verify.'
+      WHERE id = ${connectionId}::uuid AND user_id = ${userId}::uuid
+    `;
+    return created({
+      ...createdRow,
+      status: 'pending',
+      statusMessage: 'Awaiting worker validation — start the sync daemon to verify.',
+    });
+  }
+
   if (!probe.ok) {
-    // Soft-delete the row so the user can retry with a different key
-    // without hitting the unique-label constraint immediately.
+    // Worker IS reachable but rejected the keys (auth_failed / permission /
+    // rate_limited / unknown adapter error). Soft-delete the row so the user
+    // can retry with a different key without hitting the unique-label
+    // constraint immediately.
     await sql`
       UPDATE public.exchange_connections
       SET deleted_at = now(), status = 'auth_failed', status_message = ${probe.message ?? probe.error ?? 'connect failed'}

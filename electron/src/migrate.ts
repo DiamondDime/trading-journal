@@ -31,6 +31,16 @@ export interface DesktopDbHandle {
   port: number;
   dataDir: string;
   applied: string[];
+  /**
+   * Direct query handle on the in-process PGlite instance. Used by the
+   * user-provisioning step (electron/src/user-provision.ts) which needs to
+   * run an UPSERT against `auth.users` + `public.profiles` BEFORE the
+   * Next.js subprocess (and its postgres.js client) spawn. Going through
+   * the wire-protocol port would work but adds a connection round-trip
+   * for a one-off boot-time write.
+   */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  query: (text: string, params?: unknown[]) => Promise<{ rows: any[] }>;
   /** Stop the wire-protocol server and close the PGlite instance. */
   shutdown: () => Promise<void>;
 }
@@ -114,6 +124,8 @@ export function bootDesktopDb(opts: {
       port,
       dataDir,
       applied,
+      // PGlite's query signature matches PgQueryRunner from user-provision.ts.
+      query: (text: string, params?: unknown[]) => db.query(text, params),
       async shutdown() {
         try {
           await server.stop();
