@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Inter, JetBrains_Mono, Source_Serif_4 } from "next/font/google";
 import { ThemeProvider } from "@/components/theme-provider";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { UpdateBanner } from "@/components/desktop/update-banner";
 import { LocaleProvider } from "@/lib/i18n/context";
 import { getLocale, getMessages } from "@/lib/i18n/server";
 import "./globals.css";
@@ -51,6 +52,8 @@ export default async function RootLayout({
           disableTransitionOnChange
         >
           <LocaleProvider locale={locale} messages={messages}>
+            {/* No-op in webapp mode; renders only when window.electronAPI is present. */}
+            <UpdateBanner />
             <TooltipProvider>{children}</TooltipProvider>
           </LocaleProvider>
         </ThemeProvider>

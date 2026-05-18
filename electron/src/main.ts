@@ -1,0 +1,328 @@
+/**
+ * Electron main process for Journal (crypto-spread-journal).
+ *
+ * Architecture
+ * ------------
+ * - In packaged production builds, the main process spawns the Next.js
+ *   standalone server (`server.js`) as a Node subprocess. The standalone
+ *   bundle ships with the app (see `electron-builder.yml` `files` glob) and
+ *   listens on $PORT chosen by `findFreePort` below.
+ * - In `electron:dev`, the user runs `next dev` separately via `concurrently`,
+ *   so this process honours `DESKTOP_DEV=1` and skips spawning anything —
+ *   it just waits for whatever is on $DESKTOP_DEV_PORT (default 3000) and
+ *   loads it into the BrowserWindow.
+ *
+ * Decision: subprocess spawn (vs Next's programmatic API).
+ *   `next start` / `server.js` is the supported public surface. The
+ *   programmatic API (`import next from 'next'`) is documented as unstable
+ *   and breaks across minor versions, especially in Next 16. Subprocess +
+ *   `output: 'standalone'` is what every production Electron-Next setup
+ *   uses (e.g. Notion clones, Outline, Linear-style apps).
+ *
+ * DB / Worker / Auto-updater are wired by other agents; this file leaves
+ * marked TODO stubs where their entry points should attach.
+ */
+import { app, BrowserWindow, shell, ipcMain, type IpcMainInvokeEvent } from 'electron';
+import { spawn, type ChildProcess } from 'node:child_process';
+import { createServer } from 'node:net';
+import { join, resolve } from 'node:path';
+import { existsSync } from 'node:fs';
+import { bootDesktopDb, type DesktopDbHandle } from './migrate';
+// Auto-update agent: helper that wires `electron-updater` + IPC channels.
+// Idempotent and a no-op in dev mode.
+import { attachAutoUpdater } from './auto-update';
+
+const isDev = process.env.DESKTOP_DEV === '1' || !app.isPackaged;
+const DEV_PORT = Number.parseInt(process.env.DESKTOP_DEV_PORT ?? '3000', 10);
+const PORT_RANGE_START = 3500;
+const PORT_RANGE_END = 3600;
+const STARTUP_TIMEOUT_MS = 30_000;
+
+// Singletons we have to clean up on exit.
+let mainWindow: BrowserWindow | null = null;
+let nextServer: ChildProcess | null = null;
+let desktopDb: DesktopDbHandle | null = null;
+// Worker subprocess will be owned by the worker agent. Reserved here so that
+// the lifecycle in `app.on('before-quit')` already handles it.
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+let syncWorker: ChildProcess | null = null;
+
+/**
+ * Probe ports in [PORT_RANGE_START, PORT_RANGE_END) and return the first one
+ * that accepts a `listen()` (i.e. nothing else is bound to it).
+ *
+ * We rely on Node's `net.createServer` instead of `getPort` to avoid an extra
+ * runtime dep — the logic is 15 lines.
+ */
+async function findFreePort(): Promise<number> {
+  for (let port = PORT_RANGE_START; port < PORT_RANGE_END; port++) {
+    const ok = await new Promise<boolean>((resolveFn) => {
+      const probe = createServer();
+      probe.unref();
+      probe.once('error', () => resolveFn(false));
+      probe.once('listening', () => {
+        probe.close(() => resolveFn(true));
+      });
+      probe.listen(port, '127.0.0.1');
+    });
+    if (ok) return port;
+  }
+  throw new Error(
+    `No free port in [${PORT_RANGE_START}, ${PORT_RANGE_END}) — refusing to start.`,
+  );
+}
+
+/**
+ * Poll http://127.0.0.1:{port}/ until it returns any HTTP response (we don't
+ * care about the status code, only that the server has bound and is answering).
+ */
+async function waitForServer(port: number, timeoutMs = STARTUP_TIMEOUT_MS): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  const url = `http://127.0.0.1:${port}/`;
+  while (Date.now() < deadline) {
+    try {
+      const res = await fetch(url, { method: 'HEAD' });
+      // Any response means the listener is up. Next.js may briefly 404 the
+      // root before app router has hydrated; that's fine for us.
+      if (res.status > 0) return;
+    } catch {
+      // ECONNREFUSED while booting — ignore and retry.
+    }
+    await new Promise((r) => setTimeout(r, 200));
+  }
+  throw new Error(`Next.js server on :${port} did not respond within ${timeoutMs}ms`);
+}
+
+/**
+ * Resolve the path to `.next/standalone/server.js`.
+ *
+ * In a packaged build the standalone bundle is listed in `asarUnpack`
+ * (see `electron-builder.yml`) so it lives at
+ *   resources/app.asar.unpacked/.next/standalone/server.js
+ * — Electron transparently rewrites paths via `app.asar` to the unpacked
+ * dir, but we use the explicit `.unpacked` path because the Node subprocess
+ * we spawn is *not* Electron-aware and won't perform that rewrite itself.
+ *
+ * When running unpackaged (rare: `electron .` against a freshly-built but
+ * un-bundled tree), we look relative to the repo root.
+ */
+function resolveStandaloneServerEntry(): string {
+  if (app.isPackaged) {
+    return join(
+      process.resourcesPath,
+      'app.asar.unpacked',
+      '.next',
+      'standalone',
+      'server.js',
+    );
+  }
+  return resolve(__dirname, '..', '..', '.next', 'standalone', 'server.js');
+}
+
+/**
+ * Spawn the Next.js standalone server. Standalone bundles expose a plain
+ * Node entry that honours $PORT and $HOSTNAME. We point its working directory
+ * at the standalone root so its require()s resolve against the bundled
+ * node_modules.
+ */
+function spawnNextServer(port: number, pgPort: number): ChildProcess {
+  const serverEntry = resolveStandaloneServerEntry();
+  if (!existsSync(serverEntry)) {
+    throw new Error(
+      `Standalone server entry not found at ${serverEntry}. ` +
+        `Did you run \`pnpm build\` before \`pnpm electron:pack\`?`,
+    );
+  }
+
+  const userData = app.getPath('userData');
+  const dataDir = join(userData, 'data');
+
+  const child = spawn(process.execPath, [serverEntry], {
+    cwd: resolve(serverEntry, '..'),
+    env: {
+      ...process.env,
+      // Tell the Next.js code path that it's running inside Electron so the
+      // DB layer (PGlite) and any other desktop-specific branches activate.
+      DESKTOP_MODE: '1',
+      PORT: String(port),
+      HOSTNAME: '127.0.0.1',
+      // The PGlite WASM database lives in the main (Electron) process. Its
+      // wire-protocol bridge is bound to PGLITE_PORT on loopback; the Next.js
+      // server's postgres.js client connects there. See src/lib/db/client.ts.
+      PGLITE_PORT: String(pgPort),
+      // Retained for the worker subprocess (Python) which speaks PGlite
+      // directly. The Next.js subprocess doesn't read this — it connects via
+      // PGLITE_PORT — but downstream tooling may.
+      PGLITE_DATA_DIR: dataDir,
+      // Don't inherit the parent process's ELECTRON_RUN_AS_NODE flag, etc.
+      ELECTRON_RUN_AS_NODE: '1',
+      NODE_ENV: 'production',
+    },
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
+
+  child.stdout?.on('data', (chunk: Buffer) => {
+    process.stdout.write(`[next] ${chunk.toString()}`);
+  });
+  child.stderr?.on('data', (chunk: Buffer) => {
+    process.stderr.write(`[next!] ${chunk.toString()}`);
+  });
+  child.on('exit', (code, signal) => {
+    console.error(`[next] exited code=${code} signal=${signal}`);
+    if (mainWindow) {
+      // If the server dies after the window is open, surface it loudly.
+      // We can replace this with a proper recovery dialog later.
+      mainWindow.webContents.executeJavaScript(
+        `console.error('Next.js server exited unexpectedly (code=${code}).')`,
+      );
+    }
+  });
+  return child;
+}
+
+function createMainWindow(targetUrl: string): BrowserWindow {
+  const win = new BrowserWindow({
+    title: 'Journal',
+    width: 1400,
+    height: 900,
+    minWidth: 1024,
+    minHeight: 640,
+    backgroundColor: '#000000',
+    show: false,
+    webPreferences: {
+      preload: join(__dirname, 'preload.js'),
+      nodeIntegration: false,
+      contextIsolation: true,
+      sandbox: true,
+      // Allow loading http://localhost without warnings in dev.
+      // We never load remote URLs in this window.
+      webSecurity: true,
+    },
+  });
+
+  win.once('ready-to-show', () => win.show());
+
+  // External links open in the user's browser, not inside the app.
+  win.webContents.setWindowOpenHandler(({ url }) => {
+    if (url.startsWith('http://') || url.startsWith('https://')) {
+      void shell.openExternal(url);
+    }
+    return { action: 'deny' };
+  });
+
+  void win.loadURL(targetUrl);
+  return win;
+}
+
+function registerIpcHandlers(): void {
+  ipcMain.handle('app:getVersion', (_event: IpcMainInvokeEvent) => app.getVersion());
+  ipcMain.handle('app:openExternal', async (_event: IpcMainInvokeEvent, url: string) => {
+    if (typeof url !== 'string') throw new Error('openExternal: url must be a string');
+    if (!url.startsWith('http://') && !url.startsWith('https://')) {
+      throw new Error('openExternal: only http(s) URLs allowed');
+    }
+    await shell.openExternal(url);
+    return true;
+  });
+}
+
+async function boot(): Promise<void> {
+  registerIpcHandlers();
+
+  // Boot the PGlite database BEFORE we spawn the Next.js subprocess. The
+  // subprocess connects to PGlite via the wire-protocol bridge on PGLITE_PORT;
+  // if it queried before the bridge was up, postgres.js would ECONNREFUSED.
+  desktopDb = await bootDesktopDb();
+  console.log(`[main] PGlite ready at ${desktopDb.dataDir} (port ${desktopDb.port})`);
+
+  let targetPort: number;
+  if (isDev) {
+    // electron:dev runs `next dev` separately; just point at it.
+    targetPort = DEV_PORT;
+    console.log(`[main] dev mode — expecting Next.js on :${targetPort}`);
+    await waitForServer(targetPort).catch((err) => {
+      console.error('[main] dev server not reachable:', err);
+      throw err;
+    });
+  } else {
+    targetPort = await findFreePort();
+    console.log(`[main] spawning Next.js standalone on :${targetPort}`);
+    nextServer = spawnNextServer(targetPort, desktopDb.port);
+    await waitForServer(targetPort);
+  }
+
+  mainWindow = createMainWindow(`http://127.0.0.1:${targetPort}`);
+
+  // -------------------------------------------------------------------------
+  // Auto-update agent — attach AFTER the window exists so renderer IPC works.
+  // No-op in dev (`app.isPackaged === false`). Idempotent.
+  // -------------------------------------------------------------------------
+  attachAutoUpdater(mainWindow);
+
+  // TODO(worker): when the sync worker is ported, spawn it here using the
+  //   same env (DESKTOP_MODE=1, PGLITE_DATA_DIR=...) so it shares the DB.
+}
+
+app.whenReady().then(() => {
+  boot().catch((err) => {
+    console.error('[main] boot failed:', err);
+    app.exit(1);
+  });
+
+  app.on('activate', () => {
+    // macOS: re-create the window when the dock icon is clicked and no
+    // windows are open.
+    if (BrowserWindow.getAllWindows().length === 0) {
+      // Just open a new window pointing at the same server.
+      // We assume the server is still alive; if not, user can quit and relaunch.
+      const port = nextServer ? null : DEV_PORT;
+      // In production, we don't know the spawned port here without state —
+      // but mainWindow's URL has it. Fall back to recreating from origin.
+      const lastUrl = mainWindow?.webContents.getURL();
+      const url = lastUrl && lastUrl.startsWith('http')
+        ? new URL(lastUrl).origin
+        : `http://127.0.0.1:${port ?? DEV_PORT}`;
+      mainWindow = createMainWindow(url);
+    }
+  });
+});
+
+app.on('window-all-closed', () => {
+  // macOS apps typically stay running until the user explicitly quits.
+  if (process.platform !== 'darwin') {
+    app.quit();
+  }
+});
+
+app.on('before-quit', () => {
+  if (nextServer && !nextServer.killed) {
+    nextServer.kill('SIGTERM');
+    nextServer = null;
+  }
+  if (syncWorker && !syncWorker.killed) {
+    syncWorker.kill('SIGTERM');
+    syncWorker = null;
+  }
+  if (desktopDb) {
+    // Don't await — Electron will quit shortly after this handler returns.
+    // The shutdown closes the socket and flushes PGlite to disk; we let it
+    // race with process exit because PGlite's file format is crash-safe (it
+    // is, in the end, Postgres).
+    desktopDb.shutdown().catch((err) => {
+      console.error('[main] PGlite shutdown failed:', err);
+    });
+    desktopDb = null;
+  }
+});
+
+// Block creation of additional renderer-process windows from web content.
+// External URLs are already handled in setWindowOpenHandler.
+app.on('web-contents-created', (_event, contents) => {
+  contents.on('will-navigate', (event, url) => {
+    const allowed = `http://127.0.0.1:`;
+    if (!url.startsWith(allowed)) {
+      event.preventDefault();
+      void shell.openExternal(url);
+    }
+  });
+});

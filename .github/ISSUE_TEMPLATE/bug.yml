@@ -1,0 +1,92 @@
+name: Bug report
+description: Report something that is broken or regresses
+title: "bug: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for filing a bug. Please redact any API keys, addresses, or
+        other secrets before pasting logs.
+
+  - type: textarea
+    id: description
+    attributes:
+      label: Description
+      description: A clear, single-paragraph description of the problem.
+      placeholder: When I do X, Y happens. I expected Z.
+    validations:
+      required: true
+
+  - type: textarea
+    id: repro
+    attributes:
+      label: Reproduction steps
+      description: Numbered steps that reliably reproduce the issue.
+      placeholder: |
+        1.
+        2.
+        3.
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behaviour
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behaviour
+    validations:
+      required: true
+
+  - type: dropdown
+    id: environment
+    attributes:
+      label: Environment
+      description: Which flavor of the app are you running?
+      options:
+        - Desktop app (.dmg / .exe / .AppImage)
+        - Self-hosted webapp (Docker Compose)
+        - Self-hosted webapp (local dev — pnpm dev)
+        - Other / not sure
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: Version or commit SHA
+      description: Desktop — the version shown in the About menu. Webapp — `git rev-parse HEAD`.
+      placeholder: "0.1.0 / a1b2c3d"
+    validations:
+      required: true
+
+  - type: input
+    id: os
+    attributes:
+      label: OS
+      description: e.g. macOS 14.5, Ubuntu 24.04, Windows 11.
+    validations:
+      required: true
+
+  - type: input
+    id: exchange
+    attributes:
+      label: Exchange involved (if adapter bug)
+      placeholder: e.g. Binance, Hyperliquid, n/a
+    validations:
+      required: false
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: Paste relevant log lines. Redact any keys.
+      render: shell
+    validations:
+      required: false

@@ -1,0 +1,31 @@
+{
+  "//": "Separate TS config for the Electron main process. Targets Node 22 (Electron 42 bundles Node 22), emits CommonJS (asar + electron-builder are happiest with CJS), and writes to ./dist so electron-builder can scoop it up.",
+  "//paths": "PGlite ships subpath exports (e.g. @electric-sql/pglite/contrib/pgcrypto) which the classic 'node' resolver can't find — TS reports them as missing even though .d.ts files exist. We map the known subpaths explicitly so we don't have to switch to bundler/node16 resolution (which the rest of this repo doesn't use).",
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "commonjs",
+    "moduleResolution": "node",
+    "lib": ["ES2022", "DOM"],
+    "outDir": "./dist",
+    "rootDir": "./src",
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "forceConsistentCasingInFileNames": true,
+    "sourceMap": true,
+    "declaration": false,
+    "types": ["node"],
+    "paths": {
+      "@electric-sql/pglite/contrib/*": [
+        "../node_modules/@electric-sql/pglite/dist/contrib/*"
+      ],
+      "@electric-sql/pglite-socket": [
+        "../node_modules/@electric-sql/pglite-socket/dist/index.d.ts"
+      ]
+    }
+  },
+  "include": ["src/**/*.ts"],
+  "exclude": ["dist", "node_modules"]
+}

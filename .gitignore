@@ -61,3 +61,7 @@ uploads/
 # Playwright
 test-results/
 playwright-report/
+
+# Electron build artifacts
+electron/dist/
+dist-electron/

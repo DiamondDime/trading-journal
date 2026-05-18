@@ -2,6 +2,7 @@
   "name": "crypto-journal",
   "version": "0.1.0",
   "private": true,
+  "main": "electron/dist/main.js",
   "scripts": {
     "dev": "next dev",
     "build": "next build",
@@ -16,6 +17,7 @@
     "e2e:headed": "playwright test --headed",
     "e2e:ui": "playwright test --ui",
     "typecheck": "tsc --noEmit",
+    "electron:typecheck": "tsc --noEmit -p electron/tsconfig.json",
     "db:create": "createdb crypto_spread_journal",
     "db:drop": "dropdb --if-exists crypto_spread_journal",
     "db:migrate": "for f in supabase/migrations/*.sql; do echo \"-- $f\"; psql -d crypto_spread_journal -v ON_ERROR_STOP=1 -f \"$f\" || exit 1; done",
@@ -26,9 +28,23 @@
     "worker:once": "cd worker && uv run python -m csj_worker.main --once",
     "worker:match": "cd worker && uv run python -m csj_worker.main match",
     "worker:backfill-excursions": "cd worker && uv run python -m csj_worker.main backfill-excursions",
-    "worker:test": "cd worker && uv run pytest"
+    "worker:test": "cd worker && uv run pytest",
+    "electron:tsc": "tsc -p electron/tsconfig.json",
+    "electron:tsc:watch": "tsc -p electron/tsconfig.json --watch --preserveWatchOutput",
+    "electron:emit": "tsc -p electron/tsconfig.json || node -e \"if(!require('fs').existsSync('electron/dist/main.js')){console.error('electron:emit produced no main.js — fix the type errors above');process.exit(1)}\"",
+    "electron:prepare-standalone": "node -e \"const{cpSync,existsSync,mkdirSync}=require('fs');mkdirSync('.next/standalone/.next',{recursive:true});if(existsSync('.next/static'))cpSync('.next/static','.next/standalone/.next/static',{recursive:true});if(existsSync('public'))cpSync('public','.next/standalone/public',{recursive:true});console.log('standalone assets copied')\"",
+    "electron:dev": "pnpm electron:emit && concurrently -k -n next,electron -c blue,magenta \"next dev\" \"wait-on tcp:3000 && cross-env DESKTOP_DEV=1 DESKTOP_DEV_PORT=3000 electron .\"",
+    "electron:pack": "pnpm electron:emit && next build && pnpm electron:prepare-standalone && electron-builder --dir --mac",
+    "electron:build": "pnpm electron:emit && next build && pnpm electron:prepare-standalone && electron-builder --mac",
+    "worker-ts:dev": "cd worker-ts && pnpm dev",
+    "worker-ts:once": "cd worker-ts && pnpm start --once",
+    "worker-ts:typecheck": "cd worker-ts && pnpm typecheck",
+    "worker-ts:test": "cd worker-ts && pnpm test",
+    "release": "if [ -f scripts/release.sh ]; then bash scripts/release.sh; else echo 'TODO — see electron/ scaffolding'; exit 1; fi"
   },
   "dependencies": {
+    "@electric-sql/pglite": "^0.4.5",
+    "@electric-sql/pglite-socket": "^0.1.5",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "decimal.js": "^10.4.3",
@@ -54,12 +70,18 @@
     "@types/react-dom": "^19",
     "@vitest/coverage-v8": "^4.1.6",
     "@vitest/ui": "^4.1.6",
+    "concurrently": "^9.2.1",
+    "cross-env": "^10.1.0",
+    "electron": "^42.1.0",
+    "electron-builder": "^26.8.1",
+    "electron-updater": "^6.8.3",
     "eslint": "^9",
     "eslint-config-next": "16.2.6",
     "tailwindcss": "^4",
     "tsx": "^4.22.0",
     "typescript": "^5",
-    "vitest": "^4.1.6"
+    "vitest": "^4.1.6",
+    "wait-on": "^9.0.0"
   },
   "pnpm": {
     "onlyBuiltDependencies": [

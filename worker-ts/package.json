@@ -1,0 +1,28 @@
+{
+  "name": "@csj/worker-ts",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "TypeScript port of the Crypto Spread Journal ingestion worker. Spawned as a child process by the Electron main process.",
+  "main": "src/main.ts",
+  "scripts": {
+    "dev": "tsx watch src/main.ts",
+    "start": "tsx src/main.ts",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "ccxt": "^4.4.94",
+    "pino": "^9.5.0",
+    "pino-pretty": "^11.3.0",
+    "postgres": "^3.4.9",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@types/node": "^20",
+    "tsx": "^4.22.0",
+    "typescript": "^5",
+    "vitest": "^4.1.6"
+  }
+}

@@ -1,0 +1,101 @@
+# electron-builder config for Journal (crypto-spread-journal).
+#
+# Decisions:
+#   - YAML over package.json: keeps the root manifest tidy and gives us inline
+#     comments per setting.
+#   - macOS-only targets this session per the spec; the `mac` block is set up
+#     so adding `win` / `linux` later is just appending top-level keys.
+#   - We package the Next.js *standalone* bundle (.next/standalone) plus
+#     the static assets (.next/static) and public/. server.js inside the
+#     standalone tree is what main.ts spawns at runtime.
+#   - asar = true; `.next/standalone` is the heaviest payload but doesn't
+#     need to be unpacked (it's all .js, read-only). If postgres native
+#     bindings or PGlite WASM end up in node_modules and break asar, add
+#     them to `asarUnpack` rather than disabling asar wholesale.
+#   - Signing left to the user. The notarize / signing IDs come from env
+#     vars (`CSC_*`, `APPLE_ID`, `APPLE_APP_SPECIFIC_PASSWORD`,
+#     `APPLE_TEAM_ID`); if they aren't set, electron-builder produces an
+#     unsigned .dmg, which still launches with right-click → Open.
+
+appId: com.cryptojournal.app
+productName: Journal
+copyright: Copyright © 2026 ${author}
+
+# Where the .dmg/.zip outputs land. `dist/` is already a Next.js artifact dir
+# in some setups, so we keep a distinct directory.
+directories:
+  buildResources: electron/build
+  output: dist-electron
+
+# Compiled main+preload + Next.js standalone runtime + static assets.
+# Globs are relative to the project root.
+#
+# .next/standalone already contains its own server.js + minimum node_modules.
+# `pnpm electron:prepare-standalone` (run before electron-builder) copies
+# .next/static and public/ INTO .next/standalone/ — Next's documented layout
+# requirement — so we don't ship duplicate top-level copies.
+files:
+  - electron/dist/**/*
+  - .next/standalone/**/*
+  # Migrations ship with the app so the DB layer can apply them on first run.
+  # (PGlite ignores Postgres-specific features, but the migration runner
+  # owned by the DB agent decides what to do.)
+  - supabase/migrations/**/*
+  - package.json
+  - "!**/.DS_Store"
+  - "!**/*.map"
+  - "!**/node_modules/**/{CHANGELOG.md,README.md,README,readme.md,readme}"
+  - "!**/node_modules/**/{test,tests,__tests__,__mocks__,powered-test,example,examples}/**/*"
+  - "!**/node_modules/**/*.d.ts"
+
+# Unpack the Next.js standalone bundle so that:
+#  1) `node server.js` can stat-and-read regular files (asar fs shimming is
+#     reliable for the renderer but flakier for child processes), and
+#  2) PGlite / native modules bundled by Next's tracer can dlopen .node files.
+asar: true
+asarUnpack:
+  - .next/standalone/**/*
+compression: maximum
+artifactName: ${productName}-${version}-${os}-${arch}.${ext}
+
+mac:
+  category: public.app-category.finance
+  target:
+    - target: dmg
+      arch:
+        - x64
+        - arm64
+  hardenedRuntime: true
+  gatekeeperAssess: false
+  entitlements: electron/build/entitlements.mac.plist
+  entitlementsInherit: electron/build/entitlements.mac.plist
+  # TODO: configure once you have a Developer ID cert.
+  # identity: null disables signing entirely — leave commented so
+  # electron-builder uses whatever cert is in your CSC_* env vars.
+  # identity: null
+  # notarize: false
+
+dmg:
+  contents:
+    - x: 130
+      y: 220
+    - x: 410
+      y: 220
+      type: link
+      path: /Applications
+  sign: false
+
+# ============================================================================
+# Publish target — consumed by electron-updater at runtime to discover
+# available updates, and by electron-builder when invoked with `--publish`
+# (which is what the GitHub Actions release workflow does).
+#
+# Channel defaults to `latest`; pre-releases get `beta`/`alpha` channels if we
+# decide to ship them later. Releases must be marked "non-prerelease" on GitHub
+# for electron-updater to pick them up by default.
+# ============================================================================
+publish:
+  provider: github
+  owner: skywalqr
+  repo: crypto-spread-journal
+  releaseType: release

@@ -1,0 +1,60 @@
+name: Feature request
+description: Propose new behaviour or a workflow change
+title: "feat: "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Describe the problem before the solution. Most rejected feature
+        requests get rejected because the problem they solve is unclear, not
+        because the proposed solution is wrong.
+
+  - type: textarea
+    id: what
+    attributes:
+      label: What
+      description: One or two sentences describing the feature.
+    validations:
+      required: true
+
+  - type: textarea
+    id: why
+    attributes:
+      label: Why
+      description: What hurts today, who else has the problem, and what changes when this lands.
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: List approaches you considered and their trade-offs. "Do nothing" is a valid alternative.
+      placeholder: |
+        - Approach A — tradeoffs:
+        - Approach B — tradeoffs:
+        - Do nothing — tradeoffs:
+    validations:
+      required: true
+
+  - type: textarea
+    id: out-of-scope
+    attributes:
+      label: Out of scope
+      description: What this feature should explicitly NOT do, to keep the scope honest.
+    validations:
+      required: false
+
+  - type: dropdown
+    id: flavor
+    attributes:
+      label: Which flavor does this affect?
+      options:
+        - Both desktop and webapp
+        - Desktop only
+        - Webapp only
+        - Worker / ingestion only
+        - Not sure
+    validations:
+      required: true

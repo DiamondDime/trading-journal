@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  macOS hardened-runtime entitlements for Journal.
+
+  We grant a small set of exceptions:
+   - allow-jit / allow-unsigned-executable-memory: required by V8 + ffi
+     used inside Node modules (postgres.js, decimal.js use no jit, but
+     PGlite's WASM runtime needs writable+executable memory pages).
+   - allow-dyld-environment-variables / disable-library-validation:
+     needed so Electron can load helper frameworks signed with a different
+     team ID than the host (common during dev / unsigned packaging).
+   - cs.allow-jit (NSAllowsArbitraryLoads in network sandbox isn't needed
+     because we keep network access via the standard outgoing client
+     entitlement).
+   - inherit + child-process: we spawn the Next.js server as a Node
+     subprocess. Without this the sandbox kills the child.
+
+  When you set up real signing, you can almost certainly drop
+  `disable-library-validation` — keep it only if you hit gatekeeper errors
+  with the official Apple distribution cert.
+-->
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>com.apple.security.cs.allow-jit</key>
+    <true/>
+    <key>com.apple.security.cs.allow-unsigned-executable-memory</key>
+    <true/>
+    <key>com.apple.security.cs.allow-dyld-environment-variables</key>
+    <true/>
+    <key>com.apple.security.cs.disable-library-validation</key>
+    <true/>
+    <key>com.apple.security.network.client</key>
+    <true/>
+    <key>com.apple.security.network.server</key>
+    <true/>
+    <key>com.apple.security.inherit</key>
+    <true/>
+</dict>
+</plist>

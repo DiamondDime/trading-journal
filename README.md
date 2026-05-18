@@ -1,151 +1,80 @@
-# crypto-journal
+# Journal
 
-An editorial trading journal for serious crypto traders. Self-hosted, exchange-aware, never sells your data.
+A local-first crypto trading journal that models spreads, trades, sales, and airdrops as first-class activities. Self-hosted, exchange-aware, never sells your data.
 
-![Dashboard screenshot — TODO: capture and commit to docs/screenshots/dashboard.png](docs/screenshots/dashboard.png)
+![screenshot](docs/screenshot.png)
 
-> Status: pre-release. Schema and APIs are still moving. Not yet recommended for production journaling without backups.
+> Status: alpha (pre-v1). Schema and APIs are still moving. Keep backups.
 
-## Quick start
+## Two ways to run
 
-The fastest path is Docker Compose.
+### Desktop app (recommended)
+
+Download the latest `.dmg` from the [Releases](https://github.com/skywalqr/crypto-spread-journal/releases) page and double-click. The app ships its own Postgres (PGlite), worker process, and Next.js server — nothing else to install. Updates download in the background and apply on relaunch.
+
+User data lives in `~/Library/Application Support/Journal/`. See [ELECTRON.md](ELECTRON.md) for the desktop architecture.
+
+### Self-host the webapp
+
+Requires Node 22, Postgres 16, and pnpm.
 
 ```bash
-git clone https://github.com/<owner>/crypto-journal.git
-cd crypto-journal
-cp .env.example .env
-# Generate a master key for credential encryption:
-echo "CREDENTIALS_MASTER_KEY=$(openssl rand -base64 32)" >> .env
-docker compose up -d
-# Open http://localhost:3000
+$ git clone https://github.com/skywalqr/crypto-spread-journal
+$ cd crypto-spread-journal
+$ pnpm install
+$ cp .env.example .env  # edit DATABASE_URL, CREDENTIALS_MASTER_KEY, APP_USER_ID
+$ pnpm db:create && pnpm db:migrate
+$ pnpm dev
 ```
 
-On first boot the `web` container waits for Postgres to report healthy, runs `pnpm db:migrate`, then starts. The `worker` container starts in parallel and idles until you connect an exchange.
+Open http://localhost:3000. Run `pnpm db:seed` to populate 27 demo activities so the UI isn't empty on first install.
 
-On first install, run `pnpm db:seed` to populate 27 demo activities so the UI isn't empty.
+To run the ingestion worker against your local DB:
+
+```bash
+$ cd worker && uv sync
+$ pnpm worker:dev
+```
+
+Docker Compose is also supported — see `docker-compose.yml`.
+
+## Features
+
+- **Four activity types, modelled separately.** Spreads (multi-leg, multi-venue strategies), Trades (single-venue positions), Sales (IDO / launchpad / premarket / OTC token allocations with vesting and claims), Airdrops (token receipts with snapshot eligibility).
+- **Exchange ingestion** for 11 venues. CCXT-backed for Binance, Bybit, OKX, BingX, Gate, MEXC, KuCoin, Bitget, HTX, Phemex; bespoke for Hyperliquid. Adapters reject API keys with withdraw permission at connection time.
+- **Leg matcher.** Heuristic proposals for cross-exchange perp arb, cash-and-carry, calendar, funding-capture, and DEX/CEX arb spreads. User accepts or rejects each candidate.
+- **APR-first analytics.** PnL series, breakdown by exchange / asset / regime, funding attribution, MAE/MFE excursions for closed trades and spreads.
+- **Editorial journal.** One Markdown note per activity, screenshot attachments with MarkerJS2 annotation, controlled-vocabulary tags, saved views.
+- **i18n.** English and Russian, switched via a cookie + Server Action. No client-side i18n bundle.
+- **Single-user mode.** No login UI in v1 — auth is the `APP_USER_ID` env var. RLS policies are in place for the multi-user future.
+- **Calendar, partners, and dashboard** views over your activity history.
+
+The full feature list and v2 roadmap are in `docs/specs/2026-05-15-architecture.md` and `docs/specs/2026-05-16-multi-activity-journal-design.md`.
 
 ## Architecture
 
-Three services, one Postgres.
+The webapp is Next.js 16 (App Router, React 19) talking to Postgres via [postgres.js](https://github.com/porsager/postgres). A separate ingestion worker (Python 3.12 + ccxt today, TypeScript port in progress for the desktop bundle) polls connected exchanges, normalises fills, runs the position builder and leg matcher, and writes spread candidates back to the database.
 
-- **web** — Next.js 16 (App Router, React 19). Renders the journal, exposes `/api/*` for activity CRUD and exchange connection management. Single-user-per-instance by default (`APP_USER_ID` env var).
-- **worker** — Python 3.12 ingestion service. Connects to exchanges via [ccxt] (CEX) and custom httpx clients (Hyperliquid), normalises fills into a canonical schema, folds fills into positions, and runs the leg matcher that proposes spread candidates.
-- **postgres** — schema lives in `supabase/migrations/`. The supabase/ path is retained for stability; the project no longer depends on Supabase services.
+The desktop app wraps the same Next.js server in Electron, swaps Postgres for embedded PGlite, swaps the Python worker for the Node port, and adds auto-update via GitHub Releases. The data model and the journal UI are identical between flavors.
 
-The data model is a multi-activity journal. The atomic unit is an `activity` (supertype) with four subtypes: **Spread** (multi-leg, often cross-venue), **Trade** (single venue, single position), **Sale** (token allocation event — IDO, premarket, OTC), **Airdrop** (token receipt event). See `docs/specs/2026-05-16-multi-activity-journal-design.md` for the full design.
+See [ARCHITECTURE.md](ARCHITECTURE.md) for the full system overview, data flow, and dependency rationale.
 
-[ccxt]: https://github.com/ccxt/ccxt
+## Privacy
 
-## Supported exchanges
+No telemetry. No analytics. No phone-home. Your data stays on your machine.
 
-All CEX adapters share a single `CcxtUniversalAdapter` (see [`worker/csj_worker/adapters/generic.py`](worker/csj_worker/adapters/generic.py)) driven by per-venue `VenueConfig` modules. Adding a new ccxt-supported exchange is now ~30 LOC of config plus an `exchange_catalog` row.
+Exchange API keys are encrypted with **AES-256-GCM** before they ever touch the database. The master key lives in `CREDENTIALS_MASTER_KEY` (webapp) or in the OS keychain (desktop) — never in the database itself. Plaintext credentials never appear in API responses, never get written to logs, and never leave the request handler in clear form. Adapters reject any API key that grants withdraw permission. See [SECURITY.md](SECURITY.md) for the full threat model.
 
-| Exchange | Kind | Auth | Adapter | Notes |
-|---|---|---|---|---|
-| Binance | CEX | api_key | `CcxtUniversalAdapter(BINANCE_CONFIG)` | Spot + USD-M perp + coin-M perp |
-| Bybit | CEX | api_key | `CcxtUniversalAdapter(BYBIT_CONFIG)` | v5 unified, linear + spot |
-| OKX | CEX | api_key + passphrase | `CcxtUniversalAdapter(OKX_CONFIG)` | SPOT + SWAP + FUTURES + OPTION |
-| BingX | CEX | api_key | `CcxtUniversalAdapter(BINGX_CONFIG)` | Withdraw status unverifiable — UI attestation required |
-| Gate | CEX | api_key | `CcxtUniversalAdapter(GATE_CONFIG)` | Spot + perp + dated futures |
-| MEXC | CEX | api_key | `CcxtUniversalAdapter(MEXC_CONFIG)` | Withdraw status unverifiable — UI attestation required |
-| KuCoin | CEX | api_key + passphrase | `CcxtUniversalAdapter(KUCOIN_CONFIG)` | Defaults to `kucoinfutures` for perps |
-| Bitget | CEX | api_key + passphrase | `CcxtUniversalAdapter(BITGET_CONFIG)` | v2 api-key-info endpoint |
-| HTX | CEX | api_key | `CcxtUniversalAdapter(HTX_CONFIG)` | Formerly Huobi |
-| Phemex | CEX | api_key | `CcxtUniversalAdapter(PHEMEX_CONFIG)` | Withdraw status unverifiable — UI attestation required |
-| Hyperliquid | DEX | wallet_address | `HyperliquidAdapter` (bespoke) | Not on ccxt — uses proprietary `/info` endpoint |
+## Status
 
-Planned (declared in `Exchange` enum, no adapter yet): Deribit, OKX DEX, Aster, Kraken.
+Alpha — pre-v1. The schema is stable enough to journal against, but breaking migrations may still ship without a migration path. Keep a `pg_dump` before you upgrade. The desktop port is under active development; the webapp flow is the reference implementation.
 
-### Adding a new exchange
-
-If the exchange is supported by [ccxt](https://github.com/ccxt/ccxt/wiki/Exchange-Markets):
-
-1. **Create `worker/csj_worker/adapters/configs/<code>.py`** — define `CONFIG = VenueConfig(code='<code>', ccxt_id='<ccxt_id>', ccxt_options={...}, requires_passphrase=...)`.
-2. **Implement `_fetch_permissions`, `_has_withdraw`, `_extract_permissions`** per the exchange's API docs. The framework rejects keys where `_has_withdraw` returns true. For venues without an introspection endpoint, surface `"withdraw:unverified"` in `_extract_permissions` so the UI can force user attestation.
-3. **Register in `csj_worker/adapters/configs/__init__.py`** (`ALL_CONFIGS` dict).
-4. **Add a row to the `exchange_catalog` migration** with the canonical code, display name, and capability flags.
-5. **Smoke-test in `tests/adapters/test_generic_adapter.py`** — copy one of the existing per-venue `TestWithdrawPermissionRejection` tests as a template.
-
-For venues NOT on ccxt (DEXes, regional venues), implement a bespoke `ExchangeAdapter` subclass under `csj_worker/adapters/legacy/` and register it directly in `ADAPTER_REGISTRY`.
-
-### Legacy fallback
-
-The hand-built Binance and Bybit adapters (~700 LOC each) are preserved under `worker/csj_worker/adapters/legacy/`. To roll back to them for any specific venue, set the env var `CSJ_USE_LEGACY_ADAPTER_<EXCHANGE>=1` (e.g. `CSJ_USE_LEGACY_ADAPTER_BINANCE=1`). The factory consults this flag at adapter resolution time, so per-connection toggling is possible.
-
-## Security
-
-Exchange API keys are encrypted at rest with **AES-256-GCM** before they ever touch Postgres. The master key is supplied via the `CREDENTIALS_MASTER_KEY` env var (32 random bytes, base64-encoded — generate with `openssl rand -base64 32`). Encryption is implemented in `src/lib/crypto/credentials.ts` (Node) and mirrored byte-for-byte in `worker/csj_worker/crypto.py` (Python) so the web app and the worker can read the same ciphertext.
-
-Plaintext credentials never appear in API responses, never get written to logs, and never leave the request handler in clear form. Adapters reject any API key that grants withdraw permission at `connect()` — this is enforced in the adapter ABC contract, not just a UI hint. If you lose `CREDENTIALS_MASTER_KEY` you lose access to every stored API key on that instance, so keep it backed up out-of-band. See [SECURITY.md](SECURITY.md) for the threat model and disclosure process.
-
-## Local development
-
-```bash
-pnpm install
-cd worker && uv sync --extra dev && cd ..
-
-# Database (assumes postgres@14+ running locally)
-pnpm db:create
-pnpm db:migrate
-# or: pnpm db:reset   (drop + create + migrate in one shot)
-
-cp .env.example .env.local
-# Edit DATABASE_URL, CREDENTIALS_MASTER_KEY, APP_USER_ID
-
-pnpm dev                       # http://localhost:3000
-pnpm typecheck                 # tsc --noEmit
-pnpm test:run                  # Vitest run-once
-cd worker && uv run pytest     # Python worker tests
-```
-
-The full set of pnpm scripts:
-
-| Script | Purpose |
-|---|---|
-| `pnpm dev` | Next.js dev server with HMR |
-| `pnpm build` | Production build (standalone output) |
-| `pnpm start` | Run the production build |
-| `pnpm typecheck` | `tsc --noEmit` over the whole tree |
-| `pnpm test` / `pnpm test:run` | Vitest watch / run-once |
-| `pnpm test:coverage` | Vitest with v8 coverage |
-| `pnpm db:create` / `db:drop` / `db:reset` | Postgres lifecycle |
-| `pnpm db:migrate` | Apply `supabase/migrations/*.sql` in order |
-| `pnpm db:psql` | Interactive psql shell |
-| `pnpm worker:dev` | Run the Python worker daemon against your local DB |
-| `pnpm worker:once` | Run a single sync+match cycle then exit |
-| `pnpm worker:match` | Run the leg matcher only (no exchange sync) |
-| `pnpm worker:test` | pytest in `worker/` |
-
-## Worker (exchange ingestion)
-
-The worker is a Python daemon that pulls fills from connected exchanges and
-runs the leg matcher.
-
-```bash
-# One-shot (useful for development):
-pnpm worker:once
-
-# Long-running (production):
-pnpm worker:dev
-
-# Matcher only (no sync):
-pnpm worker:match
-
-# Backfill MAE/MFE excursions for closed trades & spreads
-# (reads public klines, no credentials required, idempotent):
-pnpm worker:backfill-excursions
-pnpm worker:backfill-excursions --activity-id <uuid>     # one activity
-pnpm worker:backfill-excursions --force                  # overwrite existing
-```
-
-Environment: `DATABASE_URL`, `CREDENTIALS_MASTER_KEY` (required), optional
-`WORKER_POLL_INTERVAL_SECONDS` (default 300), `WORKER_LOOKBACK_DAYS` (default
-30), `WORKER_LOG_LEVEL` (default INFO). Logs are JSON lines on stdout.
-
-## Contributing
-
-See [CONTRIBUTING.md](CONTRIBUTING.md) — covers issue templates, feature proposals, adding a new exchange adapter, and the commit conventions used in this repo.
+Open issues, gaps, and known limitations live in the spec docs under `docs/specs/`.
 
 ## License
 
-[MIT](LICENSE). Copyright 2026 Andrew Shvoev and crypto-journal contributors.
+[AGPL-3.0](LICENSE). If you run a modified copy on a server reachable over a network, you must offer the modified source to its users — see section 13 of the license.
+
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md). Bug reports and feature requests use the templates under [`.github/ISSUE_TEMPLATE/`](.github/ISSUE_TEMPLATE/). Adapter requests are also welcome.
