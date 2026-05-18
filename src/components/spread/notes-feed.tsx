@@ -16,6 +16,10 @@ function hrefFor(note: RecentNoteRow): string {
       return `/sales/${note.activityId}`;
     case "airdrop":
       return `/airdrops/${note.activityId}`;
+    case "yield_position":
+      return `/yield-positions/${note.activityId}`;
+    case "option":
+      return `/options/${note.activityId}`;
   }
 }
 

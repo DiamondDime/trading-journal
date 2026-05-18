@@ -36,17 +36,24 @@ interface NotesPageProps {
 
 const PAGE_SIZE = 20;
 
+type NoteActivityType = NonNullable<NoteListFilters["activityType"]>[number];
+
 function parseTypes(
   raw: string | string[] | undefined,
 ): NoteListFilters["activityType"] {
   if (typeof raw !== "string") return undefined;
-  const valid = new Set(["spread", "trade", "sale", "airdrop"] as const);
+  const valid = new Set<NoteActivityType>([
+    "spread",
+    "trade",
+    "sale",
+    "airdrop",
+    "yield_position",
+    "option",
+  ]);
   const parts = raw
     .split(",")
     .map((s) => s.trim())
-    .filter((s): s is "spread" | "trade" | "sale" | "airdrop" =>
-      valid.has(s as "spread" | "trade" | "sale" | "airdrop"),
-    );
+    .filter((s): s is NoteActivityType => valid.has(s as NoteActivityType));
   return parts.length > 0 ? parts : undefined;
 }
 

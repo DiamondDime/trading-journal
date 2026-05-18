@@ -103,7 +103,7 @@ export interface RecentNoteRow {
   updatedAt: Iso8601;
   // Joined from activity
   activityName: string;
-  activityType: 'spread' | 'trade' | 'sale' | 'airdrop';
+  activityType: 'spread' | 'trade' | 'sale' | 'airdrop' | 'yield_position' | 'option';
 }
 
 export async function listRecentNotes(
@@ -271,7 +271,7 @@ export async function deleteNote(
  * doesn't change this call signature.
  */
 export interface NoteListFilters {
-  activityType?: ('spread' | 'trade' | 'sale' | 'airdrop')[];
+  activityType?: ('spread' | 'trade' | 'sale' | 'airdrop' | 'yield_position' | 'option')[];
   /** Single free-form tag (from activity_tag). Multi-tag is v2. */
   tag?: string;
   /** ILIKE against notes.body. Sanitised by parameterisation — postgres.js
@@ -294,7 +294,7 @@ export interface AllNoteRow {
   bodyLength: number;
   createdAt: Iso8601;
   updatedAt: Iso8601;
-  activityType: 'spread' | 'trade' | 'sale' | 'airdrop';
+  activityType: 'spread' | 'trade' | 'sale' | 'airdrop' | 'yield_position' | 'option';
   activityName: string;
   activityStatus: string;
   activitySatisfaction: boolean | null;
@@ -360,7 +360,7 @@ export async function listAllNotes(
     bodyLength: string;
     createdAt: unknown;
     updatedAt: unknown;
-    activityType: 'spread' | 'trade' | 'sale' | 'airdrop';
+    activityType: 'spread' | 'trade' | 'sale' | 'airdrop' | 'yield_position' | 'option';
     activityName: string;
     activityStatus: string;
     activitySatisfaction: boolean | null;

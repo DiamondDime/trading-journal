@@ -957,6 +957,8 @@ export const en = {
       trades: 'Trades',
       sales: 'Sales',
       airdrops: 'Airdrops',
+      yieldPositions: 'Yield positions',
+      options: 'Options',
     },
     clearFilters: 'Clear filters',
     empty: 'No notes yet — start writing on any activity detail page.',

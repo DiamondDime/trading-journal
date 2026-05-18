@@ -968,6 +968,8 @@ export const ru: MessageDict = {
       trades: 'Сделки',
       sales: 'Продажи',
       airdrops: 'Эирдропы',
+      yieldPositions: 'Доходные позиции',
+      options: 'Опционы',
     },
     clearFilters: 'Сбросить фильтры',
     empty: 'Пока нет заметок — начните писать на странице любой активности.',

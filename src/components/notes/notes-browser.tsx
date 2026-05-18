@@ -8,7 +8,13 @@ import { cn } from "@/lib/utils";
 import { useT, useLocale } from "@/lib/i18n/client";
 import type { AllNoteRow } from "@/lib/db/notes";
 
-type ActivityType = "spread" | "trade" | "sale" | "airdrop";
+type ActivityType =
+  | "spread"
+  | "trade"
+  | "sale"
+  | "airdrop"
+  | "yield_position"
+  | "option";
 type SortKey = "newest" | "oldest" | "longest" | "edited";
 
 interface Filters {
@@ -26,13 +32,22 @@ interface NotesBrowserProps {
   initialFilters: Filters;
 }
 
-const ACTIVITY_TYPE_ORDER: ActivityType[] = ["spread", "trade", "sale", "airdrop"];
+const ACTIVITY_TYPE_ORDER: ActivityType[] = [
+  "spread",
+  "trade",
+  "sale",
+  "airdrop",
+  "yield_position",
+  "option",
+];
 
 const TYPE_LETTER: Record<ActivityType, string> = {
   spread: "",
   trade: "T",
   sale: "S",
   airdrop: "A",
+  yield_position: "Y",
+  option: "O",
 };
 
 function hrefFor(type: ActivityType, id: string): string {
@@ -45,6 +60,10 @@ function hrefFor(type: ActivityType, id: string): string {
       return `/sales/${id}`;
     case "airdrop":
       return `/airdrops/${id}`;
+    case "yield_position":
+      return `/yield-positions/${id}`;
+    case "option":
+      return `/options/${id}`;
   }
 }
 
@@ -132,6 +151,8 @@ export function NotesBrowser({
     trade: t("notes.filter.trades"),
     sale: t("notes.filter.sales"),
     airdrop: t("notes.filter.airdrops"),
+    yield_position: t("notes.filter.yieldPositions"),
+    option: t("notes.filter.options"),
   };
 
   // Singular forms — used in per-card describe text + the small type chip.
@@ -141,6 +162,8 @@ export function NotesBrowser({
     trade: t("activity.trade"),
     sale: t("activity.sale"),
     airdrop: t("activity.airdrop"),
+    yield_position: t("activity.yieldPosition"),
+    option: t("activity.option"),
   };
 
   const SORT_LABELS: Record<SortKey, string> = {
