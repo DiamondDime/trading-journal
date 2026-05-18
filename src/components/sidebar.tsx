@@ -110,6 +110,7 @@ function zeroCounts(): SidebarCounts {
     movements: 0,
     watchlist: 0,
     topStrategyTags: [],
+    openPositions: 0,
   };
 }
 

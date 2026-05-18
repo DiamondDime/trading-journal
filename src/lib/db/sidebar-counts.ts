@@ -48,6 +48,12 @@ export interface SidebarCounts {
    * as a "By strategy" group. Entries are sorted by count desc.
    */
   topStrategyTags: { tag: string; count: number }[];
+  /**
+   * Open exchange positions — feeds the badge on the "Trades" sidebar link.
+   * Counts public.positions where status='open' (the rows surfaced on
+   * /trades by default).
+   */
+  openPositions: number;
 }
 
 const EMPTY_BY_TYPE: Record<ActivityType, number> = {
@@ -82,6 +88,7 @@ export async function listSidebarCounts(userId: string): Promise<SidebarCounts> 
     watchlistRow,
     strategyTagRows,
     movements,
+    openPositionsRow,
   ] = await Promise.all([
     sql<{ type: ActivityType; count: string }[]>`
       SELECT type, count(*)::text AS count
@@ -130,6 +137,13 @@ export async function listSidebarCounts(userId: string): Promise<SidebarCounts> 
       LIMIT 5
     `,
     countEvents(userId),
+    sql<{ count: string }[]>`
+      SELECT count(*)::text AS count
+      FROM public.positions p
+      WHERE p.user_id = ${userId}::uuid
+        AND p.deleted_at IS NULL
+        AND p.status = 'open'
+    `,
   ]);
 
   const byType = { ...EMPTY_BY_TYPE };
@@ -164,5 +178,6 @@ export async function listSidebarCounts(userId: string): Promise<SidebarCounts> 
     movements,
     watchlist,
     topStrategyTags,
+    openPositions: Number(openPositionsRow[0]?.count ?? 0),
   };
 }

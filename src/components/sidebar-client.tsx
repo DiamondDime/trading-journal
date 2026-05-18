@@ -95,7 +95,7 @@ export function SidebarClient({ counts, portfolio, displayName, initials }: Side
       label: t("sidebar.sections.book"),
       items: [
         { icon: BookOpen, label: t("sidebar.nav.overview"), href: "/spreads" },
-        { icon: LineChart, label: t("sidebar.nav.trades"), href: "/trades" },
+        { icon: LineChart, label: t("sidebar.nav.trades"), href: "/trades", count: counts.openPositions },
         { icon: Archive, label: t("sidebar.nav.archive"), href: "/spreads/archive", count: counts.all },
         { icon: CalendarDays, label: t("sidebar.nav.calendar"), href: "/calendar" },
         {
