@@ -41,7 +41,7 @@ build.
 ## GitHub Actions secrets
 
 Once you have the above, add these to the repo as Actions secrets at
-`https://github.com/skywalqr/crypto-spread-journal/settings/secrets/actions`:
+`https://github.com/DiamondDime/trading-journal/settings/secrets/actions`:
 
 | Secret name                   | Value                                                     |
 | ----------------------------- | --------------------------------------------------------- |

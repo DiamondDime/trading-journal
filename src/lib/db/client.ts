@@ -61,7 +61,7 @@ const DESKTOP_HOST = process.env.PGLITE_HOST ?? '127.0.0.1';
 const connStr = DESKTOP_MODE
   ? `postgresql://postgres:postgres@${DESKTOP_HOST}:${DESKTOP_PORT}/postgres`
   : (process.env.DATABASE_URL ??
-     'postgresql://skywalqr@localhost:5432/crypto_spread_journal');
+     `postgresql://${process.env.USER ?? 'postgres'}@localhost:5432/crypto_spread_journal`);
 
 export const sql =
   globalThis.__pgSql ??

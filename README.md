@@ -10,7 +10,7 @@ A local-first crypto trading journal that models spreads, trades, sales, and air
 
 ### Desktop app (recommended)
 
-Download the latest `.dmg` from the [Releases](https://github.com/skywalqr/crypto-spread-journal/releases) page and double-click. The app ships its own Postgres (PGlite), worker process, and Next.js server — nothing else to install. Updates download in the background and apply on relaunch.
+Download the latest `.dmg` from the [Releases](https://github.com/DiamondDime/trading-journal/releases) page and double-click. The app ships its own Postgres (PGlite), worker process, and Next.js server — nothing else to install. Updates download in the background and apply on relaunch.
 
 User data lives in `~/Library/Application Support/Journal/`. See [ELECTRON.md](ELECTRON.md) for the desktop architecture.
 
@@ -19,8 +19,8 @@ User data lives in `~/Library/Application Support/Journal/`. See [ELECTRON.md](E
 Requires Node 22, Postgres 16, and pnpm.
 
 ```bash
-$ git clone https://github.com/skywalqr/crypto-spread-journal
-$ cd crypto-spread-journal
+$ git clone https://github.com/DiamondDime/trading-journal
+$ cd trading-journal
 $ pnpm install
 $ cp .env.example .env  # edit DATABASE_URL, CREDENTIALS_MASTER_KEY, APP_USER_ID
 $ pnpm db:create && pnpm db:migrate

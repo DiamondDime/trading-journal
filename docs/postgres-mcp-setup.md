@@ -2,6 +2,8 @@
 
 Goal: let Claude query `crypto_spread_journal` locally for trade analysis, without exposing write access.
 
+> **Note**: In every connection string below, replace `<your-os-user>` with your macOS / Linux account name (run `whoami` to find it). That's the default Postgres role when you install Postgres on macOS via Homebrew or on Linux via `initdb` without overrides.
+
 ## Option A — Official `@modelcontextprotocol/server-postgres` (read-only, simplest)
 
 Add this entry to `~/.claude.json` under `mcpServers`:
@@ -13,7 +15,7 @@ Add this entry to `~/.claude.json` under `mcpServers`:
   "args": [
     "-y",
     "@modelcontextprotocol/server-postgres",
-    "postgresql://skywalqr@localhost:5432/crypto_spread_journal"
+    "postgresql://<your-os-user>@localhost:5432/crypto_spread_journal"
   ]
 }
 ```
@@ -29,7 +31,7 @@ That's it. Restart Claude Code; you'll see `mcp__postgres-csj__query` available.
   "args": [
     "postgres-mcp",
     "--access-mode=restricted",
-    "postgresql://skywalqr@localhost:5432/crypto_spread_journal"
+    "postgresql://<your-os-user>@localhost:5432/crypto_spread_journal"
   ]
 }
 ```
@@ -40,11 +42,11 @@ That's it. Restart Claude Code; you'll see `mcp__postgres-csj__query` available.
 
 ```bash
 # Option A
-npx -y @modelcontextprotocol/server-postgres postgresql://skywalqr@localhost:5432/crypto_spread_journal
+npx -y @modelcontextprotocol/server-postgres postgresql://<your-os-user>@localhost:5432/crypto_spread_journal
 # Should print "Postgres MCP server running on stdio" and wait. Ctrl-C.
 
 # Option B
-uvx postgres-mcp --access-mode=restricted postgresql://skywalqr@localhost:5432/crypto_spread_journal
+uvx postgres-mcp --access-mode=restricted postgresql://<your-os-user>@localhost:5432/crypto_spread_journal
 ```
 
 ## Useful views once connected

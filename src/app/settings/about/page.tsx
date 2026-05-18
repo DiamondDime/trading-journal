@@ -6,7 +6,7 @@ export const dynamic = "force-dynamic";
 
 const APP_VERSION = "0.1.0";
 const LICENSE = "AGPL-3.0";
-const REPO_URL = "https://github.com/skywalqr/crypto-spread-journal";
+const REPO_URL = "https://github.com/DiamondDime/trading-journal";
 
 export default async function AboutSettingsPage() {
   const t = await getT();
@@ -34,7 +34,7 @@ export default async function AboutSettingsPage() {
               rel="noopener noreferrer"
               className="inline-flex items-center gap-1.5 text-text underline decoration-text-tertiary decoration-1 underline-offset-2 hover:decoration-text"
             >
-              github.com/skywalqr/crypto-spread-journal
+              github.com/DiamondDime/trading-journal
               <ArrowUpRight className="h-3 w-3" />
             </a>
           }
