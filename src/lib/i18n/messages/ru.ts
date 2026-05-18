@@ -782,6 +782,7 @@ export const ru: MessageDict = {
       title: 'Трейды',
       subtitle: 'Все позиции, которые воркер импортировал с подключённых бирж.',
       quickAdd: 'Записать вручную',
+      syncingBadge: 'Синхрон.',
       stats: {
         aria: 'Счётчики позиций',
         total: 'Всего',

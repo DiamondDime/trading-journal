@@ -754,6 +754,7 @@ export const en = {
       title: 'Trades',
       subtitle: 'Every position the worker has imported from your connected exchanges.',
       quickAdd: 'Add manual entry',
+      syncingBadge: 'Syncing',
       stats: {
         aria: 'Position counters',
         total: 'Total',

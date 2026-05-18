@@ -24,6 +24,7 @@ import {
   listTradeFeed,
   listFeedExchangeOptions,
   getTradeFeedStats,
+  countActiveSyncJobs,
   type TradeFeedFilters,
   type TradeFeedSort,
   type TradeFeedStats,
@@ -130,13 +131,19 @@ export default async function TradesFeedPage({
   const sort = parseSort(rawSort);
 
   // Parallel reads — independent of each other.
-  const [{ rows, nextCursor, total }, exchangeOptions, connectionCount, stats] =
-    await Promise.all([
-      listTradeFeed(userId, filters, sort, PAGE_LIMIT, cursor),
-      listFeedExchangeOptions(userId),
-      getConnectedExchangeCount(userId),
-      getTradeFeedStats(userId),
-    ]);
+  const [
+    { rows, nextCursor, total },
+    exchangeOptions,
+    connectionCount,
+    stats,
+    activeSyncs,
+  ] = await Promise.all([
+    listTradeFeed(userId, filters, sort, PAGE_LIMIT, cursor),
+    listFeedExchangeOptions(userId),
+    getConnectedExchangeCount(userId),
+    getTradeFeedStats(userId),
+    countActiveSyncJobs(userId),
+  ]);
 
   const start = total === 0 ? 0 : (page - 1) * PAGE_LIMIT + 1;
   const end = Math.min(start + rows.length - 1, total);
@@ -206,9 +213,23 @@ export default async function TradesFeedPage({
       <header className="flex flex-col gap-4 border-b border-border px-8 py-7 lg:px-12">
         <div className="flex flex-col gap-2 md:flex-row md:items-end md:justify-between md:gap-6">
           <div className="flex flex-col gap-2">
-            <h1 className="font-serif text-[40px] font-medium leading-none tracking-tight text-text">
-              {t("trades.feed.title")}
-            </h1>
+            <div className="flex items-center gap-3">
+              <h1 className="font-serif text-[40px] font-medium leading-none tracking-tight text-text">
+                {t("trades.feed.title")}
+              </h1>
+              {activeSyncs > 0 && (
+                <span
+                  className="inline-flex items-center gap-1.5 rounded-full border border-warn/40 bg-warn/10 px-2.5 py-0.5 font-mono text-[10px] uppercase tracking-[0.14em] text-warn"
+                  aria-live="polite"
+                >
+                  <span className="relative flex h-1.5 w-1.5">
+                    <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-warn opacity-75" />
+                    <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-warn" />
+                  </span>
+                  {t("trades.feed.syncingBadge")}
+                </span>
+              )}
+            </div>
             <p className="font-serif text-sm italic text-text-tertiary">
               {t("trades.feed.subtitle")}
             </p>

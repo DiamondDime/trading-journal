@@ -414,6 +414,22 @@ export interface TradeFeedStats {
 }
 
 /**
+ * Number of queued or running sync_jobs for this user. >0 means the worker
+ * is currently importing fills from at least one venue; the hero shows a
+ * "Syncing" pill so the user knows why the feed might be lagging.
+ */
+export async function countActiveSyncJobs(userId: string): Promise<number> {
+  if (!UUID_RE.test(userId)) return 0;
+  const [row] = await sql<{ count: string }[]>`
+    SELECT count(*)::text AS count
+    FROM public.sync_jobs
+    WHERE user_id = ${userId}::uuid
+      AND state IN ('queued', 'running')
+  `;
+  return Number(row?.count ?? 0);
+}
+
+/**
  * Aggregate stats for the /trades hero. One query — fast even on a busy
  * book because every count is a plain `count(*) filter (where ...)` on the
  * existing `positions` indexes.
