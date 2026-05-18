@@ -4,7 +4,13 @@ import { ExchangeVenuesChips } from "@/components/settings/exchange-logo";
 
 type Status = "open" | "winding_down" | "orphaned" | "closed" | "expired" | "claimed" | "vested";
 
-export type ActivityType = "spread" | "trade" | "sale" | "airdrop";
+export type ActivityType =
+  | "spread"
+  | "trade"
+  | "sale"
+  | "airdrop"
+  | "yield_position"
+  | "option";
 
 export type SpreadListItem = {
   serial: string;
@@ -39,6 +45,8 @@ const ACTIVITY_BADGE_LABEL: Record<ActivityType, string> = {
   trade: "TRADE",
   sale: "SALE",
   airdrop: "AIRDROP",
+  yield_position: "YIELD",
+  option: "OPTION",
 };
 
 export function SpreadListCard({ item }: { item: SpreadListItem }) {

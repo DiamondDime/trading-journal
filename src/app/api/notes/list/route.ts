@@ -33,14 +33,28 @@ export const GET = withAuth(async (req, { userId }) => {
   }
   const { type, tag, q, sort, limit, offset } = parsed.data;
 
-  const valid = new Set(['spread', 'trade', 'sale', 'airdrop'] as const);
+  type ApiNoteActivityType =
+    | 'spread'
+    | 'trade'
+    | 'sale'
+    | 'airdrop'
+    | 'yield_position'
+    | 'option';
+  const valid = new Set<ApiNoteActivityType>([
+    'spread',
+    'trade',
+    'sale',
+    'airdrop',
+    'yield_position',
+    'option',
+  ]);
   const parsedTypes =
     typeof type === 'string'
       ? (type
           .split(',')
           .map((s) => s.trim())
-          .filter((s): s is 'spread' | 'trade' | 'sale' | 'airdrop' =>
-            valid.has(s as 'spread' | 'trade' | 'sale' | 'airdrop'),
+          .filter((s): s is ApiNoteActivityType =>
+            valid.has(s as ApiNoteActivityType),
           ))
       : undefined;
 

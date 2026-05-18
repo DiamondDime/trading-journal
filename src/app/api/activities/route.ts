@@ -2,7 +2,7 @@
  * GET /api/activities — polymorphic list across all activity types.
  *
  * Query string params (all optional, comma-separated where multi-valued):
- *   type=spread,trade,sale,airdrop
+ *   type=spread,trade,sale,airdrop,yield_position,option
  *   status=open,closed,…
  *   spread_type=cash_carry,…   (only meaningful when type includes 'spread')
  *   sale_kind=ido,launchpad,…   (only meaningful when type includes 'sale')
@@ -31,7 +31,7 @@ export const GET = withAuth(async (req, { userId }) => {
     s ? s.split(',').map((p) => p.trim()).filter(Boolean) : undefined;
 
   const items = await listActivities(userId, {
-    type: splitCsv(q.type) as ('spread' | 'trade' | 'sale' | 'airdrop')[] | undefined,
+    type: splitCsv(q.type) as Parameters<typeof listActivities>[1]['type'],
     status: splitCsv(q.status) as Parameters<typeof listActivities>[1]['status'],
     spreadType: splitCsv(q.spread_type),
     saleKind: splitCsv(q.sale_kind),
