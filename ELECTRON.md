@@ -95,6 +95,44 @@ $ pnpm electron:pack
 
 Release the artefact via the GitHub Releases workflow at `.github/workflows/release-desktop.yml`.
 
+## Build a Windows .exe
+
+The Windows target is an [NSIS](https://nsis.sourceforge.io/) installer, x64 only. Cross-compiling NSIS from macOS is unreliable; build on a Windows host (or let GitHub Actions do it — see the `build-win` job in the release workflow).
+
+```bash
+$ pnpm electron:build:win   # on a Windows host
+```
+
+To build both Mac and Windows in one shot (only works on a machine that can produce both, i.e. CI):
+
+```bash
+$ pnpm electron:build:all
+```
+
+Output lands in `dist-electron/Journal-<version>-win-x64.exe`.
+
+### Windows install
+
+The installer is **unsigned**. We don't ship with an EV/OV code-signing certificate, so:
+
+1. Download `Journal-<version>-win-x64.exe` from the [Releases page](https://github.com/DiamondDime/trading-journal/releases).
+2. Double-click the installer. Windows SmartScreen will warn: *"Windows protected your PC"*. This is expected for unsigned installers.
+3. Click **More info** → **Run anyway**.
+4. The installer is per-user (no UAC prompt) and lets you change the install directory. Default location: `%LOCALAPPDATA%\Programs\Journal\`.
+
+After install, the app launches from the desktop shortcut or Start menu (search for "Journal").
+
+### Where Windows user data lives
+
+| Path | What |
+|---|---|
+| `%APPDATA%\Journal\pglite\` | PGlite database files |
+| `%APPDATA%\Journal\uploads\` | Screenshot attachments |
+| `%APPDATA%\Journal\logs\` | Rotating JSON-lines logs |
+| Windows Credential Manager: `Journal: master-key` | `CREDENTIALS_MASTER_KEY` |
+
+To reset the app on Windows: quit it, delete `%APPDATA%\Journal\`, and remove the Credential Manager entry. Next launch re-provisions a fresh DB.
+
 ## Auto-update
 
 The app uses [electron-updater](https://www.electron.build/auto-update) against GitHub Releases. On launch (and on a configurable interval), the main process checks the latest release for a newer `.dmg`, downloads it in the background, and applies it on next relaunch. Update channels: `latest` (stable) and `beta` (prerelease).

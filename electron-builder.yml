@@ -96,6 +96,43 @@ dmg:
 # ============================================================================
 publish:
   provider: github
-  owner: skywalqr
-  repo: crypto-spread-journal
+  owner: DiamondDime
+  repo: trading-journal
   releaseType: release
+
+# ============================================================================
+# Windows build target — NSIS installer, x64 only.
+#
+# Decisions:
+#   - UNSIGNED. The user explicitly chose not to purchase a code-signing cert.
+#     SmartScreen will warn on first run; users right-click → Run anyway.
+#     See ELECTRON.md → "Windows install" for the user-facing flow.
+#   - x64 only. Skipping arm64 keeps the matrix simple; <1% of Windows traders
+#     are on ARM today, and we can add it later when electron-builder's NSIS
+#     arm64 story stabilises.
+#   - oneClick: false + perMachine: false → per-USER install (writes to
+#     %LOCALAPPDATA%, no UAC elevation prompt). User can also change the
+#     install directory.
+#   - The same `publish:` block above drives uploads for Windows: the GH
+#     Actions workflow's build-win job uses softprops/action-gh-release to
+#     attach the .exe + latest.yml to the same release the Mac job creates.
+# ============================================================================
+win:
+  target:
+    - target: nsis
+      arch:
+        - x64
+  # No signing — leave `signAndEditExecutable` defaulted (true) so the .exe
+  # metadata is at least populated, even unsigned.
+
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  # Show a finish page so users know the install completed.
+  allowElevation: false
+  deleteAppDataOnUninstall: false
+  # Shortcut + Start-menu entry so the app shows up in Win+S search.
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: Journal

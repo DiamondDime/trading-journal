@@ -37,6 +37,8 @@
     "electron:dev": "pnpm electron:emit && concurrently -k -n next,electron -c blue,magenta \"next dev\" \"wait-on tcp:3000 && cross-env DESKTOP_DEV=1 DESKTOP_DEV_PORT=3000 electron .\"",
     "electron:pack": "pnpm electron:emit && next build && pnpm electron:prepare-standalone && electron-builder --dir --mac",
     "electron:build": "pnpm electron:emit && next build && pnpm electron:prepare-standalone && electron-builder --mac",
+    "electron:build:win": "pnpm electron:emit && next build && pnpm electron:prepare-standalone && electron-builder --win",
+    "electron:build:all": "pnpm electron:emit && next build && pnpm electron:prepare-standalone && electron-builder --mac --win",
     "worker-ts:dev": "cd worker-ts && pnpm dev",
     "worker-ts:once": "cd worker-ts && pnpm start --once",
     "worker-ts:typecheck": "cd worker-ts && pnpm typecheck",
