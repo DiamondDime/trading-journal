@@ -400,3 +400,57 @@ export async function listFeedExchangeOptions(
     count: Number(r.count),
   }));
 }
+
+// ============================================================================
+// Hero stats
+// ============================================================================
+
+export interface TradeFeedStats {
+  total: number;
+  open: number;
+  closed: number;
+  linked: number;
+  unlinked: number;
+}
+
+/**
+ * Aggregate stats for the /trades hero. One query — fast even on a busy
+ * book because every count is a plain `count(*) filter (where ...)` on the
+ * existing `positions` indexes.
+ */
+export async function getTradeFeedStats(
+  userId: string,
+): Promise<TradeFeedStats> {
+  if (!UUID_RE.test(userId)) {
+    return { total: 0, open: 0, closed: 0, linked: 0, unlinked: 0 };
+  }
+
+  type Row = {
+    total: string;
+    open: string;
+    closed: string;
+    linked: string;
+    unlinked: string;
+  };
+  const [row] = await sql<Row[]>`
+    SELECT
+      count(*)::text                                              AS total,
+      count(*) FILTER (WHERE p.status = 'open')::text             AS open,
+      count(*) FILTER (WHERE p.status = 'closed')::text           AS closed,
+      count(*) FILTER (WHERE sl.id IS NOT NULL)::text             AS linked,
+      count(*) FILTER (WHERE sl.id IS NULL)::text                 AS unlinked
+    FROM public.positions p
+    LEFT JOIN public.spread_legs sl
+      ON sl.position_id = p.id
+    WHERE p.user_id = ${userId}::uuid
+      AND p.deleted_at IS NULL
+  `;
+
+  return {
+    total: Number(row?.total ?? 0),
+    open: Number(row?.open ?? 0),
+    closed: Number(row?.closed ?? 0),
+    linked: Number(row?.linked ?? 0),
+    unlinked: Number(row?.unlinked ?? 0),
+  };
+}

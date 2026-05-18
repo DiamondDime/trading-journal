@@ -16,15 +16,17 @@
  *     `getT()` AND the response varies per request based on query string.
  */
 import Link from "next/link";
-import { ChevronLeft, ChevronRight, Plug, ArrowRight } from "lucide-react";
+import { ChevronLeft, ChevronRight, Plug, ArrowRight, Plus } from "lucide-react";
 import { requireUser } from "@/lib/auth/server";
 import { getT } from "@/lib/i18n/server";
 import { getConnectedExchangeCount } from "@/lib/db/activity";
 import {
   listTradeFeed,
   listFeedExchangeOptions,
+  getTradeFeedStats,
   type TradeFeedFilters,
   type TradeFeedSort,
+  type TradeFeedStats,
 } from "./db";
 import { FeedFilterBar } from "@/components/trades/feed-filter-bar";
 import { FeedTable } from "@/components/trades/feed-table";
@@ -128,11 +130,12 @@ export default async function TradesFeedPage({
   const sort = parseSort(rawSort);
 
   // Parallel reads — independent of each other.
-  const [{ rows, nextCursor, total }, exchangeOptions, connectionCount] =
+  const [{ rows, nextCursor, total }, exchangeOptions, connectionCount, stats] =
     await Promise.all([
       listTradeFeed(userId, filters, sort, PAGE_LIMIT, cursor),
       listFeedExchangeOptions(userId),
       getConnectedExchangeCount(userId),
+      getTradeFeedStats(userId),
     ]);
 
   const start = total === 0 ? 0 : (page - 1) * PAGE_LIMIT + 1;
@@ -200,13 +203,25 @@ export default async function TradesFeedPage({
   return (
     <div className="w-full">
       {/* ── Hero ──────────────────────────────────────────────────────── */}
-      <header className="flex flex-col gap-2 border-b border-border px-8 py-7 lg:px-12">
-        <h1 className="font-serif text-[40px] font-medium leading-none tracking-tight text-text">
-          {t("trades.feed.title")}
-        </h1>
-        <p className="font-serif text-sm italic text-text-tertiary">
-          {t("trades.feed.subtitle")}
-        </p>
+      <header className="flex flex-col gap-4 border-b border-border px-8 py-7 lg:px-12">
+        <div className="flex flex-col gap-2 md:flex-row md:items-end md:justify-between md:gap-6">
+          <div className="flex flex-col gap-2">
+            <h1 className="font-serif text-[40px] font-medium leading-none tracking-tight text-text">
+              {t("trades.feed.title")}
+            </h1>
+            <p className="font-serif text-sm italic text-text-tertiary">
+              {t("trades.feed.subtitle")}
+            </p>
+          </div>
+          <Link
+            href="/add"
+            className="inline-flex w-fit items-center gap-1.5 rounded-md border border-border bg-surface px-3 py-1.5 font-mono text-[10px] uppercase tracking-[0.16em] text-text-secondary transition-colors hover:border-border-strong hover:text-text"
+          >
+            <Plus className="h-3 w-3" />
+            {t("trades.feed.quickAdd")}
+          </Link>
+        </div>
+        {stats.total > 0 && <StatsStrip stats={stats} />}
       </header>
 
       <div className="px-8 py-6 lg:px-12">
@@ -295,6 +310,47 @@ export default async function TradesFeedPage({
         )}
       </div>
     </div>
+  );
+}
+
+// ── Stats strip ───────────────────────────────────────────────────────────
+
+async function StatsStrip({ stats }: { stats: TradeFeedStats }) {
+  const t = await getT();
+  const items: Array<{ key: string; value: number; tone?: "warn" }> = [
+    { key: "total", value: stats.total },
+    { key: "open", value: stats.open },
+    { key: "closed", value: stats.closed },
+    {
+      key: "unlinked",
+      value: stats.unlinked,
+      ...(stats.unlinked > 0 ? { tone: "warn" as const } : {}),
+    },
+  ];
+  return (
+    <dl
+      className="grid grid-cols-2 gap-4 sm:grid-cols-4"
+      aria-label={t("trades.feed.stats.aria")}
+    >
+      {items.map((s) => (
+        <div
+          key={s.key}
+          className="flex flex-col gap-1 border-l border-border-subtle pl-4"
+        >
+          <dt className="font-mono text-[9px] uppercase tracking-[0.16em] text-text-tertiary">
+            {t(`trades.feed.stats.${s.key}` as Parameters<typeof t>[0])}
+          </dt>
+          <dd
+            className={
+              "font-mono text-[20px] font-medium tabular-nums " +
+              (s.tone === "warn" && s.value > 0 ? "text-warn" : "text-text")
+            }
+          >
+            {s.value.toLocaleString("en-US")}
+          </dd>
+        </div>
+      ))}
+    </dl>
   );
 }
 

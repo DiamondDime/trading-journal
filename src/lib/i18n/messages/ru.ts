@@ -781,6 +781,14 @@ export const ru: MessageDict = {
     feed: {
       title: 'Трейды',
       subtitle: 'Все позиции, которые воркер импортировал с подключённых бирж.',
+      quickAdd: 'Записать вручную',
+      stats: {
+        aria: 'Счётчики позиций',
+        total: 'Всего',
+        open: 'Открытых',
+        closed: 'Закрытых',
+        unlinked: 'Без привязки',
+      },
       empty: {
         noConnections: {
           title: 'Подключи биржу, чтобы начать.',

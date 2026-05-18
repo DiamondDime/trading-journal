@@ -753,6 +753,14 @@ export const en = {
     feed: {
       title: 'Trades',
       subtitle: 'Every position the worker has imported from your connected exchanges.',
+      quickAdd: 'Add manual entry',
+      stats: {
+        aria: 'Position counters',
+        total: 'Total',
+        open: 'Open',
+        closed: 'Closed',
+        unlinked: 'Unlinked',
+      },
       empty: {
         noConnections: {
           title: 'Connect an exchange to start logging.',
