@@ -35,7 +35,6 @@ const EXCHANGES = [
 ] as const;
 const INSTRUMENTS = ["perp", "spot", "future"] as const;
 const SIDES = ["long", "short"] as const;
-const STATUSES = ["open", "closed", "liquidated"] as const;
 const KINDS = ["spot", "perp", "dated_future", "option", "otc", "nft"] as const;
 
 type Search = Promise<{ [key: string]: string | string[] | undefined }>;
@@ -93,11 +92,6 @@ export default async function TradeFieldsPage(props: { searchParams: Search }) {
   const sideLabels: Record<(typeof SIDES)[number], string> = {
     long: t("wizard.trade.fields.side.long"),
     short: t("wizard.trade.fields.side.short"),
-  };
-  const statusLabels: Record<(typeof STATUSES)[number], string> = {
-    open: t("wizard.trade.fields.status.open"),
-    closed: t("wizard.trade.fields.status.closed"),
-    liquidated: t("wizard.trade.fields.status.liquidated"),
   };
 
   // Seed from edit-mode DB row when present.
@@ -182,10 +176,10 @@ export default async function TradeFieldsPage(props: { searchParams: Search }) {
 
   const kindRaw = getStr(sp, "kind") || dbDefaults.kind || "spot";
   const kind = (KINDS as readonly string[]).includes(kindRaw) ? kindRaw : "spot";
-  const status =
-    (STATUSES as readonly string[]).includes(getStr(sp, "status"))
-      ? getStr(sp, "status")
-      : dbDefaults.status || "closed";
+  // Status is always closed for journal entries. The only exception is
+  // liquidations, surfaced via a checkbox rather than a 3-way picker.
+  const isLiquidatedDefault =
+    dbDefaults.status === "liquidated" || getStr(sp, "status") === "liquidated";
 
   // URL > DB > empty. URL overrides DB so back-from-review keeps user edits.
   const defaults = {
@@ -317,20 +311,6 @@ export default async function TradeFieldsPage(props: { searchParams: Search }) {
         )}
         <input type="hidden" name="kind" value={kind} />
 
-        {/* ── Status ─────────────────────────────────────────────────── */}
-        <SectionLabel>{t("wizard.trade.fields.sections.status")}</SectionLabel>
-        <RadioRow
-          legend={t("wizard.trade.fields.labels.status")}
-          name="status"
-          requiredCue={requiredCue}
-          options={STATUSES.map((s) => ({
-            value: s,
-            label: statusLabels[s],
-            tone: s === "closed" ? "neutral" : s === "open" ? "up" : "down",
-          }))}
-          defaultValue={status}
-        />
-
         {/* ── Venue + symbol ─────────────────────────────────────────── */}
         <SectionLabel>{t("wizard.trade.fields.sections.venue")}</SectionLabel>
         <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
@@ -443,12 +423,8 @@ export default async function TradeFieldsPage(props: { searchParams: Search }) {
           <WizardField
             label={t("wizard.trade.fields.labels.exitPrice")}
             htmlFor="exitPrice"
-            helper={
-              status === "open"
-                ? t("wizard.trade.fields.helpers.exitPriceOpen")
-                : t("wizard.trade.fields.helpers.usd")
-            }
-            required={status !== "open"}
+            helper={t("wizard.trade.fields.helpers.usd")}
+            required
           >
             <WizardInput
               id="exitPrice"
@@ -459,7 +435,7 @@ export default async function TradeFieldsPage(props: { searchParams: Search }) {
               inputMode="decimal"
               defaultValue={defaults.exitPrice}
               placeholder="66380.00"
-              required={status !== "open"}
+              required
             />
           </WizardField>
 
@@ -506,6 +482,27 @@ export default async function TradeFieldsPage(props: { searchParams: Search }) {
             <input type="hidden" name="fees" value={defaults.fees} />
           )}
         </div>
+        {/* Liquidation checkbox — unchecked = closed (default), checked = liquidated.
+            The `status` query param is absent when unchecked; the review page and
+            action both default to "closed" on absence. When checked, status=liquidated
+            is emitted into the GET query string. */}
+        <label className="flex items-start gap-2 text-[12px]">
+          <input
+            type="checkbox"
+            name="status"
+            value="liquidated"
+            defaultChecked={isLiquidatedDefault}
+            className="mt-0.5 h-3.5 w-3.5 accent-text"
+          />
+          <span className="flex flex-col gap-0.5">
+            <span className="font-mono text-[10px] uppercase tracking-[0.16em] text-text-tertiary">
+              {t("wizard.trade.fields.liquidated.label")}
+            </span>
+            <span className="font-serif italic text-text-tertiary">
+              {t("wizard.trade.fields.liquidated.helper")}
+            </span>
+          </span>
+        </label>
 
         {/* ── Timing ─────────────────────────────────────────────────── */}
         <SectionLabel>{t("wizard.trade.fields.sections.timing")}</SectionLabel>
@@ -522,15 +519,14 @@ export default async function TradeFieldsPage(props: { searchParams: Search }) {
           <WizardField
             label={t("wizard.trade.fields.labels.closedAt")}
             htmlFor="closedAt"
-            helper={status === "open" ? t("wizard.trade.fields.helpers.closedAtOpen") : undefined}
-            required={status !== "open"}
+            required
           >
             <WizardInput
               id="closedAt"
               name="closedAt"
               type="datetime-local"
               defaultValue={defaults.closedAt}
-              required={status !== "open"}
+              required
             />
           </WizardField>
         </div>

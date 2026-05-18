@@ -23,7 +23,6 @@ import {
   getPartnerCatalog,
 } from "@/lib/db/exchanges";
 import { PartnerCard } from "@/components/partners/partner-card";
-import { SavingsCalculator } from "@/components/partners/savings-calculator";
 
 // Catalog reads are fast (single SELECT, <5ms locally) but referral copy can
 // move between releases; force-dynamic keeps the page honest after the
@@ -41,19 +40,6 @@ export default async function PartnersPage() {
 
   const count = partners.length;
   const counterCopy = t.plural("partners.counterPlural", count);
-
-  // Mean of the published rebate fractions across referral-eligible
-  // partners with a non-null rebatePct. This is what the calculator uses
-  // as its averageRebatePct input. Defensive fallback to 0 keeps the
-  // result well-defined even with an empty set (calculator is hidden in
-  // that case, but we still want the math layer not to NaN).
-  const rebateValues = partners
-    .map((p) => p.rebatePct)
-    .filter((v): v is number => v != null);
-  const averageRebateFraction =
-    rebateValues.length > 0
-      ? rebateValues.reduce((s, v) => s + v, 0) / rebateValues.length / 100
-      : 0;
 
   return (
     <div className="w-full">
@@ -114,13 +100,28 @@ export default async function PartnersPage() {
           </section>
         )}
 
-        {/* ── savings calculator ────────────────────────────────────────── */}
+        {/* ── persuasion callout ────────────────────────────────────────── */}
+        {/* Mirrors the honesty card chrome so the page reads as two matched */}
+        {/* callouts bracketing the partner grid: trust (top) → social proof */}
+        {/* (bottom). One paragraph, no numbers we can't defend. The "thousands */}
+        {/* a year" claim is bracketed by "typical volumes" and "some desks per */}
+        {/* month" — directional, not a fabricated population stat. */}
         {partners.length > 0 && (
-          <section className="mb-8">
-            <SavingsCalculator
-              averageRebateFraction={averageRebateFraction}
-              locale={locale}
-            />
+          <section
+            aria-labelledby="partners-persuasion-heading"
+            className="mb-8 overflow-hidden rounded-md border border-border bg-surface"
+          >
+            <div className="border-l-2 border-border-strong px-6 py-5">
+              <h2
+                id="partners-persuasion-heading"
+                className="font-serif text-[15px] font-semibold uppercase tracking-[0.16em] text-text"
+              >
+                {t("partners.persuasionTitle")}
+              </h2>
+              <p className="mt-3 font-serif text-[15px] italic leading-relaxed text-text-secondary">
+                {t("partners.persuasionBody")}
+              </p>
+            </div>
           </section>
         )}
 

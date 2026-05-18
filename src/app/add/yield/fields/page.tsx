@@ -93,7 +93,6 @@ export default async function YieldFieldsPage(props: { searchParams: Search }) {
   const issues = decodeIssues(getStr(sp, "issues"));
 
   const STEP_LABELS = [
-    t("wizard.yield.stepLabels.source"),
     t("wizard.yield.stepLabels.kind"),
     t("wizard.yield.stepLabels.fields"),
     t("wizard.yield.stepLabels.review"),
@@ -224,13 +223,13 @@ export default async function YieldFieldsPage(props: { searchParams: Search }) {
 
   const backHref = editValid
     ? `/yield-positions/${editId}`
-    : `/add/yield/kind?source=${source}&kind=${effectiveKind}`;
+    : `/add/yield/kind?kind=${effectiveKind}`;
 
   return (
     <WizardShell
       type="yield_position"
-      step={3}
-      totalSteps={4}
+      step={2}
+      totalSteps={3}
       stepLabels={STEP_LABELS}
       title={editValid ? "Edit yield details" : "Yield details"}
       subtitle={

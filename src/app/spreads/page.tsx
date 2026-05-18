@@ -40,7 +40,6 @@ import {
   computeStreaks,
   computeMoreMetrics,
   computeRDistribution,
-  computeSharpeSortino,
 } from "@/lib/analytics";
 import { fetchSubtypeMetaForIds } from "@/lib/data/db-queries";
 import { feedRowsToActivities } from "@/lib/data/db-adapter";
@@ -169,11 +168,6 @@ function fmtPercent(n: number | null, mult100 = true): string {
   if (n == null || !Number.isFinite(n)) return "—";
   const v = mult100 ? n * 100 : n;
   return `${v.toFixed(1)}%`;
-}
-
-function fmtSharpe(n: number | null, enoughData: boolean): string {
-  if (!enoughData || n == null || !Number.isFinite(n)) return "—";
-  return n.toFixed(2);
 }
 
 function fmtExpectancy(n: number): string {
@@ -323,7 +317,6 @@ export default async function SpreadsPage({ searchParams }: SpreadsPageProps) {
   const drawdown = computeDrawdown(closedNormalized);
   const streaks = computeStreaks(closedNormalized);
   const more = computeMoreMetrics(closedNormalized);
-  const sharpe = computeSharpeSortino(closedNormalized);
   // 1R = average loss (USD). When there are no losses, fall back to the
   // grand-average activity size so the histogram still has a sensible
   // unit; with rUnit=0 the R-distribution helper returns an empty result.
@@ -529,7 +522,7 @@ export default async function SpreadsPage({ searchParams }: SpreadsPageProps) {
             Each card carries a one-line italic-serif explanation so the
             number is self-evident without a glossary. No hero variant —
             the single amber moment lives upstairs. */}
-        <section className="mb-8 grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-6">
+        <section className="mb-8 grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-5">
           <KpiCardWithCaption
             label={t("dashboard.kpi.profitFactor")}
             value={fmtRatio(more.profitFactor)}
@@ -597,22 +590,6 @@ export default async function SpreadsPage({ searchParams }: SpreadsPageProps) {
                 : streaks.currentStreak.kind === "win"
                   ? t("dashboard.deltas.streakNowWins", { count: streaks.currentStreak.length })
                   : t("dashboard.deltas.streakNoStreak")
-            }
-          />
-          <KpiCardWithCaption
-            label={t("dashboard.kpi.sharpe")}
-            value={fmtSharpe(sharpe.sharpe, sharpe.enoughData)}
-            tone={
-              sharpe.enoughData && sharpe.sharpe >= 0 ? "up" : "down"
-            }
-            caption={t("dashboard.captions.sharpe")}
-            delta={
-              sharpe.enoughData
-                ? t("dashboard.deltas.sharpeReady", {
-                    days: sharpe.sampleDays,
-                    factor: sharpe.annualizationFactor,
-                  })
-                : t("dashboard.deltas.sharpeNeeds", { days: sharpe.sampleDays })
             }
           />
         </section>

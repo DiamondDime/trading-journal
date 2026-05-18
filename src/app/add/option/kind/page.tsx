@@ -23,7 +23,6 @@ function getStr(sp: Awaited<Search>, key: string, fallback = ""): string {
 export default async function OptionKindPage(props: { searchParams: Search }) {
   const t = await getT();
   const STEP_LABELS = [
-    t("wizard.option.stepLabels.source"),
     t("wizard.option.stepLabels.kind"),
     t("wizard.option.stepLabels.legs"),
     t("wizard.option.stepLabels.fields"),
@@ -37,8 +36,8 @@ export default async function OptionKindPage(props: { searchParams: Search }) {
   return (
     <WizardShell
       type="option"
-      step={2}
-      totalSteps={5}
+      step={1}
+      totalSteps={4}
       stepLabels={STEP_LABELS}
       title={t("wizard.option.kind.title")}
       subtitle={t("wizard.option.kind.subtitle")}
@@ -71,7 +70,7 @@ export default async function OptionKindPage(props: { searchParams: Search }) {
           ]}
         />
         <WizardNav
-          backHref="/add/option/source"
+          backHref="/add"
           continueFormId="option-kind-form"
         />
       </form>

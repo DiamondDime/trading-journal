@@ -33,16 +33,11 @@ export default async function MovementKindPage(props: { searchParams: Search }) 
 
   const defaultKind = getStr(sp, "kind");
 
-  // i18n keys for each kind. Keep this aligned with movement_event_kind.
+  // Only two kinds are exposed in the UI. The DB enum retains all values so
+  // existing rows with other kinds still render correctly elsewhere.
   const KINDS = [
-    { value: "bridge",     i18n: "bridge" },
-    { value: "convert",    i18n: "convert" },
-    { value: "transfer",   i18n: "transfer" },
-    { value: "deposit",    i18n: "deposit" },
-    { value: "withdrawal", i18n: "withdrawal" },
-    { value: "nft_trade",  i18n: "nftTrade" },
-    { value: "loss",       i18n: "loss" },
-    { value: "other",      i18n: "other" },
+    { value: "loss",  i18n: "loss" },
+    { value: "other", i18n: "other" },
   ] as const;
 
   return (

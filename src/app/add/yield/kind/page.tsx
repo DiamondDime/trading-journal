@@ -27,11 +27,9 @@ function getStr(sp: Awaited<Search>, key: string, fallback = ""): string {
 export default async function YieldKindPage(props: { searchParams: Search }) {
   const t = await getT();
   const sp = await props.searchParams;
-  const source = getStr(sp, "source", "manual");
   const defaultKind = getStr(sp, "kind", "stake");
 
   const STEP_LABELS = [
-    t("wizard.yield.stepLabels.source"),
     t("wizard.yield.stepLabels.kind"),
     t("wizard.yield.stepLabels.fields"),
     t("wizard.yield.stepLabels.review"),
@@ -40,8 +38,8 @@ export default async function YieldKindPage(props: { searchParams: Search }) {
   return (
     <WizardShell
       type="yield_position"
-      step={2}
-      totalSteps={4}
+      step={1}
+      totalSteps={3}
       stepLabels={STEP_LABELS}
       title="What kind of yield?"
       subtitle="Each kind unlocks the right fields on the next step. Pick the one that matches your position — you can edit later."
@@ -52,8 +50,6 @@ export default async function YieldKindPage(props: { searchParams: Search }) {
         method="get"
         className="flex flex-col gap-7"
       >
-        <input type="hidden" name="source" value={source} />
-
         <WizardRadioRow
           name="kind"
           defaultValue={defaultKind}
@@ -103,7 +99,7 @@ export default async function YieldKindPage(props: { searchParams: Search }) {
 
         <div className="mt-6 flex items-center justify-between border-t border-border pt-6">
           <Link
-            href="/add/yield/source"
+            href="/add"
             className="inline-flex items-center gap-1.5 font-mono text-[11px] uppercase tracking-[0.16em] text-text-tertiary transition-colors hover:text-text"
           >
             <ArrowLeft className="h-3 w-3" />

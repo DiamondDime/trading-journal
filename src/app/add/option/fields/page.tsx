@@ -46,7 +46,6 @@ function isoToDateTimeLocal(iso: string | null): string {
 export default async function OptionFieldsPage(props: { searchParams: Search }) {
   const t = await getT();
   const STEP_LABELS = [
-    t("wizard.option.stepLabels.source"),
     t("wizard.option.stepLabels.kind"),
     t("wizard.option.stepLabels.legs"),
     t("wizard.option.stepLabels.fields"),
@@ -165,8 +164,8 @@ export default async function OptionFieldsPage(props: { searchParams: Search }) 
   return (
     <WizardShell
       type="option"
-      step={4}
-      totalSteps={5}
+      step={3}
+      totalSteps={4}
       stepLabels={STEP_LABELS}
       title={
         editValid

@@ -23,7 +23,7 @@ export async function generateMetadata(): Promise<Metadata> {
   // Cookie read inside getT keeps this per-request.
   return {
     title: "Movement events · Crypto Journal",
-    description: "Bridges, conversions, transfers, deposits, withdrawals, NFT trades and losses.",
+    description: "Losses, write-offs, and manual book adjustments — things that touch P&L but aren't a trade.",
   };
 }
 

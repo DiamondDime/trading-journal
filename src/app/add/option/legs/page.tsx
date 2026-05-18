@@ -71,7 +71,6 @@ function extractLegDefaults(
 export default async function OptionLegsPage(props: { searchParams: Search }) {
   const t = await getT();
   const STEP_LABELS = [
-    t("wizard.option.stepLabels.source"),
     t("wizard.option.stepLabels.kind"),
     t("wizard.option.stepLabels.legs"),
     t("wizard.option.stepLabels.fields"),
@@ -145,8 +144,8 @@ export default async function OptionLegsPage(props: { searchParams: Search }) {
   return (
     <WizardShell
       type="option"
-      step={3}
-      totalSteps={5}
+      step={2}
+      totalSteps={4}
       stepLabels={STEP_LABELS}
       title={
         subtype === "option_spread"

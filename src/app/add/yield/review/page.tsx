@@ -114,7 +114,6 @@ export default async function YieldReviewPage(props: { searchParams: Search }) {
   const t = await getT();
   const sp = await props.searchParams;
   const STEP_LABELS = [
-    t("wizard.yield.stepLabels.source"),
     t("wizard.yield.stepLabels.kind"),
     t("wizard.yield.stepLabels.fields"),
     t("wizard.yield.stepLabels.review"),
@@ -210,8 +209,8 @@ export default async function YieldReviewPage(props: { searchParams: Search }) {
   return (
     <WizardShell
       type="yield_position"
-      step={4}
-      totalSteps={4}
+      step={3}
+      totalSteps={3}
       stepLabels={STEP_LABELS}
       title={isEditing ? "Confirm changes" : "Confirm yield position"}
       subtitle={
@@ -300,7 +299,7 @@ export default async function YieldReviewPage(props: { searchParams: Search }) {
           <WizardSummaryRow
             label="Kind"
             value={v.kind.charAt(0).toUpperCase() + v.kind.slice(1)}
-            editHref={`/add/yield/kind?source=${v.source}&kind=${v.kind}`}
+            editHref={`/add/yield/kind?kind=${v.kind}`}
           />
           <WizardSummaryRow
             label="Protocol"

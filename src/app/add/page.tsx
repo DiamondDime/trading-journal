@@ -45,14 +45,14 @@ export default async function AddIndexPage() {
       caption: t("wizard.add.options.yield.caption"),
       title: t("wizard.add.options.yield.title"),
       description: t("wizard.add.options.yield.description"),
-      href: "/add/yield/source",
+      href: "/add/yield/kind",
       badge: t("wizard.add.options.yield.badge"),
     },
     {
       caption: t("wizard.add.options.option.caption"),
       title: t("wizard.add.options.option.title"),
       description: t("wizard.add.options.option.description"),
-      href: "/add/option/source",
+      href: "/add/option/kind",
       badge: t("wizard.add.manual"),
     },
     {
