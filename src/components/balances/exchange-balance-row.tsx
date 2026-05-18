@@ -8,7 +8,7 @@
  */
 import Link from "next/link";
 import { ArrowUpRight } from "lucide-react";
-import { ExchangeLogo } from "@/components/settings/exchange-logo";
+import { ExchangeLogo, exchangeLogoUrl } from "@/components/settings/exchange-logo";
 import type { BalanceByExchange } from "@/types/balances";
 import { getT, getLocale } from "@/lib/i18n/server";
 
@@ -48,7 +48,7 @@ export async function ExchangeBalanceRow({ entry }: Props) {
         <ExchangeLogo
           code={entry.exchangeCode}
           displayName={entry.exchange}
-          logoUrl={`/exchanges/${entry.exchangeCode}.svg`}
+          logoUrl={exchangeLogoUrl(entry.exchangeCode)}
           size="md"
         />
         <div className="min-w-0">

@@ -1,6 +1,7 @@
 import { ArrowUp, ArrowDown, Minus } from "lucide-react";
 import { unstable_cache } from "next/cache";
 import { ExchangeChip } from "@/components/settings/exchange-logo";
+import { getT } from "@/lib/i18n/server";
 
 /**
  * Funding rates ticker — real data from Binance USD-M perp futures.
@@ -124,24 +125,33 @@ function TrendIcon({ rate }: { rate: number }) {
  * so the window is always under 8h. Render as "in 2h 34m" / "in 4m" / "now"
  * — terse, mono-friendly, no seconds noise.
  */
-function fmtCountdown(nextFundingTime: number, now: number): string {
+function fmtCountdown(
+  nextFundingTime: number,
+  now: number,
+  t: Awaited<ReturnType<typeof getT>>,
+): string {
   const deltaMs = nextFundingTime - now;
-  if (deltaMs <= 0) return "now";
+  if (deltaMs <= 0) return t("dashboard.funding.now");
   const totalMinutes = Math.floor(deltaMs / 60_000);
   const hours = Math.floor(totalMinutes / 60);
   const minutes = totalMinutes % 60;
-  if (hours <= 0) return `in ${minutes}m`;
-  return `in ${hours}h ${minutes}m`;
+  if (hours <= 0) return t("dashboard.funding.inMinutes", { m: minutes });
+  return t("dashboard.funding.inHoursMinutes", { h: hours, m: minutes });
 }
 
-function fmtFetchedAgo(fetchedAt: number, now: number): string {
+function fmtFetchedAgo(
+  fetchedAt: number,
+  now: number,
+  t: Awaited<ReturnType<typeof getT>>,
+): string {
   const ageSec = Math.max(0, Math.floor((now - fetchedAt) / 1000));
-  if (ageSec < 60) return `${ageSec}s ago`;
+  if (ageSec < 60) return t("dashboard.funding.secondsAgo", { s: ageSec });
   const min = Math.floor(ageSec / 60);
-  return `${min}m ago`;
+  return t("dashboard.funding.minutesAgo", { m: min });
 }
 
 export async function FundingTicker() {
+  const t = await getT();
   const data = await getFundingRates();
   // Date.now is pure-at-request-time inside this async Server Component.
   // eslint-disable-next-line react-hooks/purity
@@ -158,13 +168,13 @@ export async function FundingTicker() {
               <span className="relative inline-flex h-2 w-2 rounded-full bg-text-tertiary" />
             </span>
             <h3 className="font-serif text-[12px] font-semibold uppercase tracking-[0.16em] text-text">
-              Funding rates · live
+              {t("dashboard.funding.title")}
             </h3>
           </div>
         </div>
         <div className="flex h-[260px] items-center justify-center px-6">
           <p className="font-serif text-sm italic text-text-tertiary">
-            Funding rates unavailable. Retrying in 5 minutes.
+            {t("dashboard.funding.unavailable")}
           </p>
         </div>
       </div>
@@ -183,11 +193,11 @@ export async function FundingTicker() {
             <span className="relative inline-flex h-2 w-2 rounded-full bg-up" />
           </span>
           <h3 className="font-serif text-[12px] font-semibold uppercase tracking-[0.16em] text-text">
-            Funding rates · live
+            {t("dashboard.funding.title")}
           </h3>
         </div>
         <span className="font-mono text-[10px] text-text-tertiary">
-          updated {fmtFetchedAgo(fetchedAt, now)}
+          {t("dashboard.funding.updatedAgo", { ago: fmtFetchedAgo(fetchedAt, now, t) })}
         </span>
       </div>
 
@@ -196,16 +206,16 @@ export async function FundingTicker() {
           <thead>
             <tr className="border-b border-border-subtle text-text-tertiary">
               <th className="px-4 py-1.5 text-left font-mono text-[9px] font-medium uppercase tracking-[0.14em]">
-                Symbol
+                {t("dashboard.funding.columns.symbol")}
               </th>
               <th className="px-2 py-1.5 text-right font-mono text-[9px] font-medium uppercase tracking-[0.14em]">
-                8h
+                {t("dashboard.funding.columns.eightH")}
               </th>
               <th className="px-2 py-1.5 text-right font-mono text-[9px] font-medium uppercase tracking-[0.14em]">
-                APR
+                {t("dashboard.funding.columns.apr")}
               </th>
               <th className="px-2 py-1.5 text-right font-mono text-[9px] font-medium uppercase tracking-[0.14em]">
-                Next
+                {t("dashboard.funding.columns.next")}
               </th>
               <th className="px-3 py-1.5 text-center font-mono text-[9px] font-medium uppercase tracking-[0.14em]">
                 Δ
@@ -248,7 +258,7 @@ export async function FundingTicker() {
                     {Math.abs(r.apr).toFixed(1)}%
                   </td>
                   <td className="px-2 py-1.5 text-right font-mono text-[10px] tabular-nums text-text-tertiary">
-                    {fmtCountdown(r.nextFundingTime, now)}
+                    {fmtCountdown(r.nextFundingTime, now, t)}
                   </td>
                   <td className="px-3 py-1.5">
                     <div className="flex justify-center">
@@ -263,7 +273,7 @@ export async function FundingTicker() {
       </div>
 
       <div className="border-t border-border px-4 py-2 font-serif text-[10px] italic text-text-tertiary">
-        Source: Binance USD-M perps · refreshed every 5 min
+        {t("dashboard.funding.source")}
       </div>
     </div>
   );

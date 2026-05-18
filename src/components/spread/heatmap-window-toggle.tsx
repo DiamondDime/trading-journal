@@ -6,6 +6,7 @@ import {
   type HeatmapWindow,
 } from "@/lib/dashboard/filters";
 import { cn } from "@/lib/utils";
+import { useT } from "@/lib/i18n/client";
 
 /**
  * 13w / 26w / 52w toggle for the calendar heatmap. Persists the choice in
@@ -20,15 +21,15 @@ interface Props {
   current: HeatmapWindow;
 }
 
-const LABELS: Record<HeatmapWindow, string> = {
-  "13w": "13 weeks",
-  "26w": "26 weeks",
-  "52w": "52 weeks",
-};
-
 export function HeatmapWindowToggle({ current }: Props) {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const t = useT();
+  const labels: Record<HeatmapWindow, string> = {
+    "13w": t("dashboard.heatmapWindow.w13"),
+    "26w": t("dashboard.heatmapWindow.w26"),
+    "52w": t("dashboard.heatmapWindow.w52"),
+  };
 
   function setWindow(w: HeatmapWindow) {
     const sp = new URLSearchParams(searchParams.toString());
@@ -41,7 +42,7 @@ export function HeatmapWindowToggle({ current }: Props) {
   return (
     <div
       role="radiogroup"
-      aria-label="Heatmap window length"
+      aria-label={t("dashboard.heatmapWindow.aria")}
       className="flex items-center gap-1 rounded-md border border-border bg-surface p-0.5"
     >
       {HEATMAP_WINDOWS.map((w) => {
@@ -60,7 +61,7 @@ export function HeatmapWindowToggle({ current }: Props) {
                 : "text-text-tertiary hover:text-text",
             )}
           >
-            {LABELS[w]}
+            {labels[w]}
           </button>
         );
       })}

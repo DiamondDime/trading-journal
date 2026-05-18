@@ -2,6 +2,7 @@ import Link from "next/link";
 import { ArrowUpRight } from "lucide-react";
 import { requireUser } from "@/lib/auth/server";
 import { listRecentNotes, type RecentNoteRow } from "@/lib/db/notes";
+import { getT, getLocale } from "@/lib/i18n/server";
 
 const FEED_LIMIT = 6;
 
@@ -23,8 +24,8 @@ function hrefFor(note: RecentNoteRow): string {
   }
 }
 
-function fmtDate(iso: string): string {
-  return new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric" });
+function fmtDate(iso: string, intlLocale: string): string {
+  return new Date(iso).toLocaleDateString(intlLocale, { month: "short", day: "numeric" });
 }
 
 function fmtSerial(activityId: string): string {
@@ -51,6 +52,9 @@ function previewOf(body: string): string {
  */
 export async function NotesFeed() {
   const { id: userId } = await requireUser();
+  const t = await getT();
+  const locale = await getLocale();
+  const intlLocale = locale === "ru" ? "ru-RU" : "en-US";
   const notes = await listRecentNotes(userId, FEED_LIMIT);
 
   if (notes.length === 0) {
@@ -58,12 +62,12 @@ export async function NotesFeed() {
       <div className="h-full rounded-md border border-border bg-surface">
         <div className="flex items-center justify-between border-b border-border px-4 py-3">
           <h3 className="font-serif text-[12px] font-semibold uppercase tracking-[0.16em] text-text">
-            Recent notes
+            {t("dashboard.notesFeed.title")}
           </h3>
         </div>
         <div className="px-4 py-8 text-center">
           <p className="font-serif text-[13px] italic text-text-tertiary">
-            No notes yet. Open any activity to write your first postmortem.
+            {t("dashboard.notesFeed.empty")}
           </p>
         </div>
       </div>
@@ -74,13 +78,14 @@ export async function NotesFeed() {
     <div className="h-full rounded-md border border-border bg-surface">
       <div className="flex items-center justify-between border-b border-border px-4 py-3">
         <h3 className="font-serif text-[12px] font-semibold uppercase tracking-[0.16em] text-text">
-          Recent notes
+          {t("dashboard.notesFeed.title")}
         </h3>
         <Link
           href="/spreads/archive"
           className="flex items-center gap-1 font-mono text-[10px] uppercase tracking-[0.14em] text-text-tertiary hover:text-text"
         >
-          {notes.length} recent <ArrowUpRight className="h-3 w-3" />
+          {t("dashboard.notesFeed.recentCount", { n: notes.length })}{" "}
+          <ArrowUpRight className="h-3 w-3" />
         </Link>
       </div>
 
@@ -93,7 +98,7 @@ export async function NotesFeed() {
           >
             <div className="flex items-center gap-2 mb-1.5">
               <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-text-tertiary">
-                {fmtDate(n.updatedAt)}
+                {fmtDate(n.updatedAt, intlLocale)}
               </span>
               <span className="font-mono text-[10px] text-text-tertiary">·</span>
               <span className="font-mono text-[10px] text-signature">

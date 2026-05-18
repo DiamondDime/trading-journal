@@ -6,6 +6,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { useT, useLocale } from "@/lib/i18n/client";
 
 /**
  * Dashboard heatmap of daily realized net P&L over the last 13 / 26 / 52 weeks.
@@ -38,7 +39,18 @@ import {
  * The grid alignment uses Date constructed in local time so they line up.
  */
 
-const DAY_LABELS = ["S", "M", "T", "W", "T", "F", "S"];
+// Sun..Sat keys (Date.getDay maps 0..6 = Sun..Sat). Tooltip shows full short
+// weekday via Intl, so the column labels stay tiny single-letter glyphs from
+// calendar.weekdaysShort.
+const DAY_LABEL_KEYS = [
+  "calendar.weekdaysShort.sun",
+  "calendar.weekdaysShort.mon",
+  "calendar.weekdaysShort.tue",
+  "calendar.weekdaysShort.wed",
+  "calendar.weekdaysShort.thu",
+  "calendar.weekdaysShort.fri",
+  "calendar.weekdaysShort.sat",
+] as const;
 // Default window — the page can widen this via the `weeks` prop. 13w stays the
 // dashboard default because it fits cleanly in the side-by-side grid; 26w/52w
 // expand the column count for users that want a longer rear-view mirror.
@@ -113,18 +125,22 @@ function addDays(d: Date, n: number): Date {
   return out;
 }
 
-function fmtTooltipDate(d: Date): string {
-  return d.toLocaleDateString("en-US", {
+function fmtTooltipDate(d: Date, intlLocale: string): string {
+  return d.toLocaleDateString(intlLocale, {
     weekday: "short",
     month: "short",
     day: "numeric",
   });
 }
 
-function fmtAmount(v: number): string {
-  if (v === 0) return "no realized P&L";
+function fmtAmount(
+  v: number,
+  intlLocale: string,
+  noPnlLabel: string,
+): string {
+  if (v === 0) return noPnlLabel;
   const sign = v > 0 ? "+" : "−"; // minus sign
-  return `${sign}$${Math.abs(v).toLocaleString("en-US", {
+  return `${sign}$${Math.abs(v).toLocaleString(intlLocale, {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   })}`;
@@ -151,6 +167,9 @@ export function CalendarHeatmap({
   firstActivityDate,
   weeks: weeksProp = DEFAULT_WEEKS,
 }: CalendarHeatmapProps) {
+  const t = useT();
+  const locale = useLocale();
+  const intlLocale = locale === "ru" ? "ru-RU" : "en-US";
   // Clamp to a sane range — 52w is the longest the page exposes, but a caller
   // could pass anything; very large windows would blow out the grid layout.
   const weeksCount = Math.max(1, Math.min(104, Math.floor(weeksProp)));
@@ -205,7 +224,7 @@ export function CalendarHeatmap({
       const d = wks[w][0].date;
       if (d.getMonth() !== lastMonth) {
         markers.push({
-          label: d.toLocaleDateString("en-US", { month: "short" }),
+          label: d.toLocaleDateString(intlLocale, { month: "short" }),
           weekIdx: w,
         });
         lastMonth = d.getMonth();
@@ -213,7 +232,7 @@ export function CalendarHeatmap({
     }
 
     return { weeks: wks, monthMarkers: markers };
-  }, [byDate, endDate, firstActivityDate, weeksCount, totalDays]);
+  }, [byDate, endDate, firstActivityDate, weeksCount, totalDays, intlLocale]);
 
   // maxAbs over the visible window — drives the intensity scale and the legend.
   const maxAbs = React.useMemo(() => {
@@ -230,6 +249,15 @@ export function CalendarHeatmap({
   // Layout mode — 1fr fill below the threshold, fixed pitch + scroll at/above.
   const isScrollMode = weeksCount >= SCROLL_WEEKS_THRESHOLD;
 
+  const noPnlLabel = t("dashboard.heatmap.noRealizedPnl");
+  const dayLabels = DAY_LABEL_KEYS.map((k) => t(k));
+  const labels: HeatmapLabels = {
+    t,
+    intlLocale,
+    noPnlLabel,
+    dayLabels,
+  };
+
   return (
     <div className="flex flex-col gap-2">
       {isScrollMode ? (
@@ -238,6 +266,7 @@ export function CalendarHeatmap({
           weeksCount={weeksCount}
           monthMarkers={monthMarkers}
           maxAbs={maxAbs}
+          labels={labels}
         />
       ) : (
         <FillGrid
@@ -245,12 +274,20 @@ export function CalendarHeatmap({
           weeksCount={weeksCount}
           monthMarkers={monthMarkers}
           maxAbs={maxAbs}
+          labels={labels}
         />
       )}
 
-      <Legend maxAbs={maxAbs} />
+      <Legend maxAbs={maxAbs} legendLabel={t("dashboard.heatmap.legend")} />
     </div>
   );
+}
+
+interface HeatmapLabels {
+  t: ReturnType<typeof useT>;
+  intlLocale: string;
+  noPnlLabel: string;
+  dayLabels: string[];
 }
 
 // ---------------------------------------------------------------------------
@@ -264,9 +301,10 @@ interface GridProps {
   weeksCount: number;
   monthMarkers: { label: string; weekIdx: number }[];
   maxAbs: number;
+  labels: HeatmapLabels;
 }
 
-function FillGrid({ weeks, weeksCount, monthMarkers, maxAbs }: GridProps) {
+function FillGrid({ weeks, weeksCount, monthMarkers, maxAbs, labels }: GridProps) {
   // Grid: col 1 = day-of-week label column (auto), cols 2..N+1 = weeks (1fr each).
   // Rows: row 1 = month-labels row (auto), rows 2..8 = day-of-week rows.
   //
@@ -303,7 +341,7 @@ function FillGrid({ weeks, weeksCount, monthMarkers, maxAbs }: GridProps) {
 
       {/* Day-of-week labels — col 1, rows 2..8. Hide alternate rows so M/W/F
           read cleanly without cluttering the column. */}
-      {DAY_LABELS.map((d, i) => (
+      {labels.dayLabels.map((d, i) => (
         <span
           key={`dow-${i}`}
           style={{ gridColumn: 1, gridRow: i + 2 }}
@@ -324,7 +362,7 @@ function FillGrid({ weeks, weeksCount, monthMarkers, maxAbs }: GridProps) {
             <TooltipTrigger asChild>
               <div
                 role="img"
-                aria-label={cellAriaLabel(c)}
+                aria-label={cellAriaLabel(c, labels)}
                 style={{
                   gridColumn: w + 2,
                   gridRow: d + 2,
@@ -337,7 +375,7 @@ function FillGrid({ weeks, weeksCount, monthMarkers, maxAbs }: GridProps) {
                 className="rounded-[2px] transition-transform hover:scale-110 hover:ring-1 hover:ring-text/40"
               />
             </TooltipTrigger>
-            <CellTooltip cell={c} />
+            <CellTooltip cell={c} labels={labels} />
           </Tooltip>
         )),
       )}
@@ -350,7 +388,7 @@ function FillGrid({ weeks, weeksCount, monthMarkers, maxAbs }: GridProps) {
 // rather than 1fr, and the whole thing lives inside an overflow-x-auto wrapper.
 // ---------------------------------------------------------------------------
 
-function ScrollGrid({ weeks, weeksCount, monthMarkers, maxAbs }: GridProps) {
+function ScrollGrid({ weeks, weeksCount, monthMarkers, maxAbs, labels }: GridProps) {
   const gridTemplateColumns = `auto repeat(${weeksCount}, ${SCROLL_CELL_SIZE}px)`;
 
   return (
@@ -378,7 +416,7 @@ function ScrollGrid({ weeks, weeksCount, monthMarkers, maxAbs }: GridProps) {
           </span>
         ))}
 
-        {DAY_LABELS.map((d, i) => (
+        {labels.dayLabels.map((d, i) => (
           <span
             key={`dow-${i}`}
             style={{
@@ -402,7 +440,7 @@ function ScrollGrid({ weeks, weeksCount, monthMarkers, maxAbs }: GridProps) {
               <TooltipTrigger asChild>
                 <div
                   role="img"
-                  aria-label={cellAriaLabel(c)}
+                  aria-label={cellAriaLabel(c, labels)}
                   style={{
                     gridColumn: w + 2,
                     gridRow: d + 2,
@@ -416,7 +454,7 @@ function ScrollGrid({ weeks, weeksCount, monthMarkers, maxAbs }: GridProps) {
                   className="rounded-[2px] transition-transform hover:scale-125 hover:ring-1 hover:ring-text/40"
                 />
               </TooltipTrigger>
-              <CellTooltip cell={c} />
+              <CellTooltip cell={c} labels={labels} />
             </Tooltip>
           )),
         )}
@@ -429,12 +467,12 @@ function ScrollGrid({ weeks, weeksCount, monthMarkers, maxAbs }: GridProps) {
 // Tooltip content — extracted so the two grids share one body.
 // ---------------------------------------------------------------------------
 
-function CellTooltip({ cell: c }: { cell: BuiltCell }) {
+function CellTooltip({ cell: c, labels }: { cell: BuiltCell; labels: HeatmapLabels }) {
   return (
     <TooltipContent side="top" className="font-mono text-[11px]">
       <div className="flex flex-col gap-0.5">
         <span className="text-text-tertiary">
-          {fmtTooltipDate(c.date)}
+          {fmtTooltipDate(c.date, labels.intlLocale)}
         </span>
         <span
           className={
@@ -445,14 +483,14 @@ function CellTooltip({ cell: c }: { cell: BuiltCell }) {
                 : "text-text-tertiary"
           }
         >
-          {fmtAmount(c.netPnl)}
+          {fmtAmount(c.netPnl, labels.intlLocale, labels.noPnlLabel)}
         </span>
         <span className="text-text-tertiary">
           {c.count === 0
             ? c.preHistory
-              ? "before first activity"
-              : "no activity"
-            : `${c.count} ${c.count === 1 ? "activity" : "activities"}`}
+              ? labels.t("dashboard.heatmap.beforeFirstActivity")
+              : labels.t("dashboard.heatmap.noActivity")
+            : labels.t.plural("dashboard.heatmap.tooltipActivities", c.count)}
         </span>
       </div>
     </TooltipContent>
@@ -478,13 +516,19 @@ function cellBackground(c: BuiltCell, maxAbs: number): string {
   return `color-mix(in srgb, ${hue} ${pct}%, transparent)`;
 }
 
-function cellAriaLabel(c: BuiltCell): string {
+function cellAriaLabel(c: BuiltCell, labels: HeatmapLabels): string {
+  const dateStr = fmtTooltipDate(c.date, labels.intlLocale);
   if (c.count === 0) {
-    return `${fmtTooltipDate(c.date)}: no activity`;
+    return labels.t("dashboard.heatmap.ariaCellEmpty", { date: dateStr });
   }
-  return `${fmtTooltipDate(c.date)}: ${fmtAmount(c.netPnl)} across ${c.count} ${
-    c.count === 1 ? "activity" : "activities"
-  }`;
+  return labels.t.plural(
+    "dashboard.heatmap.ariaCellWithActivity",
+    c.count,
+    {
+      date: dateStr,
+      pnl: fmtAmount(c.netPnl, labels.intlLocale, labels.noPnlLabel),
+    },
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -523,7 +567,7 @@ function buildLegendTiers(maxAbs: number): LegendTier[] {
   return tiers;
 }
 
-function Legend({ maxAbs }: { maxAbs: number }) {
+function Legend({ maxAbs, legendLabel }: { maxAbs: number; legendLabel: string }) {
   const tiers = React.useMemo(() => buildLegendTiers(maxAbs), [maxAbs]);
   const noData = maxAbs === 0;
 
@@ -551,7 +595,7 @@ function Legend({ maxAbs }: { maxAbs: number }) {
         ))}
       </div>
       <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-text-tertiary">
-        Per-day realized P&L
+        {legendLabel}
       </span>
     </div>
   );

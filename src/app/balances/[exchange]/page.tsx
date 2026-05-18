@@ -14,7 +14,7 @@ import {
   getExchangeBalanceDetail,
   type ExchangeBalanceDetail,
 } from "@/lib/db/balances";
-import { ExchangeLogo } from "@/components/settings/exchange-logo";
+import { ExchangeLogo, exchangeLogoUrl } from "@/components/settings/exchange-logo";
 import type { WalletType } from "@/types/balances";
 import type { UserId } from "@/types/canonical";
 import { getT, getLocale } from "@/lib/i18n/server";
@@ -104,7 +104,7 @@ export default async function ExchangeBalancePage({ params }: PageProps) {
           <ExchangeLogo
             code={exchange}
             displayName={exchangeName}
-            logoUrl={`/exchanges/${exchange}.svg`}
+            logoUrl={exchangeLogoUrl(exchange)}
             size="md"
           />
           <div>

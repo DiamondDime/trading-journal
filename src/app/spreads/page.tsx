@@ -775,10 +775,12 @@ export default async function SpreadsPage({ searchParams }: SpreadsPageProps) {
         <footer className="mt-8 flex items-center justify-between border-t border-border pt-5 font-mono text-[10px] uppercase tracking-[0.18em] text-text-tertiary">
           <span>{t("dashboard.footer", { since: sinceLabel })}</span>
           <span>
-            {t("dashboard.footerRight", {
-              exchanges: connectedExchangeCount,
-              count: totals.count,
-            })}
+            {t.plural(
+              "dashboard.footerRightParts.exchanges",
+              connectedExchangeCount,
+            )}
+            {" · "}
+            {t.plural("dashboard.footerRightParts.archived", totals.count)}
           </span>
         </footer>
       </div>

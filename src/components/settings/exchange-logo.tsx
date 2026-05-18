@@ -140,6 +140,30 @@ const NAME_TO_CODE: Record<string, string> = {
 };
 
 /**
+ * Extension per exchange code. Mirrors the actual files in
+ * `/public/exchanges/`. Defaults to png — only the SVG-natively-distributed
+ * brand assets (Kraken, Deribit) get .svg.
+ */
+const CODE_TO_EXT: Record<string, "svg" | "png"> = {
+  kraken: "svg",
+  deribit: "svg",
+};
+function logoUrlFor(code: string): string {
+  const ext = CODE_TO_EXT[code] ?? "png";
+  return `/exchanges/${code}.${ext}`;
+}
+
+/**
+ * Public helper for surfaces (balance rows, drilldowns, anywhere else that
+ * builds an `<img>` URL directly without going through ExchangeChip) to
+ * resolve the right file extension. Returns the .png path by default,
+ * .svg for the few exchanges that ship SVG brand assets.
+ */
+export function exchangeLogoUrl(code: string): string {
+  return logoUrlFor(code);
+}
+
+/**
  * Resolve a free-form venue string into a known catalog code, or null if
  * we don't have a logo for it. Lower-cases + strips whitespace before
  * lookup so "Binance", "BINANCE", " binance " all match.
@@ -190,7 +214,7 @@ export function ExchangeChip({
   className,
 }: ChipProps) {
   const resolved = code ?? resolveExchangeCode(venue) ?? "";
-  const logoUrl = resolved ? `/exchanges/${resolved}.svg` : null;
+  const logoUrl = resolved ? logoUrlFor(resolved) : null;
   return (
     <ExchangeLogo
       code={resolved || venue}

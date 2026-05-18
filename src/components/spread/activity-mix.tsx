@@ -1,12 +1,11 @@
 import { TrendingDown, TrendingUp } from "lucide-react";
 import {
-  ACTIVITY_TYPE_LABELS,
-  SPREAD_TYPE_LABELS,
   type Activity,
   type ActivityType,
   type SpreadRow,
   type SpreadType,
 } from "@/lib/data/archive-data";
+import { getT, getLocale } from "@/lib/i18n/server";
 
 type Slice = {
   key: string;
@@ -34,14 +33,53 @@ const SPREAD_SUBTYPE_ORDER: SpreadType[] = [
   "dex_cex",
 ];
 
-function buildActivitySlices(data: Activity[]): Slice[] {
+function activityTypeKey(
+  t: ActivityType,
+):
+  | "dashboard.activityMix.types.spread"
+  | "dashboard.activityMix.types.trade"
+  | "dashboard.activityMix.types.sale"
+  | "dashboard.activityMix.types.airdrop"
+  | "dashboard.activityMix.types.yield_position"
+  | "dashboard.activityMix.types.option" {
+  switch (t) {
+    case "spread": return "dashboard.activityMix.types.spread";
+    case "trade": return "dashboard.activityMix.types.trade";
+    case "sale": return "dashboard.activityMix.types.sale";
+    case "airdrop": return "dashboard.activityMix.types.airdrop";
+    case "yield_position": return "dashboard.activityMix.types.yield_position";
+    case "option": return "dashboard.activityMix.types.option";
+  }
+}
+
+function spreadTypeKey(
+  t: SpreadType,
+):
+  | "dashboard.activityMix.spreadTypes.cash_carry"
+  | "dashboard.activityMix.spreadTypes.calendar"
+  | "dashboard.activityMix.spreadTypes.funding"
+  | "dashboard.activityMix.spreadTypes.cross_exchange"
+  | "dashboard.activityMix.spreadTypes.dex_cex" {
+  switch (t) {
+    case "cash_carry": return "dashboard.activityMix.spreadTypes.cash_carry";
+    case "calendar": return "dashboard.activityMix.spreadTypes.calendar";
+    case "funding": return "dashboard.activityMix.spreadTypes.funding";
+    case "cross_exchange": return "dashboard.activityMix.spreadTypes.cross_exchange";
+    case "dex_cex": return "dashboard.activityMix.spreadTypes.dex_cex";
+  }
+}
+
+function buildActivitySlices(
+  data: Activity[],
+  nameOf: (t: ActivityType) => string,
+): Slice[] {
   const slices: Slice[] = ACTIVITY_TYPE_ORDER.map((t) => {
     const rows = data.filter((r) => r.type === t);
     const net = rows.reduce((s, r) => s + r.netPnl, 0);
     const capital = rows.reduce((s, r) => s + r.capital, 0);
     return {
       key: t,
-      name: ACTIVITY_TYPE_LABELS[t],
+      name: nameOf(t),
       count: rows.length,
       net,
       capital,
@@ -55,7 +93,10 @@ function buildActivitySlices(data: Activity[]): Slice[] {
   }));
 }
 
-function buildSpreadSubtypeSlices(data: Activity[]): Slice[] {
+function buildSpreadSubtypeSlices(
+  data: Activity[],
+  nameOf: (t: SpreadType) => string,
+): Slice[] {
   const spreads = data.filter((r): r is SpreadRow => r.type === "spread");
   const slices: Slice[] = SPREAD_SUBTYPE_ORDER.map((t) => {
     const rows = spreads.filter((s) => s.spreadType === t);
@@ -63,7 +104,7 @@ function buildSpreadSubtypeSlices(data: Activity[]): Slice[] {
     const capital = rows.reduce((sum, r) => sum + r.capital, 0);
     return {
       key: t,
-      name: SPREAD_TYPE_LABELS[t],
+      name: nameOf(t),
       count: rows.length,
       net,
       capital,
@@ -79,33 +120,53 @@ function buildSpreadSubtypeSlices(data: Activity[]): Slice[] {
     }));
 }
 
+function fmtSignedUsd(value: number, intlLocale: string): string {
+  const sign = value >= 0 ? "+" : "−";
+  return `${sign}$${Math.abs(value).toLocaleString(intlLocale, {
+    maximumFractionDigits: 0,
+  })}`;
+}
+
 /**
  * Receive the page's full activity dataset as a prop so the dashboard can
  * pass the result of its DB query (post-Wave 5A) without this component
  * needing to know about the data source. With no data, renders empty
  * slices so the layout stays intact.
  */
-export function ActivityMix({ data = [] }: { data?: Activity[] }) {
-  const activitySlices = buildActivitySlices(data);
-  const spreadSlices = buildSpreadSubtypeSlices(data);
+export async function ActivityMix({ data = [] }: { data?: Activity[] }) {
+  const t = await getT();
+  const locale = await getLocale();
+  const intlLocale = locale === "ru" ? "ru-RU" : "en-US";
+  const capitalLabel = t("dashboard.activityMix.capital");
+
+  const activitySlices = buildActivitySlices(data, (a) => t(activityTypeKey(a)));
+  const spreadSlices = buildSpreadSubtypeSlices(data, (s) => t(spreadTypeKey(s)));
   const total = data.length;
   const totalNet = activitySlices.reduce((s, a) => s + a.net, 0);
+  const spreadTotal = spreadSlices.reduce((n, s) => n + s.count, 0);
 
   return (
     <div className="flex flex-col gap-4">
       <div className="rounded-md border border-border bg-surface">
         <div className="flex items-center justify-between border-b border-border px-5 py-3">
           <h3 className="font-serif text-[12px] font-semibold uppercase tracking-[0.16em] text-text">
-            Activity mix · YTD
+            {t("dashboard.activityMix.title")}
           </h3>
           <span className="font-mono text-[10px] text-text-tertiary">
-            {total} activities · net {totalNet >= 0 ? "+" : "−"}${Math.abs(totalNet).toLocaleString(undefined, { maximumFractionDigits: 0 })}
+            {t.plural("dashboard.activityMix.summary", total, {
+              net: fmtSignedUsd(totalNet, intlLocale),
+            })}
           </span>
         </div>
 
         <div className="grid grid-cols-2 divide-x divide-border-subtle md:grid-cols-4">
           {activitySlices.map((s) => (
-            <SliceCell key={s.key} slice={s} />
+            <SliceCell
+              key={s.key}
+              slice={s}
+              intlLocale={intlLocale}
+              capitalLabel={capitalLabel}
+            />
           ))}
         </div>
       </div>
@@ -113,16 +174,21 @@ export function ActivityMix({ data = [] }: { data?: Activity[] }) {
       <div className="rounded-md border border-border bg-surface">
         <div className="flex items-center justify-between border-b border-border px-5 py-3">
           <h3 className="font-serif text-[12px] font-semibold uppercase tracking-[0.16em] text-text">
-            Spread subtypes
+            {t("dashboard.activityMix.spreadSubtypes")}
           </h3>
           <span className="font-mono text-[10px] text-text-tertiary">
-            {spreadSlices.reduce((n, s) => n + s.count, 0)} spreads
+            {t.plural("dashboard.activityMix.subtypeCount", spreadTotal)}
           </span>
         </div>
 
         <div className="grid grid-cols-2 divide-x divide-border-subtle md:grid-cols-5">
           {spreadSlices.map((s) => (
-            <SliceCell key={s.key} slice={s} />
+            <SliceCell
+              key={s.key}
+              slice={s}
+              intlLocale={intlLocale}
+              capitalLabel={capitalLabel}
+            />
           ))}
         </div>
       </div>
@@ -130,7 +196,15 @@ export function ActivityMix({ data = [] }: { data?: Activity[] }) {
   );
 }
 
-function SliceCell({ slice }: { slice: Slice }) {
+function SliceCell({
+  slice,
+  intlLocale,
+  capitalLabel,
+}: {
+  slice: Slice;
+  intlLocale: string;
+  capitalLabel: string;
+}) {
   const tone: "up" | "down" = slice.net >= 0 ? "up" : "down";
   return (
     <div className="flex flex-col gap-2 px-5 py-4 transition-colors hover:bg-subtle border-b md:border-b-0 border-border-subtle">
@@ -149,7 +223,7 @@ function SliceCell({ slice }: { slice: Slice }) {
             tone === "up" ? "text-up" : "text-down"
           }`}
         >
-          {slice.net >= 0 ? "+" : "−"}${Math.abs(slice.net).toLocaleString(undefined, { maximumFractionDigits: 0 })}
+          {fmtSignedUsd(slice.net, intlLocale)}
         </span>
         {tone === "up" ? (
           <TrendingUp className="h-3 w-3 text-up" strokeWidth={2.5} />
@@ -169,11 +243,11 @@ function SliceCell({ slice }: { slice: Slice }) {
 
       <div className="flex items-center justify-between text-[10px]">
         <span className="font-mono uppercase tracking-[0.14em] text-text-tertiary">
-          capital
+          {capitalLabel}
         </span>
         <span className="font-mono tabular-nums text-text-secondary">
           {slice.capital > 0
-            ? `$${slice.capital.toLocaleString(undefined, { maximumFractionDigits: 0 })}`
+            ? `$${slice.capital.toLocaleString(intlLocale, { maximumFractionDigits: 0 })}`
             : "—"}
         </span>
       </div>

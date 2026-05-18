@@ -26,6 +26,7 @@ import {
 } from "@/lib/dashboard/filters";
 import { cn } from "@/lib/utils";
 import type { ActivityType } from "@/types/canonical";
+import { useT, useLocale } from "@/lib/i18n/client";
 
 /**
  * Dashboard action row — Filter / Export / Sync.
@@ -49,28 +50,47 @@ interface DashboardActionsProps {
   current: DashboardSearchParams;
 }
 
-const RANGE_LABELS: Record<DateRangePreset, string> = {
-  "7d": "Last 7d",
-  "30d": "Last 30d",
-  "90d": "Last 90d",
-  ytd: "YTD",
-  all: "All-time",
-  custom: "Custom",
+const RANGE_KEYS: Record<
+  DateRangePreset,
+  | "dashboard.actions.rangePresets.7d"
+  | "dashboard.actions.rangePresets.30d"
+  | "dashboard.actions.rangePresets.90d"
+  | "dashboard.actions.rangePresets.ytd"
+  | "dashboard.actions.rangePresets.all"
+  | "dashboard.actions.rangePresets.custom"
+> = {
+  "7d": "dashboard.actions.rangePresets.7d",
+  "30d": "dashboard.actions.rangePresets.30d",
+  "90d": "dashboard.actions.rangePresets.90d",
+  ytd: "dashboard.actions.rangePresets.ytd",
+  all: "dashboard.actions.rangePresets.all",
+  custom: "dashboard.actions.rangePresets.custom",
 };
 
-const TYPE_LABELS: Record<ActivityType, string> = {
-  spread: "Spreads",
-  trade: "Trades",
-  sale: "Sales",
-  airdrop: "Airdrops",
-  yield_position: "Yield",
-  option: "Options",
+const TYPE_KEYS: Record<
+  ActivityType,
+  | "dashboard.actions.activityTypes.spread"
+  | "dashboard.actions.activityTypes.trade"
+  | "dashboard.actions.activityTypes.sale"
+  | "dashboard.actions.activityTypes.airdrop"
+  | "dashboard.actions.activityTypes.yield_position"
+  | "dashboard.actions.activityTypes.option"
+> = {
+  spread: "dashboard.actions.activityTypes.spread",
+  trade: "dashboard.actions.activityTypes.trade",
+  sale: "dashboard.actions.activityTypes.sale",
+  airdrop: "dashboard.actions.activityTypes.airdrop",
+  yield_position: "dashboard.actions.activityTypes.yield_position",
+  option: "dashboard.actions.activityTypes.option",
 };
 
 export function DashboardActions({
   connectedExchangeCount,
   current,
 }: DashboardActionsProps) {
+  const t = useT();
+  const locale = useLocale();
+  const intlLocale = locale === "ru" ? "ru-RU" : "en-US";
   // Live filter state for the dialog only. The page's URL state is the
   // source of truth; this is reset every time the dialog opens.
   const [open, setOpen] = React.useState(false);
@@ -138,23 +158,23 @@ export function DashboardActions({
         | { data?: { queued: number; skipped: number; total: number } }
         | null;
       if (!res.ok) {
-        setSyncMsg("Sync request failed. Try again.");
+        setSyncMsg(t("dashboard.actions.syncMessages.failed"));
       } else if (body?.data) {
         const { queued, total } = body.data;
         if (total === 0) {
-          setSyncMsg("No exchanges to sync.");
+          setSyncMsg(t("dashboard.actions.syncMessages.noExchanges"));
         } else if (queued === 0) {
-          setSyncMsg("Sync already in progress.");
+          setSyncMsg(t("dashboard.actions.syncMessages.inProgress"));
         } else {
           setSyncMsg(
-            `Sync queued for ${queued} ${queued === 1 ? "exchange" : "exchanges"}. Check back in a few minutes.`,
+            t.plural("dashboard.actions.syncMessages.queuedFor", queued),
           );
         }
       } else {
-        setSyncMsg("Sync request submitted.");
+        setSyncMsg(t("dashboard.actions.syncMessages.submitted"));
       }
     } catch {
-      setSyncMsg("Sync request failed. Check your connection.");
+      setSyncMsg(t("dashboard.actions.syncMessages.connectionFailed"));
     } finally {
       setSyncing(false);
       setSyncCooldown(true);
@@ -171,8 +191,10 @@ export function DashboardActions({
         <span className={connectedExchangeCount > 0 ? "text-up" : "text-text-tertiary"}>
           ●
         </span>{" "}
-        {connectedExchangeCount} {connectedExchangeCount === 1 ? "exchange" : "exchanges"}{" "}
-        connected
+        {t.plural(
+          "dashboard.actions.exchangesConnected",
+          connectedExchangeCount,
+        )}
       </div>
       <div className="h-4 w-px bg-border" />
 
@@ -186,30 +208,29 @@ export function DashboardActions({
                 ? "border-text bg-subtle text-text"
                 : "border-border bg-surface text-text-secondary hover:bg-subtle",
             )}
-            aria-label="Open filters dialog"
+            aria-label={t("dashboard.actions.openFilterAria")}
           >
             <Filter className="h-3 w-3" />
-            Filter
+            {t("dashboard.actions.filter")}
             {filterActive && (
               <span className="rounded-sm bg-text px-1 font-mono text-[8px] tracking-normal text-app">
-                ON
+                {t("dashboard.actions.filterOn")}
               </span>
             )}
           </button>
         </DialogTrigger>
         <DialogContent className="max-w-xl">
           <DialogHeader>
-            <DialogTitle>Filter the dashboard</DialogTitle>
+            <DialogTitle>{t("dashboard.actions.filterDialog.title")}</DialogTitle>
             <DialogDescription>
-              Narrow the visible window. KPIs, charts, and the recent grid all
-              re-render against the chosen slice.
+              {t("dashboard.actions.filterDialog.description")}
             </DialogDescription>
           </DialogHeader>
           <DialogBody className="flex flex-col gap-6">
             {/* Date range */}
             <fieldset className="flex flex-col gap-2">
               <legend className="font-mono text-[10px] uppercase tracking-[0.16em] text-text-tertiary">
-                Date range
+                {t("dashboard.actions.filterDialog.dateRange")}
               </legend>
               <div className="flex flex-wrap gap-1.5">
                 {DATE_RANGE_PRESETS.map((preset) => (
@@ -217,20 +238,20 @@ export function DashboardActions({
                     key={preset}
                     active={draft.range === preset}
                     onClick={() => setDraft((d) => ({ ...d, range: preset }))}
-                    label={RANGE_LABELS[preset]}
+                    label={t(RANGE_KEYS[preset])}
                   />
                 ))}
                 <FilterChip
                   active={draft.range === "custom"}
                   onClick={() => setDraft((d) => ({ ...d, range: "custom" }))}
-                  label={RANGE_LABELS.custom}
+                  label={t(RANGE_KEYS.custom)}
                 />
               </div>
               {draft.range === "custom" && (
                 <div className="mt-1 flex flex-wrap gap-3">
                   <label className="flex flex-col gap-1">
                     <span className="font-mono text-[9px] uppercase tracking-[0.14em] text-text-tertiary">
-                      From
+                      {t("dashboard.actions.filterDialog.fromLabel")}
                     </span>
                     <input
                       type="date"
@@ -243,7 +264,7 @@ export function DashboardActions({
                   </label>
                   <label className="flex flex-col gap-1">
                     <span className="font-mono text-[9px] uppercase tracking-[0.14em] text-text-tertiary">
-                      To
+                      {t("dashboard.actions.filterDialog.toLabel")}
                     </span>
                     <input
                       type="date"
@@ -261,19 +282,19 @@ export function DashboardActions({
             {/* Activity types */}
             <fieldset className="flex flex-col gap-2">
               <legend className="font-mono text-[10px] uppercase tracking-[0.16em] text-text-tertiary">
-                Activity types
+                {t("dashboard.actions.filterDialog.activityTypes")}
               </legend>
               <p className="font-serif text-[12px] italic text-text-tertiary">
-                Empty selection = all types. Pick one or more to narrow.
+                {t("dashboard.actions.filterDialog.activityTypesHint")}
               </p>
               <div className="flex flex-wrap gap-1.5">
-                {ACTIVITY_TYPES.map((t) => (
+                {ACTIVITY_TYPES.map((at) => (
                   <FilterChip
-                    key={t}
-                    active={draft.types.includes(t)}
-                    onClick={() => toggleType(t)}
-                    label={TYPE_LABELS[t]}
-                    icon={draft.types.includes(t) ? "check" : null}
+                    key={at}
+                    active={draft.types.includes(at)}
+                    onClick={() => toggleType(at)}
+                    label={t(TYPE_KEYS[at])}
+                    icon={draft.types.includes(at) ? "check" : null}
                   />
                 ))}
               </div>
@@ -282,11 +303,10 @@ export function DashboardActions({
             {/* Min capital */}
             <fieldset className="flex flex-col gap-2">
               <legend className="font-mono text-[10px] uppercase tracking-[0.16em] text-text-tertiary">
-                Minimum capital
+                {t("dashboard.actions.filterDialog.minCapital")}
               </legend>
               <p className="font-serif text-[12px] italic text-text-tertiary">
-                Hide activities below this capital floor. Useful when zero-cost
-                airdrops are crowding the view.
+                {t("dashboard.actions.filterDialog.minCapitalHint")}
               </p>
               <div className="flex flex-wrap gap-1.5">
                 {MIN_CAPITAL_PRESETS.map((c) => (
@@ -294,7 +314,13 @@ export function DashboardActions({
                     key={c}
                     active={draft.minCapital === c}
                     onClick={() => setDraft((d) => ({ ...d, minCapital: c }))}
-                    label={c === 0 ? "$0" : `$${c.toLocaleString("en-US")}+`}
+                    label={
+                      c === 0
+                        ? t("dashboard.actions.filterDialog.minCapitalZero")
+                        : t("dashboard.actions.filterDialog.minCapitalAtLeast", {
+                            value: c.toLocaleString(intlLocale),
+                          })
+                    }
                   />
                 ))}
               </div>
@@ -305,11 +331,12 @@ export function DashboardActions({
               onClick={clearFilter}
               className="flex items-center gap-1.5 rounded-md border border-border bg-surface px-3 py-1.5 font-mono text-[10px] uppercase tracking-[0.14em] text-text-secondary hover:bg-subtle"
             >
-              <X className="h-3 w-3" /> Reset
+              <X className="h-3 w-3" />
+              {t("dashboard.actions.filterDialog.reset")}
             </button>
             <DialogClose asChild>
               <button className="flex items-center gap-1.5 rounded-md border border-border bg-surface px-3 py-1.5 font-mono text-[10px] uppercase tracking-[0.14em] text-text-secondary hover:bg-subtle">
-                Cancel
+                {t("dashboard.actions.filterDialog.cancel")}
               </button>
             </DialogClose>
             <Button
@@ -317,7 +344,8 @@ export function DashboardActions({
               className="bg-text text-app hover:bg-text/90"
               size="sm"
             >
-              <Check className="h-3 w-3" /> Apply
+              <Check className="h-3 w-3" />
+              {t("dashboard.actions.filterDialog.apply")}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -327,11 +355,9 @@ export function DashboardActions({
       <a
         href={exportHref}
         className="flex items-center gap-1.5 rounded-md border border-border bg-surface px-3 py-1.5 font-mono text-[10px] uppercase tracking-[0.14em] text-text-secondary hover:bg-subtle"
-        // download attribute hints to the browser that the response is a
-        // file — works alongside Content-Disposition on the server.
         download
       >
-        <Download className="h-3 w-3" /> Export
+        <Download className="h-3 w-3" /> {t("dashboard.actions.export")}
       </a>
 
       {/* Sync */}
@@ -343,19 +369,24 @@ export function DashboardActions({
             "flex items-center gap-1.5 rounded-md border border-border bg-surface px-3 py-1.5 font-mono text-[10px] uppercase tracking-[0.14em] text-text-secondary transition-colors hover:bg-subtle",
             (syncing || syncCooldown) && "cursor-not-allowed opacity-50",
           )}
-          aria-label="Sync all connected exchanges"
+          aria-label={t("dashboard.actions.syncAllAria")}
         >
           <RefreshCw
             className={cn("h-3 w-3", syncing && "animate-spin")}
           />
-          {syncing ? "Syncing…" : syncCooldown ? "Queued" : "Sync"}
+          {syncing
+            ? t("dashboard.actions.syncing")
+            : syncCooldown
+              ? t("dashboard.actions.queued")
+              : t("dashboard.actions.sync")}
         </button>
       ) : (
         <Link
           href="/settings/exchanges"
           className="flex items-center gap-1.5 rounded-md border border-text bg-text/5 px-3 py-1.5 font-mono text-[10px] uppercase tracking-[0.14em] text-text hover:bg-text/10"
         >
-          <RefreshCw className="h-3 w-3" /> Connect an exchange
+          <RefreshCw className="h-3 w-3" />
+          {t("dashboard.actions.connectExchange")}
         </Link>
       )}
 

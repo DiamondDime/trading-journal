@@ -11,6 +11,7 @@ import {
   ResponsiveContainer,
   ReferenceLine,
 } from "recharts";
+import { useT } from "@/lib/i18n/client";
 
 /**
  * R-multiple histogram. 1R = the average loss size (passed in by the
@@ -46,11 +47,12 @@ function rTick(value: string): string {
 }
 
 export function RDistributionChart({ bins = [] }: Props) {
+  const t = useT();
   if (bins.length === 0) {
     return (
       <div className="flex h-[200px] w-full items-center justify-center rounded-md border border-dashed border-border bg-surface">
         <p className="font-serif text-sm italic text-text-tertiary">
-          R-distribution will appear once activities are logged.
+          {t("analytics.charts.rDistEmpty")}
         </p>
       </div>
     );
@@ -107,7 +109,10 @@ export function RDistributionChart({ bins = [] }: Props) {
               const range = p
                 ? `${p.rangeLow.toFixed(1)}R → ${p.rangeHigh.toFixed(1)}R`
                 : "";
-              return [`${v} activities · ${range}`, "count"];
+              return [
+                t.plural("analytics.charts.rDistTooltip", v, { range }),
+                t("analytics.charts.count"),
+              ];
             }}
             labelFormatter={(label) => String(label)}
           />

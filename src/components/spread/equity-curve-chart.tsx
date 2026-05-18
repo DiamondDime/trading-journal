@@ -10,6 +10,7 @@ import {
   ReferenceLine,
   ResponsiveContainer,
 } from "recharts";
+import { useT, useLocale } from "@/lib/i18n/client";
 
 /**
  * Equity curve: running sum of net P&L by close date, plus an overlay for
@@ -65,13 +66,19 @@ export function EquityCurveChart({
   currentDrawdownUsd = 0,
   currentEquity = 0,
 }: Props) {
+  const t = useT();
+  const locale = useLocale();
+  const intlLocale = locale === "ru" ? "ru-RU" : "en-US";
+  const equityLabel = t("analytics.charts.equity");
+  const ddPrefix = t("analytics.charts.ddPrefix");
+
   // Empty-state: no activities yet. Show a flat dotted baseline so the
   // section keeps its shape rather than collapsing to nothing.
   if (points.length === 0) {
     return (
       <div className="flex h-[260px] w-full items-center justify-center rounded-md border border-dashed border-border bg-surface">
         <p className="font-serif text-sm italic text-text-tertiary">
-          Equity curve will appear once activities are logged.
+          {t("analytics.charts.equityEmpty")}
         </p>
       </div>
     );
@@ -178,10 +185,10 @@ export function EquityCurveChart({
               const sign = v >= 0 ? "+" : "−";
               const p = item?.payload as EquityPoint | undefined;
               const dd = p?.drawdownUsd ?? 0;
-              const label = `${sign}$${Math.abs(v).toLocaleString("en-US", { maximumFractionDigits: 0 })}${
-                dd < 0 ? `  ·  dd ${fmtUsdShort(dd)}` : ""
+              const label = `${sign}$${Math.abs(v).toLocaleString(intlLocale, { maximumFractionDigits: 0 })}${
+                dd < 0 ? `  ·  ${ddPrefix} ${fmtUsdShort(dd)}` : ""
               }`;
-              return [label, "equity"];
+              return [label, equityLabel];
             }}
           />
           <Area
