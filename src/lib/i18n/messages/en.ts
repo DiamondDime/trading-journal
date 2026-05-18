@@ -3369,6 +3369,11 @@ export const en = {
       moreSuffix: '+ {n} other assets above the 0.5% threshold.',
       moreSuffixOne: '+ {n} other asset above the 0.5% threshold.',
       cta: 'Investigate',
+      logMovementCta: 'Log as movement',
+    },
+    relative: {
+      noSnapshot: 'no snapshot yet',
+      momentsAgo: 'moments ago',
     },
     empty: {
       title: 'Connect an exchange to start tracking',

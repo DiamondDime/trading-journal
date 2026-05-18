@@ -3312,6 +3312,11 @@ export const ru: MessageDict = {
       moreSuffix: '+ ещё {n} активов выше порога 0,5%.',
       moreSuffixOne: '+ ещё {n} актив выше порога 0,5%.',
       cta: 'Разобраться',
+      logMovementCta: 'Записать как движение',
+    },
+    relative: {
+      noSnapshot: 'снепшота ещё нет',
+      momentsAgo: 'только что',
     },
     empty: {
       title: 'Подключи биржу, чтобы начать отслеживание',
