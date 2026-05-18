@@ -1,5 +1,5 @@
 import { sql } from "@/lib/db/client";
-import { getCurrentUser } from "@/lib/auth/server";
+import { requireUser } from "@/lib/auth/server";
 import { getT } from "@/lib/i18n/server";
 import { ProfileForm } from "./profile-form";
 
@@ -7,15 +7,13 @@ export const dynamic = "force-dynamic";
 
 interface ProfileRow {
   id: string;
-  email: string;
   displayName: string | null;
   timezone: string;
-  baseCurrency: string;
 }
 
 async function loadProfile(userId: string): Promise<ProfileRow | null> {
   const rows = await sql<ProfileRow[]>`
-    SELECT id, email, display_name, timezone, base_currency
+    SELECT id, display_name, timezone
     FROM public.profiles
     WHERE id = ${userId}::uuid
   `;
@@ -24,15 +22,8 @@ async function loadProfile(userId: string): Promise<ProfileRow | null> {
 
 export default async function ProfileSettingsPage() {
   const t = await getT();
-  const user = await getCurrentUser();
-  const profile = user ? await loadProfile(user.id) : null;
-
-  // Defensive defaults — shouldn't fire in single-user mode (APP_USER_ID is
-  // always set) but keep the UI rendering rather than crashing the layout.
-  const email = user?.email ?? profile?.email ?? "—";
-  const displayName = profile?.displayName ?? null;
-  const timezone = profile?.timezone ?? "Etc/UTC";
-  const baseCurrency = profile?.baseCurrency ?? "USD";
+  const { id: userId } = await requireUser();
+  const profile = await loadProfile(userId);
 
   return (
     <div className="space-y-8">
@@ -46,10 +37,8 @@ export default async function ProfileSettingsPage() {
       </div>
 
       <ProfileForm
-        initialDisplayName={displayName}
-        initialTimezone={timezone}
-        initialBaseCurrency={baseCurrency}
-        email={email}
+        initialDisplayName={profile?.displayName ?? null}
+        initialTimezone={profile?.timezone ?? "Etc/UTC"}
       />
 
       <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-text-tertiary">

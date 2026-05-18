@@ -6,11 +6,9 @@ import { useT } from "@/lib/i18n/client";
 import { cn } from "@/lib/utils";
 import { updateProfile } from "./actions";
 import {
-  ALLOWED_CURRENCIES,
-  ALLOWED_TIMEZONES,
   INITIAL_PROFILE_STATE,
-  type AllowedCurrency,
-  type AllowedTimezone,
+  TIMEZONE_OPTIONS,
+  normalizeStoredTimezone,
   type ProfileFormState,
 } from "./constants";
 
@@ -18,22 +16,16 @@ export interface ProfileFormProps {
   /** Pre-loaded values from the profiles row. */
   initialDisplayName: string | null;
   initialTimezone: string;
-  initialBaseCurrency: string;
-  /** Read-only — displayed but never submitted. */
-  email: string;
 }
 
 /**
- * Editable profile form. React 19 `useActionState` carries form-result
- * state (success/error/savedAt) across the submit roundtrip without any
- * client-side fetch. The submit button uses `useFormStatus` so it shows
- * a "Saving…" label without us managing pending state manually.
+ * Editable profile form. Two fields only: display name + timezone (UTC
+ * offset). Email isn't editable (it's the identity), and base currency
+ * was removed from v1 because the journal only computes USD totals today.
  */
 export function ProfileForm({
   initialDisplayName,
   initialTimezone,
-  initialBaseCurrency,
-  email,
 }: ProfileFormProps) {
   const t = useT();
   const [state, formAction] = useActionState<ProfileFormState, FormData>(
@@ -41,25 +33,18 @@ export function ProfileForm({
     INITIAL_PROFILE_STATE,
   );
 
-  // If the server returns a timezone/currency value the curated list no
-  // longer contains (e.g. someone edited Postgres directly), the <select>
-  // would render with a blank value and silently swap on save. Add the
-  // unrecognised value as an inert option so the user has to opt in.
-  const timezoneOptions: readonly string[] = ALLOWED_TIMEZONES.includes(
-    initialTimezone as AllowedTimezone,
-  )
-    ? ALLOWED_TIMEZONES
-    : [initialTimezone, ...ALLOWED_TIMEZONES];
-  const currencyOptions: readonly string[] = ALLOWED_CURRENCIES.includes(
-    initialBaseCurrency as AllowedCurrency,
-  )
-    ? ALLOWED_CURRENCIES
-    : [initialBaseCurrency, ...ALLOWED_CURRENCIES];
+  // The DB may hold a legacy bare-string timezone like "UTC". Normalize
+  // it to a value that exists in TIMEZONE_OPTIONS so the select renders
+  // a real option (not a phantom blank that vanishes on save).
+  const selectedTimezone = normalizeStoredTimezone(initialTimezone);
 
   return (
     <form action={formAction} className="space-y-6" noValidate>
       <div className="grid grid-cols-1 divide-y divide-border rounded-md border border-border bg-surface">
-        <FieldShell label={t("settings.profile.displayName")} htmlFor="profile-display-name">
+        <FieldShell
+          label={t("settings.profile.displayName")}
+          htmlFor="profile-display-name"
+        >
           <input
             id="profile-display-name"
             name="displayName"
@@ -73,37 +58,19 @@ export function ProfileForm({
           />
         </FieldShell>
 
-        <FieldShell label={t("settings.profile.email")}>
-          <p className="font-mono text-[12px] text-text-secondary" data-testid="profile-email">
-            {email}
-          </p>
-        </FieldShell>
-
-        <FieldShell label={t("settings.profile.timezone")} htmlFor="profile-timezone">
+        <FieldShell
+          label={t("settings.profile.timezone")}
+          htmlFor="profile-timezone"
+        >
           <select
             id="profile-timezone"
             name="timezone"
-            defaultValue={initialTimezone}
+            defaultValue={selectedTimezone}
             className="w-full rounded border border-border bg-inset px-3 py-2 font-mono text-[12px] text-text focus:border-border-strong focus:outline-none"
           >
-            {timezoneOptions.map((tz) => (
-              <option key={tz} value={tz}>
-                {tz}
-              </option>
-            ))}
-          </select>
-        </FieldShell>
-
-        <FieldShell label={t("settings.profile.baseCurrency")} htmlFor="profile-base-currency">
-          <select
-            id="profile-base-currency"
-            name="baseCurrency"
-            defaultValue={initialBaseCurrency}
-            className="w-full rounded border border-border bg-inset px-3 py-2 font-mono text-[12px] text-text focus:border-border-strong focus:outline-none"
-          >
-            {currencyOptions.map((c) => (
-              <option key={c} value={c}>
-                {c}
+            {TIMEZONE_OPTIONS.map((tz) => (
+              <option key={tz.value} value={tz.value}>
+                {tz.label}
               </option>
             ))}
           </select>
@@ -160,12 +127,6 @@ function SubmitButton() {
   );
 }
 
-/**
- * Inline status line under the submit button — shows a localized "Saved at
- * HH:MM:SS" stamp on success, or the appropriate validation/DB-error key on
- * failure. `aria-live` polite so screen readers pick up the change without
- * stealing focus mid-edit.
- */
 function FormStatusLine({ state }: { state: ProfileFormState }) {
   const t = useT();
 
@@ -191,14 +152,20 @@ function FormStatusLine({ state }: { state: ProfileFormState }) {
       </p>
     );
   }
-  return <span aria-hidden className="font-mono text-[10px] uppercase tracking-[0.18em] text-transparent">·</span>;
+  return (
+    <span
+      aria-hidden
+      className="font-mono text-[10px] uppercase tracking-[0.18em] text-transparent"
+    >
+      ·
+    </span>
+  );
 }
 
 function formatLocalTime(iso: string): string {
   const ts = Date.parse(iso);
   if (!Number.isFinite(ts)) return iso;
   const d = new Date(ts);
-  // 24-hour HH:MM:SS — locale-independent so EN and RU render identically.
   const pad = (n: number) => n.toString().padStart(2, "0");
   return `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
 }

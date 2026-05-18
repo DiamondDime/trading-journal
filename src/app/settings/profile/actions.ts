@@ -4,25 +4,22 @@ import { revalidatePath } from "next/cache";
 import { requireUser } from "@/lib/auth/server";
 import { sql } from "@/lib/db/client";
 import {
-  ALLOWED_CURRENCIES,
-  ALLOWED_TIMEZONES,
+  ALLOWED_TIMEZONE_VALUES,
   MAX_DISPLAY_NAME_LEN,
-  type AllowedCurrency,
-  type AllowedTimezone,
   type ProfileFormState,
 } from "./constants";
 
-function isAllowedTimezone(value: unknown): value is AllowedTimezone {
-  return typeof value === "string" && (ALLOWED_TIMEZONES as readonly string[]).includes(value);
-}
-
-function isAllowedCurrency(value: unknown): value is AllowedCurrency {
-  return typeof value === "string" && (ALLOWED_CURRENCIES as readonly string[]).includes(value);
+function isAllowedTimezone(value: unknown): value is string {
+  return typeof value === "string" && ALLOWED_TIMEZONE_VALUES.includes(value);
 }
 
 /**
- * Update the single-user profile row. Called from the /settings/profile
- * form via `useActionState`.
+ * Update the single-user profile row from the /settings/profile form.
+ *
+ * Fields written: display_name + timezone. Email is not editable (it's
+ * the identity); base_currency is no longer exposed in the UI and stays
+ * at whatever it was set to (defaults to 'USD' for analytics that still
+ * read it).
  */
 export async function updateProfile(
   _prev: ProfileFormState,
@@ -30,7 +27,6 @@ export async function updateProfile(
 ): Promise<ProfileFormState> {
   const rawDisplayName = formData.get("displayName");
   const rawTimezone = formData.get("timezone");
-  const rawCurrency = formData.get("baseCurrency");
 
   const trimmed = typeof rawDisplayName === "string" ? rawDisplayName.trim() : "";
   if (trimmed.length > MAX_DISPLAY_NAME_LEN) {
@@ -41,19 +37,15 @@ export async function updateProfile(
   if (!isAllowedTimezone(rawTimezone)) {
     return { status: "error", errorKey: "settings.profile.validation.invalidTimezone" };
   }
-  if (!isAllowedCurrency(rawCurrency)) {
-    return { status: "error", errorKey: "settings.profile.validation.invalidCurrency" };
-  }
 
   try {
     const { id: userId } = await requireUser();
     await sql`
       UPDATE public.profiles
       SET
-        display_name  = ${displayName},
-        timezone      = ${rawTimezone},
-        base_currency = ${rawCurrency},
-        updated_at    = NOW()
+        display_name = ${displayName},
+        timezone     = ${rawTimezone},
+        updated_at   = NOW()
       WHERE id = ${userId}::uuid
     `;
   } catch {

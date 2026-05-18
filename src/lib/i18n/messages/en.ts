@@ -1340,16 +1340,12 @@ export const en = {
       footer: 'Made for spread traders · open source',
     },
     profile: {
-      subtitle:
-        'The single-user identity attached to this journal. Editable UI lands in a later release; values are sourced from your local Postgres today.',
       displayName: 'Display name',
-      email: 'Email',
       timezone: 'Timezone',
-      baseCurrency: 'Base currency',
-      footer: 'Read-only · v1',
+      footer: 'Single-user · stored in your local Postgres',
       editTitle: 'Edit profile',
       editSubtitle:
-        'Your display name appears in the sidebar. Time zone and base currency drive every dashboard.',
+        'Your display name appears in the sidebar. Time zone drives every dashboard timestamp.',
       placeholders: {
         displayName: 'Your name or handle',
       },
@@ -1364,7 +1360,6 @@ export const en = {
       validation: {
         displayNameTooLong: 'Display name must be 64 characters or fewer.',
         invalidTimezone: 'Pick a valid time zone.',
-        invalidCurrency: 'Pick a valid base currency.',
       },
     },
     mcp: {
