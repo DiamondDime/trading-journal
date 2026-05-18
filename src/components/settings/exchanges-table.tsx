@@ -105,9 +105,9 @@ export async function ExchangesTable({ connections, catalog }: Props) {
                   {row.statusMessage && row.status !== "active" && (
                     <p
                       className="mt-1 max-w-[220px] truncate font-mono text-[10px] text-text-tertiary"
-                      title={row.statusMessage}
+                      title={translateStatusMessage(row.statusMessage, t)}
                     >
-                      {row.statusMessage}
+                      {translateStatusMessage(row.statusMessage, t)}
                     </p>
                   )}
                 </TableCell>
@@ -166,6 +166,25 @@ function TableCell({
   return (
     <td className={cn("px-5 py-4 align-top", className)}>{children}</td>
   );
+}
+
+/**
+ * Translate known server-emitted status messages into localized copy. The
+ * sync API stores English in `connection.status_message` for compatibility
+ * with the worker; we map the canonical strings to dictionary keys here
+ * and pass anything else through verbatim.
+ */
+function translateStatusMessage(message: string, t: TFunction): string {
+  if (message.startsWith("Awaiting worker validation")) {
+    return t("settings.exchanges.statusMessages.awaitingValidation");
+  }
+  if (message.toLowerCase() === "attestation required") {
+    return t("settings.exchanges.statusMessages.attestationRequired");
+  }
+  if (message.toLowerCase() === "connect failed") {
+    return t("settings.exchanges.statusMessages.connectFailed");
+  }
+  return message;
 }
 
 function StatusBadge({

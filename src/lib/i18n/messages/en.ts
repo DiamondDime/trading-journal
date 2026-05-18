@@ -1533,6 +1533,12 @@ export const en = {
         error: 'Error',
         disabled: 'Disabled',
       },
+      statusMessages: {
+        awaitingValidation:
+          'Awaiting worker validation — start the sync daemon to verify.',
+        attestationRequired: 'Attestation required',
+        connectFailed: 'Connect failed',
+      },
       relative: {
         never: 'Never',
         justNow: 'just now',

@@ -1568,6 +1568,12 @@ export const ru: MessageDict = {
         error: 'Ошибка',
         disabled: 'Отключено',
       },
+      statusMessages: {
+        awaitingValidation:
+          'Ждём проверки воркером — запустите демон синхронизации.',
+        attestationRequired: 'Требуется аттестация',
+        connectFailed: 'Не удалось подключиться',
+      },
       relative: {
         never: 'Никогда',
         justNow: 'только что',
