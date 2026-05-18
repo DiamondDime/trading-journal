@@ -455,11 +455,14 @@ export default async function SpreadFieldsPage(props: { searchParams: Search }) 
       ? `/add/spread/type?${new URLSearchParams({
           source: "manual",
           ...(spreadType ? { spreadType } : {}),
+          ...(variantCanonical ? { variantCanonical } : {}),
         }).toString()}`
       : `/add/spread/type?${new URLSearchParams({
           legs: legIds.join(","),
           ...(matcher ? { matcher } : {}),
+          ...(source ? { source } : {}),
           ...(spreadType ? { spreadType } : {}),
+          ...(variantCanonical ? { variantCanonical } : {}),
         }).toString()}`;
 
   // Server-side validation errors carried over via `?fieldErrors=`

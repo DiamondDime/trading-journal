@@ -26,6 +26,7 @@ import {
   Sigma,
   ArrowRightLeft,
   Wallet,
+  LineChart,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useT } from "@/lib/i18n/client";
@@ -94,6 +95,7 @@ export function SidebarClient({ counts, portfolio, displayName, initials }: Side
       label: t("sidebar.sections.book"),
       items: [
         { icon: BookOpen, label: t("sidebar.nav.overview"), href: "/spreads" },
+        { icon: LineChart, label: t("sidebar.nav.trades"), href: "/trades" },
         { icon: Archive, label: t("sidebar.nav.archive"), href: "/spreads/archive", count: counts.all },
         { icon: CalendarDays, label: t("sidebar.nav.calendar"), href: "/calendar" },
         {

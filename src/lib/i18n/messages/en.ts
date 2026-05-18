@@ -27,6 +27,7 @@ export const en = {
     },
     nav: {
       overview: 'Overview',
+      trades: 'Trades',
       archive: 'The archive',
       calendar: 'Calendar view',
       watchlist: 'Watchlist',
@@ -41,7 +42,7 @@ export const en = {
     savedViews: {
       all: 'All activity',
       spreads: 'Spreads',
-      trades: 'Trades',
+      trades: 'Logged trades',
       sales: 'Sales',
       airdrops: 'Airdrops',
       yieldPositions: 'Yield positions',
@@ -746,6 +747,92 @@ export const en = {
       oldest: 'Oldest first',
       pnlDesc: 'Highest P&L',
       pnlAsc: 'Lowest P&L',
+    },
+  },
+  trades: {
+    feed: {
+      title: 'Trades',
+      subtitle: 'Every position the worker has imported from your connected exchanges.',
+      empty: {
+        noConnections: {
+          title: 'Connect an exchange to start logging.',
+          body: 'Once you add API keys, every fill the venue exposes lands here. Group trades into spreads with the Link-as-spread action.',
+          cta: 'Connect exchange',
+        },
+        noPositions: {
+          title: 'No positions yet.',
+          body: "Your exchanges are connected but haven't reported any positions. Adjust filters or wait for the next sync.",
+        },
+      },
+      filter: {
+        exchange: 'Exchange',
+        allExchanges: 'All exchanges',
+        status: 'Status',
+        statusAll: 'All',
+        statusOpen: 'Open',
+        statusClosed: 'Closed',
+        symbol: 'Symbol',
+        searchPlaceholder: 'BTC, ETH-PERP, …',
+        side: 'Side',
+        sideAll: 'Any',
+        sideLong: 'Long',
+        sideShort: 'Short',
+        instrument: 'Instrument',
+        instrumentAll: 'Any',
+        instrumentSpot: 'Spot',
+        instrumentPerp: 'Perp',
+        instrumentDatedFuture: 'Future',
+        linked: 'Linked',
+        linkedAll: 'Any',
+        linkedTrue: 'Linked',
+        linkedFalse: 'Unlinked',
+        apply: 'Apply',
+        reset: 'Reset',
+      },
+      sort: {
+        legend: 'Sort',
+        openedDesc: 'Newest first',
+        openedAsc: 'Oldest first',
+        pnlDesc: 'Highest P&L',
+        pnlAsc: 'Lowest P&L',
+      },
+      col: {
+        exchange: 'Exchange',
+        symbol: 'Symbol',
+        side: 'Side',
+        qty: 'Qty',
+        entryExit: 'Entry → Exit',
+        opened: 'Opened',
+        netPnl: 'Net P&L',
+        funding: 'Funding',
+        linked: 'Linked',
+        selectAll: 'Select',
+      },
+      row: {
+        linkedTo: 'Linked to {name}',
+        noLink: '—',
+        opensAt: 'Opens at',
+        closedAt: 'Closed',
+      },
+      bulk: {
+        selectN: {
+          one: '{count} selected',
+          other: '{count} selected',
+        } as PluralLeaf,
+        selectMin: 'Select at least 2 positions to link as a spread.',
+        linkAsSpread: 'Link as spread',
+        clear: 'Clear',
+        selectOneAria: 'Select {symbol}',
+      },
+      pagination: {
+        prev: 'Previous',
+        next: 'Next',
+        countOf: '{start}–{end} of {total}',
+      },
+      howTo: {
+        summary: 'How the trades feed works',
+        body: 'Every fill from your connected exchanges is aggregated into a logical position. Pick two or more to link them as a spread; the spread wizard pre-fills the legs from your selection.',
+      },
     },
   },
   calendar: {
@@ -1834,6 +1921,21 @@ export const en = {
         legend: 'Spread type',
         back: 'Back',
         continue: 'Continue',
+        currentBadge: 'Current choice',
+        groups: {
+          fundingBased: {
+            title: 'Funding-based',
+            description: 'Earn funding payments or capture funding-rate dislocations.',
+          },
+          basisAndArb: {
+            title: 'Basis & arbitrage',
+            description: 'Lock in price differences across venues, expiries, or markets.',
+          },
+          timeBased: {
+            title: 'Time-based',
+            description: 'Trade the term structure between near and far expiries.',
+          },
+        },
         options: {
           cashCarry: {
             title: 'Cash-and-carry',
@@ -1844,16 +1946,32 @@ export const en = {
             description: 'Spot leg + short perp on the same venue. Pure funding yield with no basis drift.',
           },
           crossExchange: {
-            title: 'Cross-exchange',
+            title: 'Cross-exchange arbitrage',
             description: 'Same instrument, opposite sides on two venues. Captures price dislocations between exchanges.',
           },
           calendar: {
-            title: 'Calendar',
+            title: 'Calendar (long near, short far)',
             description: 'Two futures with different expiries on the same venue. Trade the term structure.',
           },
           dexCex: {
-            title: 'DEX-CEX',
+            title: 'DEX vs CEX',
             description: 'One on-chain leg, one centralised. Captures liquidity-fragmentation premia at the cost of gas + slippage.',
+          },
+          fundingSameVenue: {
+            title: 'Long-short perps · same venue',
+            description: 'Long one perp, short the same perp on the same exchange. Pure funding capture with no cross-venue execution risk.',
+          },
+          fundingCrossVenue: {
+            title: 'Long-short perps · cross venue',
+            description: 'Same instrument, opposite sides on two exchanges. Captures funding spread plus any inter-exchange premium.',
+          },
+          cashCarryFunding: {
+            title: 'Long spot, short perp (funding)',
+            description: 'Long the asset, short the funding-paying perp. Carry continues until you close — no expiry.',
+          },
+          cashCarryBasis: {
+            title: 'Long spot, short dated future',
+            description: 'Long the asset, short a quarterly or dated future. Locks in basis until expiry.',
           },
         },
       },

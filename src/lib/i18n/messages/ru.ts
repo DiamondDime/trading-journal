@@ -29,6 +29,7 @@ export const ru: MessageDict = {
     },
     nav: {
       overview: 'Обзор',
+      trades: 'Трейды',
       archive: 'Архив',
       calendar: 'Календарь',
       watchlist: 'Вотчлист',
@@ -43,7 +44,7 @@ export const ru: MessageDict = {
     savedViews: {
       all: 'Вся активность',
       spreads: 'Спреды',
-      trades: 'Сделки',
+      trades: 'Записанные сделки',
       sales: 'Продажи',
       airdrops: 'Эирдропы',
       yieldPositions: 'Доходные позиции',
@@ -774,6 +775,94 @@ export const ru: MessageDict = {
       oldest: 'Сначала старые',
       pnlDesc: 'Самые прибыльные',
       pnlAsc: 'Самые убыточные',
+    },
+  },
+  trades: {
+    feed: {
+      title: 'Трейды',
+      subtitle: 'Все позиции, которые воркер импортировал с подключённых бирж.',
+      empty: {
+        noConnections: {
+          title: 'Подключи биржу, чтобы начать.',
+          body: 'После добавления API-ключей сюда попадают все исполнения, которые отдаёт биржа. Объединяй трейды в спреды действием «Связать как спред».',
+          cta: 'Подключить биржу',
+        },
+        noPositions: {
+          title: 'Пока нет позиций.',
+          body: 'Биржи подключены, но пока не отдали позиции. Поменяй фильтры или жди следующую синхронизацию.',
+        },
+      },
+      filter: {
+        exchange: 'Биржа',
+        allExchanges: 'Все биржи',
+        status: 'Статус',
+        statusAll: 'Все',
+        statusOpen: 'Открыт',
+        statusClosed: 'Закрыт',
+        symbol: 'Символ',
+        searchPlaceholder: 'BTC, ETH-PERP, …',
+        side: 'Сторона',
+        sideAll: 'Любая',
+        sideLong: 'Лонг',
+        sideShort: 'Шорт',
+        instrument: 'Инструмент',
+        instrumentAll: 'Любой',
+        instrumentSpot: 'Спот',
+        instrumentPerp: 'Перп',
+        instrumentDatedFuture: 'Фьюч.',
+        linked: 'Привязка',
+        linkedAll: 'Любая',
+        linkedTrue: 'Связан',
+        linkedFalse: 'Не связан',
+        apply: 'Применить',
+        reset: 'Сбросить',
+      },
+      sort: {
+        legend: 'Сортировка',
+        openedDesc: 'Сначала новые',
+        openedAsc: 'Сначала старые',
+        pnlDesc: 'Самые прибыльные',
+        pnlAsc: 'Самые убыточные',
+      },
+      col: {
+        exchange: 'Биржа',
+        symbol: 'Символ',
+        side: 'Сторона',
+        qty: 'Кол-во',
+        entryExit: 'Вход → Выход',
+        opened: 'Открыт',
+        netPnl: 'Чистый P&L',
+        funding: 'Фандинг',
+        linked: 'Привязка',
+        selectAll: 'Выбор',
+      },
+      row: {
+        linkedTo: 'В составе {name}',
+        noLink: '—',
+        opensAt: 'Открыт',
+        closedAt: 'Закрыт',
+      },
+      bulk: {
+        selectN: {
+          one: 'Выбрано: {count}',
+          few: 'Выбрано: {count}',
+          many: 'Выбрано: {count}',
+          other: 'Выбрано: {count}',
+        } as PluralLeaf,
+        selectMin: 'Выбери не меньше двух позиций, чтобы связать их в спред.',
+        linkAsSpread: 'Связать как спред',
+        clear: 'Сбросить',
+        selectOneAria: 'Выбрать {symbol}',
+      },
+      pagination: {
+        prev: 'Назад',
+        next: 'Вперёд',
+        countOf: '{start}–{end} из {total}',
+      },
+      howTo: {
+        summary: 'Как работает лента трейдов',
+        body: 'Каждое исполнение с подключённых бирж агрегируется в логическую позицию. Выбери две или больше — мастер спредов подставит выбранные позиции как ноги.',
+      },
     },
   },
   calendar: {
@@ -1873,6 +1962,21 @@ export const ru: MessageDict = {
         legend: 'Тип спреда',
         back: 'Назад',
         continue: 'Дальше',
+        currentBadge: 'Текущий выбор',
+        groups: {
+          fundingBased: {
+            title: 'На фандинге',
+            description: 'Получай фандинг или захватывай его разрыв между площадками.',
+          },
+          basisAndArb: {
+            title: 'Базис и арбитраж',
+            description: 'Фиксируй ценовые расхождения между биржами, экспирациями или рынками.',
+          },
+          timeBased: {
+            title: 'По времени',
+            description: 'Торгуй кривую между ближней и дальней экспирацией.',
+          },
+        },
         options: {
           cashCarry: {
             title: 'Кэш-энд-кэрри',
@@ -1883,16 +1987,32 @@ export const ru: MessageDict = {
             description: 'Спотовая нога + шорт перпа на той же бирже. Чистый фандинг, без базисного дрейфа.',
           },
           crossExchange: {
-            title: 'Меж-биржевой',
+            title: 'Меж-биржевой арбитраж',
             description: 'Один и тот же инструмент, противоположные стороны на двух биржах. Ловит расхождения цен между площадками.',
           },
           calendar: {
-            title: 'Календарный',
+            title: 'Календарный (ближний лонг, дальний шорт)',
             description: 'Два фьючерса с разными экспирациями на одной бирже. Торговля по сроковой структуре.',
           },
           dexCex: {
-            title: 'DEX-CEX',
+            title: 'DEX против CEX',
             description: 'Одна нога on-chain, другая на централизованной бирже. Ловит премию за фрагментацию ликвидности — ценой газа и проскальзывания.',
+          },
+          fundingSameVenue: {
+            title: 'Лонг-шорт перпы · одна биржа',
+            description: 'Лонг и шорт одного перпа на одной бирже. Чистый сбор фандинга, без межбиржевого исполнения.',
+          },
+          fundingCrossVenue: {
+            title: 'Лонг-шорт перпы · разные биржи',
+            description: 'Один инструмент, противоположные стороны на двух биржах. Захват разрыва фандинга плюс возможной премии между биржами.',
+          },
+          cashCarryFunding: {
+            title: 'Лонг спот, шорт перп (фандинг)',
+            description: 'Лонг актив, шорт перп с положительным фандингом. Кэрри идёт до закрытия — без экспирации.',
+          },
+          cashCarryBasis: {
+            title: 'Лонг спот, шорт фьючерс с экспирацией',
+            description: 'Лонг актив, шорт квартальный или датированный фьючерс. Базис фиксируется до экспирации.',
           },
         },
       },
