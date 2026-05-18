@@ -5,7 +5,8 @@ import { cn } from "@/lib/utils";
 import { getT } from "@/lib/i18n/server";
 import type { TFunction } from "@/lib/i18n/resolve";
 import { requireUser } from "@/lib/auth/server";
-import { getPickerOptionsByPositionIds, type PickerOptionRow } from "../db";
+import { getPickerOptionsByPositionIds } from "../db";
+import { suggestFromLegs, type SpreadSuggestion } from "../suggest";
 
 export const dynamic = "force-dynamic";
 
@@ -75,69 +76,6 @@ const GROUPS: readonly SpreadGroup[] = [
 ];
 
 /**
- * Infer the most likely matcher spread type + variant from the selected legs.
- *
- * Used when the user lands here from /trades multi-select WITHOUT an explicit
- * `?spreadType=` param. Rules below match the same shapes the auto-matcher
- * uses; the difference is we run them on a user-picked subset rather than
- * across the open book.
- *
- * Returns `null` when no rule fires confidently — the page renders with no
- * preselection, prompting the user to pick a group manually.
- */
-function suggestFromLegs(
-  legs: PickerOptionRow[],
-): { spreadType: string; variantCanonical?: string } | null {
-  if (legs.length < 2) return null;
-  // Normalise the symbol root (e.g. "BTC-PERP" → "BTC", "ETH/USDT" → "ETH").
-  const root = (s: string) => s.split(/[-/]/)[0]?.toUpperCase() ?? s.toUpperCase();
-  const sameRoot = legs.every((l) => root(l.symbol) === root(legs[0].symbol));
-  if (!sameRoot) return null;
-
-  const exchanges = new Set(legs.map((l) => l.exchangeCode));
-  const sides = new Set(legs.map((l) => l.side));
-  const kinds = new Set(legs.map((l) => l.instrumentKind));
-
-  const oneLong = legs.filter((l) => l.side === "long").length;
-  const oneShort = legs.filter((l) => l.side === "short").length;
-  const hasOppositeSides = oneLong > 0 && oneShort > 0;
-  if (!hasOppositeSides) return null;
-
-  const allPerp = kinds.size === 1 && kinds.has("perp");
-  const sameVenue = exchanges.size === 1;
-  const hasSpot = kinds.has("spot");
-  const hasPerp = kinds.has("perp");
-  const hasDatedFuture = kinds.has("dated_future");
-
-  // 1. Long-short perps on the same exchange → same-venue funding capture.
-  if (allPerp && sameVenue) {
-    return { spreadType: "funding", variantCanonical: "same_venue" };
-  }
-  // 2. Long-short perps on different exchanges → cross-venue funding.
-  if (allPerp && !sameVenue) {
-    return { spreadType: "funding", variantCanonical: "cross_venue" };
-  }
-  // 3. Spot + perp opposite sides → cash-and-carry funding variant.
-  if (hasSpot && hasPerp && !hasDatedFuture) {
-    return { spreadType: "cash_carry", variantCanonical: "funding" };
-  }
-  // 4. Spot + dated future opposite sides → cash-and-carry basis variant.
-  if (hasSpot && hasDatedFuture) {
-    return { spreadType: "cash_carry", variantCanonical: "basis" };
-  }
-  // 5. Two dated futures (different expiries assumed, no easy expiry-compare
-  //    here) on the same venue → calendar.
-  if (kinds.size === 1 && hasDatedFuture && sameVenue) {
-    return { spreadType: "calendar" };
-  }
-  // 6. Mixed kinds across venues with same symbol root → cross-exchange.
-  if (!sameVenue) {
-    return { spreadType: "cross_exchange" };
-  }
-  return null;
-}
-
-/**
  * Step 3 — Spread type picker.
  *
  * Each card is a direct Link to /add/spread/fields with spreadType and (where
@@ -165,14 +103,21 @@ export default async function SpreadTypePage(props: { searchParams: Search }) {
   // Read the legs only when (a) we have any AND (b) the user didn't
   // explicitly pick a spread type. Skips a round-trip on the matcher path
   // and the back-nav-from-fields path.
-  let suggestion: { spreadType: string; variantCanonical?: string } | null = null;
+  let suggestion: SpreadSuggestion | null = null;
   if (legs && !explicitType) {
     const { id: userId } = await requireUser();
     const positions = await getPickerOptionsByPositionIds(
       userId,
       legs.split(","),
     );
-    suggestion = suggestFromLegs(positions);
+    suggestion = suggestFromLegs(
+      positions.map((p) => ({
+        symbol: p.symbol,
+        exchangeCode: p.exchangeCode,
+        instrumentKind: p.instrumentKind,
+        side: p.side,
+      })),
+    );
   }
 
   const preSelectedType = explicitType || suggestion?.spreadType || "";
