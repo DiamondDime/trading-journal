@@ -73,9 +73,19 @@ mac:
         - arm64
   hardenedRuntime: false
   gatekeeperAssess: false
-  # No signing in CI (no Developer ID cert configured). The flags above are
-  # also disabled because hardenedRuntime needs signing to be meaningful.
-  identity: null
+  # Ad-hoc sign (`identity: '-'`) instead of a real Developer ID. arm64
+  # binaries on macOS 11+ won't launch without ANY signature — and with
+  # `identity: null` electron-builder produces only a linker-level adhoc
+  # sig on the main binary while the framework + helpers go unsigned,
+  # which macOS silently kills. `'-'` makes electron-builder run
+  # `codesign --sign -` deeply across the bundle at packaging time, which
+  # is what we previously did by hand after every build.
+  #
+  # End-users still see a Gatekeeper "downloaded from the internet" prompt
+  # on first launch; the workaround is documented in
+  # electron/CODESIGNING.md. For real distribution, swap `'-'` for a
+  # Developer ID via env-driven `CSC_LINK` + `APPLE_*` secrets.
+  identity: "-"
   notarize: false
 
 dmg:

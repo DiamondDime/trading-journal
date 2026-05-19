@@ -161,6 +161,10 @@ export const sql: SqlClient =
     ? (createPGliteSql(bootPGlite) as unknown as SqlClient)
     : buildPgClient());
 
-if (process.env.NODE_ENV !== "production") {
-  globalThis.__pgSql = sql;
-}
+// Memoise across module reloads. In dev this is for HMR; in production
+// (Next.js standalone) it's because RSC + route-handler module graphs can
+// each load `client.ts` once, and without the global cache we'd open PGlite
+// twice — wasting 30+MB and tempting lock contention. The connection state
+// is process-global by nature; pinning it to globalThis is the cheapest
+// way to enforce one instance.
+globalThis.__pgSql = sql;

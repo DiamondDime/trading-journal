@@ -91,6 +91,13 @@ export interface PGliteSql {
     text: string,
     params?: readonly unknown[],
   ): Promise<T[]>;
+  /**
+   * Wrap a value for inline interpolation as a JSONB parameter:
+   *   sql`INSERT INTO t (filters) VALUES (${sql.json(obj)})`
+   * Real postgres.js auto-detects plain objects as jsonb already, but the
+   * codebase uses sql.json() explicitly so we honour it.
+   */
+  json(value: unknown): JsonValue;
   /** Close the underlying PGlite instance. `timeout` accepted for API parity; ignored. */
   end(opts?: { timeout?: number }): Promise<void>;
 }
@@ -99,6 +106,22 @@ export interface PGliteSql {
 
 const QUERY_TAG = Symbol("pgshim.query");
 const FRAGMENT_TAG = Symbol("pgshim.fragment");
+const JSON_TAG = Symbol("pgshim.json");
+
+/**
+ * Marker produced by `sql.json(value)`. When the shim sees one inside a
+ * template tag's values list, it serialises `value` with `JSON.stringify`
+ * and emits a single `$N` placeholder — Postgres infers the target column's
+ * jsonb / json type from context. Postgres.js's `sql.json()` does the same.
+ */
+export interface JsonValue {
+  readonly [JSON_TAG]: true;
+  readonly value: unknown;
+}
+
+function isJsonValue(v: unknown): v is JsonValue {
+  return typeof v === "object" && v !== null && JSON_TAG in v;
+}
 
 /**
  * Lazy query object — postgres.js callers expect `sql\`...\`` to return a
@@ -245,6 +268,12 @@ function buildSql(
       sql += inner.sql;
       params.push(...inner.params);
       paramN = inner.nextOffset;
+    } else if (isJsonValue(v)) {
+      // sql.json(x) marker — serialise to a JSON string and pass as a param.
+      // Postgres infers jsonb/json from the column type on the receiving end.
+      sql += `$${paramN}`;
+      params.push(JSON.stringify(v.value));
+      paramN++;
     } else if (isFragment(v)) {
       // Identifier / SET / column-list — fragment decides whether it emits
       // raw SQL only, or raw SQL plus parameters.
@@ -479,6 +508,10 @@ export function createPGliteSql(
     return runner<T>(text, params);
   };
 
+  sqlFn.json = function json(value: unknown): JsonValue {
+    return { [JSON_TAG]: true, value };
+  };
+
   sqlFn.end = async function end(_opts?: { timeout?: number }): Promise<void> {
     const db = await getDb();
     await db.close();
@@ -539,6 +572,10 @@ function wrapTransaction(tx: Transaction, savepointDepth = 0): PGliteSql {
     params: readonly unknown[] = [],
   ): Promise<T[]> {
     return runner<T>(text, params);
+  };
+
+  txFn.json = function json(value: unknown): JsonValue {
+    return { [JSON_TAG]: true, value };
   };
 
   // Inside a transaction, `end()` is meaningless — never called by app code,

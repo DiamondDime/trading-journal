@@ -263,6 +263,30 @@ describe("PGlite shim — transactions", () => {
   });
 });
 
+describe("PGlite shim — sql.json", () => {
+  it("serializes objects to JSONB via sql.json()", async () => {
+    await db.exec("delete from widgets");
+    const obj = { a: 1, b: ["x", "y"], nested: { count: 9 } };
+    await sql`insert into widgets (name, payload) values (${"j"}, ${sql.json(obj)})`;
+    const rows = await sql<{ payload: typeof obj }>`select payload from widgets`;
+    expect(rows[0].payload).toEqual(obj);
+  });
+
+  it("sql.json renders as a single $N placeholder, not inline JSON", async () => {
+    // Use array indices to verify $N numbering is contiguous.
+    await db.exec("delete from widgets");
+    await sql`
+      insert into widgets (name, quantity, payload)
+      values (${"j"}, ${42}, ${sql.json({ ok: true })})
+    `;
+    const rows = await sql<{ quantity: number; payload: { ok: boolean } }>`
+      select quantity, payload from widgets
+    `;
+    expect(rows[0].quantity).toBe(42);
+    expect(rows[0].payload).toEqual({ ok: true });
+  });
+});
+
 describe("PGlite shim — sql.unsafe", () => {
   it("executes raw SQL with positional params", async () => {
     await db.exec("delete from widgets");
