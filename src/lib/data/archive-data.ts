@@ -29,7 +29,13 @@ export type SpreadType =
   | "cross_exchange"
   | "dex_cex";
 
-export type Asset = "BTC" | "ETH" | "SOL" | "PEPE" | "EIGEN" | "W" | "ZETA" | "JUP" | "ARB" | "PYTH";
+// Asset is the display-side base ticker (e.g. "BTC", "SOL", "PEPE", "1000PEPE").
+// Kept as an open `string` alias instead of a closed union so any token the
+// user actually holds renders without being silently coerced to a fallback.
+// The previous closed union dropped unknown assets to "BTC" at the adapter
+// boundary — that broke the archive filter + list rendering for anyone whose
+// portfolio touched tokens outside the original 10-entry whitelist.
+export type Asset = string;
 
 // Status union covers every activity type's terminal states. Open/pending
 // states aren't in the closed-activity feed (the matcher pipeline tracks

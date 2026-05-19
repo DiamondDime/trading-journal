@@ -106,7 +106,7 @@ export default async function OptionFieldsPage(props: { searchParams: Search }) 
   // Defaults take searchParam first (back-nav from /review), DB second.
   const defaults = {
     underlying:
-      getStr(sp, "underlying") || dbDefaults.underlying || "BTC",
+      getStr(sp, "underlying") || dbDefaults.underlying || "",
     exchange:
       getStr(sp, "exchange") || dbDefaults.exchange || "deribit",
     spread_style:

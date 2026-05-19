@@ -70,10 +70,10 @@ const TYPE_ORDER: SpreadType[] = [
   "dex_cex",
 ];
 
-const ASSET_ORDER: Asset[] = [
-  "BTC", "ETH", "SOL", "PEPE",
-  "EIGEN", "W", "ZETA", "JUP", "ARB", "PYTH",
-];
+// Asset chip order is no longer a fixed list — `Asset` is `string`, so the
+// archive supports every ticker the user has actually traded. The filter
+// chips are derived at render time from `assetCounts`, sorted by count desc
+// then alpha asc for a stable display.
 
 const STATUS_ORDER: ActivityStatus[] = ["closed", "expired", "claimed", "vested"];
 
@@ -188,7 +188,14 @@ function decodeFromUrl(sp: { get(key: string): string | null }): DecodedState {
   return {
     activity: parseSet("activity", ACTIVITY_TYPE_ORDER),
     type: parseSet("type", TYPE_ORDER),
-    asset: parseSet("asset", ASSET_ORDER),
+    // `Asset` is an open string — the URL param can hold any ticker the user
+    // has traded. Split on commas, trim, drop empties; no whitelist check.
+    asset: new Set(
+      (sp.get("asset") ?? "")
+        .split(",")
+        .map((x) => x.trim())
+        .filter((x) => x.length > 0),
+    ),
     status: parseSet("status", STATUS_ORDER),
     outcome,
     strategy: sp.get("strategy") ?? "",
@@ -217,7 +224,10 @@ function buildUrlQuery(state: DecodedState): string {
 
 function rowAsset(a: Activity): Asset | null {
   if (a.type === "spread" || a.type === "trade" || a.type === "sale" || a.type === "airdrop") {
-    return a.asset;
+    // Filter out empty strings — db-adapter.asAsset() can emit "" when the
+    // upstream symbol is null/undefined, and we don't want that surfacing as
+    // a blank filter chip.
+    return a.asset || null;
   }
   return null;
 }
@@ -569,16 +579,19 @@ export function ArchiveBrowser({ data }: { data: Activity[] }) {
           )}
           <FilterRow
             label={t("archive.filters.asset")}
-            chips={ASSET_ORDER.filter(
-              (a) => (assetCounts.get(a) ?? 0) > 0
-            ).map((a) => ({
-              key: a,
-              label: a,
-              count: assetCounts.get(a) ?? 0,
-              active: assetFilters.has(a),
-              onClick: () =>
-                setAssetFilters((s) => toggleSetValue(s, a)),
-            }))}
+            chips={[...assetCounts.entries()]
+              .sort(
+                (a, b) =>
+                  b[1] - a[1] || a[0].localeCompare(b[0]),
+              )
+              .map(([a, count]) => ({
+                key: a,
+                label: a,
+                count,
+                active: assetFilters.has(a),
+                onClick: () =>
+                  setAssetFilters((s) => toggleSetValue(s, a)),
+              }))}
           />
           <FilterRow
             label={t("archive.filters.status")}
