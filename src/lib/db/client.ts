@@ -73,6 +73,11 @@ export const sql =
     // statement caching when talking to it so postgres.js falls back to
     // simple-query mode reliably. Negligible perf hit; the database is local.
     prepare: !DESKTOP_MODE,
+    // Skip the type-OID introspection postgres.js normally runs on first
+    // connect — PGlite-socket's pg_catalog responses are incomplete enough
+    // that this query yields `ECONNRESET` and poisons every subsequent
+    // query. Built-in OIDs cover everything the app uses.
+    ...(DESKTOP_MODE ? { fetch_types: false, ssl: false } : {}),
   });
 
 if (process.env.NODE_ENV !== 'production') {
