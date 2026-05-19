@@ -12,6 +12,14 @@ const nextConfig: NextConfig = {
   turbopack: {
     root: path.join(__dirname),
   },
+  // PGlite ships its WASM runtime + contrib extensions (citext.tar.gz,
+  // pgcrypto.tar.gz, …) as side-loaded binary assets that the package's own
+  // code resolves via `import.meta.url`. Next's bundler otherwise treats
+  // those `.tar.gz` files as static assets and rewrites paths to
+  // `/_next/static/media/<hash>.gz`, which PGlite then can't find at runtime.
+  // Marking the package as server-external keeps the require() chain plain
+  // CommonJS so PGlite's own loader finds its bundles in node_modules.
+  serverExternalPackages: ["@electric-sql/pglite"],
 };
 
 export default nextConfig;

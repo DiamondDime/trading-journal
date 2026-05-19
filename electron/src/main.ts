@@ -27,7 +27,6 @@ import { spawn, type ChildProcess } from 'node:child_process';
 import { createServer } from 'node:net';
 import { join, resolve } from 'node:path';
 import { existsSync } from 'node:fs';
-import { bootDesktopDb, type DesktopDbHandle } from './migrate';
 // Auto-update agent: helper that wires `electron-updater` + IPC channels.
 // Idempotent and a no-op in dev mode.
 import { attachAutoUpdater } from './auto-update';
@@ -36,7 +35,7 @@ import { attachAutoUpdater } from './auto-update';
 import { loadOrCreateMcpToken } from './mcp-token';
 // Per-install identity: stable uuid + worker-auth secret persisted to
 // <userData>/journal.json. The Next.js subprocess needs both via env.
-import { loadOrProvisionUser, ensureProfileRow } from './user-provision';
+import { loadOrProvisionUser } from './user-provision';
 
 const isDev = process.env.DESKTOP_DEV === '1' || !app.isPackaged;
 const DEV_PORT = Number.parseInt(process.env.DESKTOP_DEV_PORT ?? '3000', 10);
@@ -47,7 +46,6 @@ const STARTUP_TIMEOUT_MS = 30_000;
 // Singletons we have to clean up on exit.
 let mainWindow: BrowserWindow | null = null;
 let nextServer: ChildProcess | null = null;
-let desktopDb: DesktopDbHandle | null = null;
 // Worker subprocess will be owned by the worker agent. Reserved here so that
 // the lifecycle in `app.on('before-quit')` already handles it.
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -133,7 +131,6 @@ function resolveStandaloneServerEntry(): string {
  */
 function spawnNextServer(
   port: number,
-  pgPort: number,
   mcpToken: string,
   userId: string,
   workerSecret: string,
@@ -147,25 +144,29 @@ function spawnNextServer(
   }
 
   const userData = app.getPath('userData');
-  const dataDir = join(userData, 'data');
+  const pgliteDataDir = join(userData, 'data', 'pglite');
+  // Migrations live inside the asar at `<resourcesPath>/supabase/migrations`.
+  // The Next.js subprocess reads them from this path on first DB open.
+  const migrationsDir = app.isPackaged
+    ? join(process.resourcesPath, 'app.asar', 'supabase', 'migrations')
+    : resolve(__dirname, '..', '..', 'supabase', 'migrations');
 
   const child = spawn(process.execPath, [serverEntry], {
     cwd: resolve(serverEntry, '..'),
     env: {
       ...process.env,
       // Tell the Next.js code path that it's running inside Electron so the
-      // DB layer (PGlite) and any other desktop-specific branches activate.
+      // DB layer (PGlite, via src/lib/db/pglite-shim.ts) activates instead of
+      // postgres.js + DATABASE_URL.
       DESKTOP_MODE: '1',
       PORT: String(port),
       HOSTNAME: '127.0.0.1',
-      // The PGlite WASM database lives in the main (Electron) process. Its
-      // wire-protocol bridge is bound to PGLITE_PORT on loopback; the Next.js
-      // server's postgres.js client connects there. See src/lib/db/client.ts.
-      PGLITE_PORT: String(pgPort),
-      // Retained for the worker subprocess (Python) which speaks PGlite
-      // directly. The Next.js subprocess doesn't read this — it connects via
-      // PGLITE_PORT — but downstream tooling may.
-      PGLITE_DATA_DIR: dataDir,
+      // PGlite lives IN-PROCESS inside the Next.js subprocess now (no TCP
+      // wire bridge). These two env vars point its boot routine at the
+      // user-data dir for the WASM-backed datafiles, and the asar-packed
+      // migrations directory for the first-run schema apply.
+      PGLITE_DATA_DIR: pgliteDataDir,
+      PGLITE_MIGRATIONS_DIR: migrationsDir,
       // Shared secret with the `trading-journal-mcp` package. The Next.js
       // server uses this to authenticate requests on /api/mcp/v1/*. The
       // source of truth is ~/.journal/mcp.json; we forward it here so the
@@ -268,19 +269,17 @@ async function boot(): Promise<void> {
     `[mcp] token ${mcp.generated ? 'generated new token' : 'loaded from ~/.journal/mcp.json'}`,
   );
 
-  // Boot the PGlite database BEFORE we spawn the Next.js subprocess. The
-  // subprocess connects to PGlite via the wire-protocol bridge on PGLITE_PORT;
-  // if it queried before the bridge was up, postgres.js would ECONNREFUSED.
-  desktopDb = await bootDesktopDb();
-  console.log(`[main] PGlite ready at ${desktopDb.dataDir} (port ${desktopDb.port})`);
-
   // Provision (or load) the per-install user id + worker secret. Persists to
   // <userData>/journal.json. The id is stable across launches; the secret is
   // generated once and reused so the worker daemon and Next.js subprocess
   // share the same value.
+  //
+  // PGlite itself is now opened LAZILY inside the Next.js subprocess on first
+  // query (see `src/lib/db/client.ts::bootPGlite`). Main no longer touches
+  // the WASM database, which is what removes the wire-protocol bridge and
+  // its protocol-mismatch class of bugs entirely.
   const userData = app.getPath('userData');
   const provisioned = await loadOrProvisionUser(userData);
-  await ensureProfileRow(desktopDb, provisioned.userId);
   // SAFETY: log the id (debugging aid) but NEVER the workerSecret value.
   console.log(
     `[main] user provisioned ${provisioned.userId}` +
@@ -301,7 +300,6 @@ async function boot(): Promise<void> {
     console.log(`[main] spawning Next.js standalone on :${targetPort}`);
     nextServer = spawnNextServer(
       targetPort,
-      desktopDb.port,
       mcp.token,
       provisioned.userId,
       provisioned.workerSecret,
@@ -361,16 +359,9 @@ app.on('before-quit', () => {
     syncWorker.kill('SIGTERM');
     syncWorker = null;
   }
-  if (desktopDb) {
-    // Don't await — Electron will quit shortly after this handler returns.
-    // The shutdown closes the socket and flushes PGlite to disk; we let it
-    // race with process exit because PGlite's file format is crash-safe (it
-    // is, in the end, Postgres).
-    desktopDb.shutdown().catch((err) => {
-      console.error('[main] PGlite shutdown failed:', err);
-    });
-    desktopDb = null;
-  }
+  // PGlite lives in the Next.js subprocess now — SIGTERM above closes it
+  // implicitly when the subprocess exits. PGlite's file format is crash-safe
+  // (it is, in the end, Postgres), so we don't need an explicit flush.
 });
 
 // Block creation of additional renderer-process windows from web content.
