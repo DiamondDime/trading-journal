@@ -3,6 +3,7 @@ import { ArchiveBrowser } from "@/components/spread/archive-browser";
 import { requireUser } from "@/lib/auth/server";
 import { listActivitiesWithMeta } from "@/lib/data/db-queries";
 import { feedRowsToActivities } from "@/lib/data/db-adapter";
+import { ListRowsSkeleton } from "@/components/list-rows-skeleton";
 
 // Server component: fetch every non-deleted activity, plus subtype meta,
 // and hand a fixture-shaped Activity[] to the client ArchiveBrowser.
@@ -21,7 +22,7 @@ export default async function ArchivePage() {
   const data = feedRowsToActivities(rows, meta);
 
   return (
-    <Suspense fallback={null}>
+    <Suspense fallback={<ListRowsSkeleton variant="archive" />}>
       <ArchiveBrowser data={data} />
     </Suspense>
   );

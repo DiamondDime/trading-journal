@@ -277,6 +277,7 @@ export function SidebarClient({ counts, portfolio, displayName, initials }: Side
                   aria-current={isActive ? "page" : undefined}
                   className={cn(
                     "flex items-center justify-between rounded-md px-2.5 py-1.5 text-[13px] transition-colors",
+                    "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-surface",
                     isActive
                       ? "bg-subtle text-text font-medium"
                       : "text-text-secondary hover:bg-subtle hover:text-text"
@@ -353,14 +354,14 @@ export function SidebarClient({ counts, portfolio, displayName, initials }: Side
           </p>
           <Link
             href="/add"
-            className="flex items-center gap-2.5 rounded-md px-2.5 py-1.5 text-[13px] font-medium text-text hover:bg-subtle hover:text-text transition-colors"
+            className="flex items-center gap-2.5 rounded-md px-2.5 py-1.5 text-[13px] font-medium text-text hover:bg-subtle hover:text-text transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-surface"
           >
             <Plus className="h-3.5 w-3.5" />
             {t("sidebar.quick.log")}
           </Link>
           <Link
             href="/settings/exchanges"
-            className="flex items-center gap-2.5 rounded-md px-2.5 py-1.5 text-[13px] text-text-secondary hover:bg-subtle hover:text-text transition-colors"
+            className="flex items-center gap-2.5 rounded-md px-2.5 py-1.5 text-[13px] text-text-secondary hover:bg-subtle hover:text-text transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-surface"
           >
             <Plus className="h-3.5 w-3.5" />
             {t("sidebar.quick.connect")}
@@ -403,7 +404,7 @@ function SavedViewLink({
   return (
     <Link
       href={href}
-      className="flex items-center justify-between rounded-md px-2.5 py-1 text-[12px] text-text-secondary hover:bg-subtle hover:text-text transition-colors"
+      className="flex items-center justify-between rounded-md px-2.5 py-1 text-[12px] text-text-secondary hover:bg-subtle hover:text-text transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-surface"
     >
       <span className="flex items-center gap-2 min-w-0">{children}</span>
       <span className="font-mono text-[10px] text-text-tertiary">{count}</span>
@@ -435,9 +436,10 @@ function SidebarFooter({ displayName, initials }: { displayName: string; initial
         </div>
         <div className="flex items-center gap-1">
           <button
+            type="button"
             aria-label={t("common.toggleTheme")}
             onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
-            className="h-7 w-7 flex items-center justify-center rounded-md text-text-secondary hover:bg-subtle hover:text-text transition-colors"
+            className="h-7 w-7 flex items-center justify-center rounded-md text-text-secondary hover:bg-subtle hover:text-text transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-surface"
           >
             {mounted && theme === "dark" ? (
               <Sun className="h-3.5 w-3.5" />
@@ -448,7 +450,7 @@ function SidebarFooter({ displayName, initials }: { displayName: string; initial
           <Link
             href="/settings"
             aria-label={t("common.settings")}
-            className="h-7 w-7 flex items-center justify-center rounded-md text-text-secondary hover:bg-subtle hover:text-text transition-colors"
+            className="h-7 w-7 flex items-center justify-center rounded-md text-text-secondary hover:bg-subtle hover:text-text transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-surface"
           >
             <Settings className="h-3.5 w-3.5" />
           </Link>
@@ -489,7 +491,7 @@ function SearchPillButton({
       type="button"
       aria-label={ariaLabel}
       onClick={() => document.dispatchEvent(new CustomEvent("search:open"))}
-      className="group flex flex-1 items-center gap-2 rounded-md border border-border bg-inset px-2.5 py-1.5 text-left transition-colors hover:border-border-strong focus:border-border-strong focus:outline-none"
+      className="group flex flex-1 items-center gap-2 rounded-md border border-border bg-inset px-2.5 py-1.5 text-left transition-colors hover:border-border-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-surface"
     >
       <Search className="h-3.5 w-3.5 text-text-tertiary" />
       <span className="flex-1 bg-transparent text-[12px] text-text-tertiary">

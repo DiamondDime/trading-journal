@@ -156,6 +156,7 @@ export default async function MovementEventsPage({ searchParams }: MovementEvent
                 usdValue:   e.usdValue,
                 feeUsd:     e.feeUsd,
                 occurredAt: e.occurredAt,
+                href:       `/movement-events/${e.id}`,
               }}
             />
           ))}

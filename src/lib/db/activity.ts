@@ -1795,6 +1795,72 @@ export async function getRegimeAggregations(
 }
 
 /**
+ * Row shape returned by {@link listUntaggedActivitiesForRegime}. Contains
+ * only what the bulk-tag dialog needs to render a checklist.
+ */
+export interface UntaggedActivityRow {
+  id: ActivityId;
+  name: string;
+  type: ActivityType;
+  openedAt: string | null;
+}
+
+/**
+ * List activities that have no regime tag, ordered newest-first, capped at
+ * 200 rows (the dialog paginates conceptually by "select all" being enough
+ * for the common case of a few dozen untagged items).
+ */
+export async function listUntaggedActivitiesForRegime(
+  userId: string,
+): Promise<UntaggedActivityRow[]> {
+  const rows = await sql<{
+    id: ActivityId;
+    name: string;
+    type: ActivityType;
+    openedAt: string | null;
+  }[]>`
+    SELECT id, name, type, opened_at AS "openedAt"
+    FROM public.v_activity_feed
+    WHERE user_id = ${userId}::uuid
+      AND (regime_tags IS NULL OR cardinality(regime_tags) = 0)
+    ORDER BY coalesce(opened_at, created_at) DESC
+    LIMIT 200
+  `;
+  return rows;
+}
+
+/**
+ * Apply a single regime tag to a batch of activities that the user owns.
+ * Uses set-UNION semantics: the tag is appended to existing regime_tags
+ * arrays (does not wipe other tags the activities may already carry).
+ *
+ * Skips any IDs that fail the UUID check or don't belong to the user.
+ * Returns the count of rows actually updated.
+ */
+export async function applyRegimeTagBulk(
+  userId: string,
+  activityIds: readonly string[],
+  tag: string,
+): Promise<number> {
+  const cleanTag = tag.trim();
+  if (!cleanTag || cleanTag.length > 60) return 0;
+  const validIds = activityIds.filter((id) => UUID_RE.test(id));
+  if (validIds.length === 0) return 0;
+
+  const rows = await sql<{ id: string }[]>`
+    UPDATE public.activity
+    SET regime_tags = array_append(coalesce(regime_tags, '{}'), ${cleanTag}),
+        updated_at  = now()
+    WHERE id = ANY(${validIds}::uuid[])
+      AND user_id = ${userId}::uuid
+      AND deleted_at IS NULL
+      AND NOT (coalesce(regime_tags, '{}') @> ARRAY[${cleanTag}])
+    RETURNING id
+  `;
+  return rows.length;
+}
+
+/**
  * Count of activities the user has logged that carry no regime tag at all.
  * Surfaces on the regime page as a "bulk-tag these N activities" prompt.
  *

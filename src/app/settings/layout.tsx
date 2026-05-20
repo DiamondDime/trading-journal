@@ -11,7 +11,7 @@ export default async function SettingsLayout({
   return (
     <div className="flex h-screen w-full bg-app">
       <Sidebar />
-      <main className="flex-1 overflow-y-auto">
+      <main id="main-content" className="flex-1 overflow-y-auto">
         <div className="mx-auto max-w-[1240px] px-8 pb-16 pt-10">
           {/* Page chrome */}
           <header className="mb-8 flex flex-col gap-1.5">

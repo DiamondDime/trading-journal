@@ -46,6 +46,18 @@ export default async function RootLayout({
       className={`${inter.variable} ${jetbrainsMono.variable} ${sourceSerif.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col bg-app text-text">
+        {/*
+          Skip-to-content link — visually hidden until focused. Screen-reader
+          and keyboard users Tab once to skip the sidebar navigation and land
+          directly on the main content area. The target `id="main-content"` is
+          placed on the <main> element rendered by each section layout.
+        */}
+        <a
+          href="#main-content"
+          className="sr-only focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-[9999] focus:rounded-md focus:bg-surface focus:px-4 focus:py-2 focus:text-[13px] focus:font-medium focus:text-text focus:ring-2 focus:ring-ring focus:outline-none"
+        >
+          Skip to content
+        </a>
         <ThemeProvider
           attribute="class"
           defaultTheme="light"

@@ -21,6 +21,7 @@ import {
   type SavedViewRow,
 } from "@/lib/db/saved-views";
 import { ViewsBrowser } from "@/components/views/views-browser";
+import { CardGridSkeleton } from "@/components/card-grid-skeleton";
 
 export const dynamic = "force-dynamic";
 
@@ -58,7 +59,7 @@ export default async function ViewsPage({ searchParams }: ViewsPageProps) {
   }));
 
   return (
-    <Suspense fallback={null}>
+    <Suspense fallback={<CardGridSkeleton cards={4} />}>
       <ViewsBrowser initialViews={enriched} prefillFrom={prefillFrom} />
     </Suspense>
   );

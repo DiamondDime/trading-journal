@@ -9,13 +9,15 @@ export const dynamic = "force-dynamic";
 /**
  * Airdrop wizard intro / status-branch step.
  *
- * Two manual entry points + one wallet-paste shortcut:
+ * Two manual entry paths:
  *  1. "Track without claiming yet" (status=pending) — watchlist entry
  *  2. "Log a claim" (status=claimed) — full claim flow
- *  3. "Fetch from wallet" — wallet-paste auto-import flow (v1 stub)
  *
  * Carries the chosen status through the URL so /fields renders the right
  * required-vs-optional fields without a hydration hop.
+ *
+ * The "Fetch from wallet" on-chain auto-import path was removed — on-chain
+ * indexing is out of scope for v1. Manual entry covers all v1 use cases.
  */
 export default async function AirdropIntroPage() {
   const t = await getT();
@@ -40,13 +42,6 @@ export default async function AirdropIntroPage() {
       description: t("wizard.airdrop.intro.options.claimed.description"),
       href: "/add/airdrop/fields?status=claimed",
       badge: t("wizard.airdrop.intro.options.claimed.badge"),
-    },
-    {
-      caption: t("wizard.airdrop.intro.options.wallet.caption"),
-      title: t("wizard.airdrop.intro.options.wallet.title"),
-      description: t("wizard.airdrop.intro.options.wallet.description"),
-      href: "/add/airdrop/wallet",
-      badge: t("wizard.airdrop.intro.options.wallet.badge"),
     },
   ];
 

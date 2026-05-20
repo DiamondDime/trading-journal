@@ -49,7 +49,7 @@ export default async function AddLayout({
       </div>
 
       {/* ── content column ──────────────────────────────────────────────── */}
-      <div className="mx-auto max-w-3xl px-6 py-12 md:py-16">{children}</div>
+      <main id="main-content" className="mx-auto max-w-3xl px-6 py-12 md:py-16">{children}</main>
     </div>
   );
 }

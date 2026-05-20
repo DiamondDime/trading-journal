@@ -214,7 +214,7 @@ function createMainWindow(targetUrl: string): BrowserWindow {
     width: 1400,
     height: 900,
     minWidth: 1024,
-    minHeight: 640,
+    minHeight: 700,
     backgroundColor: '#000000',
     show: false,
     webPreferences: {

@@ -167,8 +167,8 @@ export default async function MovementReviewPage(props: { searchParams: Search }
             occurredAt: v.occurredAt
               ? new Date(v.occurredAt).toISOString()
               : new Date().toISOString(),
-            // Disable navigation on the preview — the row doesn't exist yet.
-            href: "#",
+            // href omitted — preview only, no row exists yet; renders as
+            // a static article rather than a dead <Link href="#">
           }}
         />
       </section>

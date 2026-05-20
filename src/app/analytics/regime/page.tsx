@@ -15,6 +15,7 @@ import { BarRank } from "@/components/analytics/bar-rank";
 import { RegimeCallout } from "@/components/analytics/regime-callout";
 import { LastUpdatedFooter } from "@/components/analytics/last-updated";
 import { AnalyticsEmptyState, MIN_FOR_ANALYTICS } from "@/components/analytics/empty-state";
+import { BulkRegimeTagDialog } from "@/components/analytics/bulk-regime-tag-dialog";
 
 /**
  * Regime Distribution — which market regimes pay, which bleed.
@@ -156,13 +157,7 @@ export default async function RegimeDistributionPage() {
                 {t("analytics.regime.untaggedHelp")}
               </p>
             </div>
-            <span
-              className="cursor-not-allowed font-mono text-[10px] uppercase tracking-[0.16em] text-text-disabled"
-              title={t("analytics.regime.bulkTagTitle")}
-              aria-disabled="true"
-            >
-              {t("analytics.regime.bulkTag")}
-            </span>
+            <BulkRegimeTagDialog untaggedCount={untaggedCount} />
           </div>
         )}
       </div>

@@ -127,7 +127,8 @@ export default async function MovementEventDetailPage({
             usdValue:   row.usdValue,
             feeUsd:     row.feeUsd,
             occurredAt: row.occurredAt,
-            href:       "#",
+            // href omitted — already on the detail page; renders as a
+            // static article rather than a dead <Link href="#">
           }}
         />
       </header>

@@ -37,6 +37,12 @@ import {
   ExchangeChip,
   ExchangeVenuesChips,
 } from "@/components/settings/exchange-logo";
+import {
+  getSpreadLegs,
+  getSpreadFundingPnl,
+  type SpreadLegRow,
+  type FundingRollup,
+} from "./db";
 
 export const dynamic = "force-dynamic";
 
@@ -148,6 +154,7 @@ export default async function SpreadDetailPage({
     initialTags,
     satisfaction,
     allClosed,
+    realLegs,
   ] = await Promise.all([
     getActivity(userId, id),
     getNoteForActivity(userId, id),
@@ -156,17 +163,37 @@ export default async function SpreadDetailPage({
     listTagsForActivity(userId, id),
     getSatisfaction(userId, id),
     getAllClosedActivities(userId),
+    getSpreadLegs(userId, id),
   ]);
   if (!activity || activity.subtype.type !== "spread") {
     notFound();
   }
+
+  // Funding roll-up depends on the leg set (it needs each leg's position_id),
+  // so it runs after getSpreadLegs resolves. Pure manual spreads have no
+  // position-linked legs → getSpreadFundingPnl returns null and the page
+  // shows nothing rather than a fabricated zero.
+  const fundingPositionIds = realLegs
+    .map((leg) => leg.positionId)
+    .filter((pid): pid is string => pid !== null);
+  const funding = await getSpreadFundingPnl(userId, fundingPositionIds);
   const initialScreenshots = toScreenshotItems(screenshots);
   const moreMetrics = computeMoreMetrics(allClosed);
   const avgLossUsd = moreMetrics.avgLoss;
 
   const s = activity.subtype.row;
   const manualLabel = t("spreadDetail.manualVenue");
-  const legs = deriveLegs(s.spreadType, s.exchanges, s.primaryBase, manualLabel);
+  // Real legs come from the spread_legs table (position-linked + manual).
+  // deriveLegs() is a FALLBACK only — used when a spread has zero spread_legs
+  // rows (legacy data created before the leg-writing wizard). This keeps the
+  // decomposition table populated for old spreads with no regression.
+  const useRealLegs = realLegs.length > 0;
+  const derivedLegs = deriveLegs(
+    s.spreadType,
+    s.exchanges,
+    s.primaryBase,
+    manualLabel,
+  );
   const apr = fmtAprPct(s.apr);
   const headlineTone = apr.tone === "up" ? "text-up" : "text-down";
   // Spread type label — resolved through the dict so the detail page reads
@@ -260,6 +287,11 @@ export default async function SpreadDetailPage({
             </span>{" "}
             {t("spreadDetail.hero.realizedSuffix", { capital: fmtCapital(capital) })}
           </p>
+          {/* Funding P&L — aggregated from funding_events across the spread's
+              position-linked legs. Rendered only when the spread has at least
+              one position-linked leg (funding === null for pure manual
+              spreads); we never fabricate a zero. */}
+          {funding !== null && <FundingLine funding={funding} t={t} />}
         </div>
       </section>
 
@@ -325,42 +357,16 @@ export default async function SpreadDetailPage({
           {t("spreadDetail.sections.decomposition")}
         </h2>
         <p className="mt-2 font-serif text-[12px] italic text-text-tertiary">
-          {t("spreadDetail.decompositionCaption")}
+          {useRealLegs
+            ? t("spreadDetail.decompositionRealCaption")
+            : t("spreadDetail.decompositionCaption")}
         </p>
-        <div className="mt-4 overflow-hidden rounded-md border border-border bg-surface">
-          <Table>
-            <TableHeader>
-              <TableRow className="hover:bg-transparent">
-                <TableHead scope="col" className="text-text-tertiary">&nbsp;</TableHead>
-                <TableHead scope="col" className="text-text-secondary">{t("spreadDetail.legs.leg1")}</TableHead>
-                <TableHead scope="col" className="text-text-secondary">{t("spreadDetail.legs.leg2")}</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              <LegRow
-                label={t("fields.venue")}
-                leg1={
-                  <span className="inline-flex items-center gap-2">
-                    <ExchangeChip venue={legs.leg1.venue} size="sm" />
-                    <span>{legs.leg1.venue}</span>
-                  </span>
-                }
-                leg2={
-                  <span className="inline-flex items-center gap-2">
-                    <ExchangeChip venue={legs.leg2.venue} size="sm" />
-                    <span>{legs.leg2.venue}</span>
-                  </span>
-                }
-              />
-              <LegRow label={t("spreadDetail.legs.symbol")} leg1={legs.leg1.symbol} leg2={legs.leg2.symbol} mono />
-              <LegRow label={t("spreadDetail.legs.instrument")} leg1={legs.leg1.instrument} leg2={legs.leg2.instrument} />
-              <LegRow
-                label={t("fields.side")}
-                leg1={<SidePill side={legs.leg1.side} t={t} />}
-                leg2={<SidePill side={legs.leg2.side} t={t} />}
-              />
-            </TableBody>
-          </Table>
+        <div className="mt-4 overflow-x-auto rounded-md border border-border bg-surface">
+          {useRealLegs ? (
+            <RealLegsTable legs={realLegs} manualLabel={manualLabel} t={t} />
+          ) : (
+            <DerivedLegsTable legs={derivedLegs} t={t} />
+          )}
         </div>
       </section>
 
@@ -507,5 +513,269 @@ function SidePill({ side, t }: { side: "long" | "short"; t: TFunction }) {
     >
       {t(`side.${side}`)}
     </span>
+  );
+}
+
+// ── real-legs rendering ──────────────────────────────────────────────────────
+
+const EM_DASH = "—";
+
+/**
+ * Format a string-decimal money value for the legs table. Falls back to an
+ * em-dash for null/blank/non-numeric input so an open leg's missing exit
+ * price (or a manual leg with no fees entered) reads cleanly.
+ */
+function fmtLegUsd(value: string | null): string {
+  if (value === null || value.trim() === "") return EM_DASH;
+  const n = Number(value);
+  return Number.isFinite(n) ? fmtUsd(n) : EM_DASH;
+}
+
+/**
+ * Format a string-decimal quantity for the legs table. Quantities are not
+ * USD so they render as plain grouped numbers; trailing zeros from the
+ * numeric(38,18) column are trimmed. Em-dash for null/blank/non-numeric.
+ */
+function fmtLegQty(value: string | null): string {
+  if (value === null || value.trim() === "") return EM_DASH;
+  const n = Number(value);
+  if (!Number.isFinite(n)) return EM_DASH;
+  return n.toLocaleString("en-US", { maximumFractionDigits: 8 });
+}
+
+/** Side pill that tolerates a null side (manual legs may omit it). */
+function LegSidePill({
+  side,
+  t,
+}: {
+  side: "long" | "short" | null;
+  t: TFunction;
+}) {
+  if (side === null) {
+    return <span className="text-text-tertiary">{EM_DASH}</span>;
+  }
+  return <SidePill side={side} t={t} />;
+}
+
+/**
+ * One attribute row in a transposed legs table. The header column holds the
+ * attribute label; each remaining cell is one leg's value for that attribute.
+ */
+function AttrRow({
+  label,
+  cells,
+  mono = false,
+}: {
+  label: string;
+  cells: React.ReactNode[];
+  mono?: boolean;
+}) {
+  return (
+    <TableRow>
+      <TableCell className="text-text-tertiary text-sm">{label}</TableCell>
+      {cells.map((cell, i) => (
+        <TableCell
+          key={i}
+          className={
+            mono ? "font-mono tabular-nums text-text" : "text-text"
+          }
+        >
+          {cell}
+        </TableCell>
+      ))}
+    </TableRow>
+  );
+}
+
+/**
+ * Decomposition table built from the REAL spread_legs rows. Transposed —
+ * one column per leg, one row per attribute — so it stays readable as the
+ * leg count grows. Position-linked and manual legs render identically because
+ * the data layer already normalized them.
+ */
+function RealLegsTable({
+  legs,
+  manualLabel,
+  t,
+}: {
+  legs: SpreadLegRow[];
+  manualLabel: string;
+  t: TFunction;
+}) {
+  const legHeader = (leg: SpreadLegRow, i: number): string =>
+    leg.role && leg.role.trim() !== ""
+      ? leg.role
+      : t("spreadDetail.legs.legN", { i: i + 1 });
+
+  return (
+    <Table>
+      <TableHeader>
+        <TableRow className="hover:bg-transparent">
+          <TableHead scope="col" className="text-text-tertiary">
+            &nbsp;
+          </TableHead>
+          {legs.map((leg, i) => (
+            <TableHead
+              key={leg.id}
+              scope="col"
+              className="text-text-secondary capitalize"
+            >
+              {legHeader(leg, i)}
+            </TableHead>
+          ))}
+        </TableRow>
+      </TableHeader>
+      <TableBody>
+        <AttrRow
+          label={t("fields.venue")}
+          cells={legs.map((leg) => {
+            const venue = leg.venue ?? manualLabel;
+            return (
+              <span key={leg.id} className="inline-flex items-center gap-2">
+                <ExchangeChip venue={venue} size="sm" />
+                <span>{venue}</span>
+              </span>
+            );
+          })}
+        />
+        <AttrRow
+          label={t("spreadDetail.legs.symbol")}
+          mono
+          cells={legs.map((leg) => leg.symbol ?? EM_DASH)}
+        />
+        <AttrRow
+          label={t("spreadDetail.legs.instrument")}
+          cells={legs.map((leg) => leg.instrumentType ?? EM_DASH)}
+        />
+        <AttrRow
+          label={t("fields.side")}
+          cells={legs.map((leg) => (
+            <LegSidePill key={leg.id} side={leg.side} t={t} />
+          ))}
+        />
+        <AttrRow
+          label={t("spreadDetail.legs.qty")}
+          mono
+          cells={legs.map((leg) => fmtLegQty(leg.qty))}
+        />
+        <AttrRow
+          label={t("spreadDetail.legs.entryPrice")}
+          mono
+          cells={legs.map((leg) => fmtLegUsd(leg.entryPrice))}
+        />
+        <AttrRow
+          label={t("spreadDetail.legs.exitPrice")}
+          mono
+          cells={legs.map((leg) => fmtLegUsd(leg.exitPrice))}
+        />
+        <AttrRow
+          label={t("spreadDetail.legs.fees")}
+          mono
+          cells={legs.map((leg) => fmtLegUsd(leg.feesUsd))}
+        />
+      </TableBody>
+    </Table>
+  );
+}
+
+/**
+ * Fallback decomposition table — renders the synthetic two-leg display from
+ * deriveLegs(). Only reached for legacy spreads that have zero spread_legs
+ * rows. New spreads always hit RealLegsTable.
+ */
+function DerivedLegsTable({
+  legs,
+  t,
+}: {
+  legs: DerivedLegs;
+  t: TFunction;
+}) {
+  return (
+    <Table>
+      <TableHeader>
+        <TableRow className="hover:bg-transparent">
+          <TableHead scope="col" className="text-text-tertiary">
+            &nbsp;
+          </TableHead>
+          <TableHead scope="col" className="text-text-secondary">
+            {t("spreadDetail.legs.leg1")}
+          </TableHead>
+          <TableHead scope="col" className="text-text-secondary">
+            {t("spreadDetail.legs.leg2")}
+          </TableHead>
+        </TableRow>
+      </TableHeader>
+      <TableBody>
+        <LegRow
+          label={t("fields.venue")}
+          leg1={
+            <span className="inline-flex items-center gap-2">
+              <ExchangeChip venue={legs.leg1.venue} size="sm" />
+              <span>{legs.leg1.venue}</span>
+            </span>
+          }
+          leg2={
+            <span className="inline-flex items-center gap-2">
+              <ExchangeChip venue={legs.leg2.venue} size="sm" />
+              <span>{legs.leg2.venue}</span>
+            </span>
+          }
+        />
+        <LegRow
+          label={t("spreadDetail.legs.symbol")}
+          leg1={legs.leg1.symbol}
+          leg2={legs.leg2.symbol}
+          mono
+        />
+        <LegRow
+          label={t("spreadDetail.legs.instrument")}
+          leg1={legs.leg1.instrument}
+          leg2={legs.leg2.instrument}
+        />
+        <LegRow
+          label={t("fields.side")}
+          leg1={<SidePill side={legs.leg1.side} t={t} />}
+          leg2={<SidePill side={legs.leg2.side} t={t} />}
+        />
+      </TableBody>
+    </Table>
+  );
+}
+
+/**
+ * Funding P&L line shown under the hero net figure. Surfaces the net signed
+ * funding (green when received, red when paid) plus a received/paid split
+ * caption. Rendered by the page only when funding data exists — this
+ * component never has to handle the "no funding" case.
+ */
+function FundingLine({
+  funding,
+  t,
+}: {
+  funding: FundingRollup;
+  t: TFunction;
+}) {
+  const net = Number(funding.netUsd);
+  const safeNet = Number.isFinite(net) ? net : 0;
+  const tone = safeNet >= 0 ? "text-up" : "text-down";
+  const received = Number(funding.receivedUsd);
+  const paid = Number(funding.paidUsd);
+  return (
+    <p className="mt-1 font-mono text-sm text-text-secondary">
+      {t("spreadDetail.funding.label")}{" "}
+      <span className={`${tone} font-medium`}>
+        {fmtUsd(safeNet, true)}
+      </span>
+      {funding.eventCount > 0 && (
+        <span className="text-text-tertiary">
+          {"  ·  "}
+          {t("spreadDetail.funding.received")}{" "}
+          {fmtUsd(Number.isFinite(received) ? received : 0)}
+          {"  ·  "}
+          {t("spreadDetail.funding.paid")}{" "}
+          {fmtUsd(Number.isFinite(paid) ? paid : 0)}
+        </span>
+      )}
+    </p>
   );
 }

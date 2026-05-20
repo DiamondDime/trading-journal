@@ -5,7 +5,7 @@ import { cn } from "@/lib/utils";
 import { getT, getLocale } from "@/lib/i18n/server";
 
 export interface EventCardItem {
-  /** event_log.id — drives the detail-page href. */
+  /** event_log row id. */
   id: string;
   kind: MovementEventKind;
   /** Headline label used on the card title. */
@@ -22,7 +22,7 @@ export interface EventCardItem {
   feeUsd?: string | null;
   /** ISO timestamp — when the movement happened. */
   occurredAt: string;
-  /** Optional override for the link target. Defaults to /movement-events/<id>. */
+  /** Link target. When omitted, the card renders as a static, non-navigating element. */
   href?: string;
   /** When set, renders an "AS OF" timestamp under the headline. */
   showAsOf?: boolean;
@@ -119,21 +119,19 @@ export async function EventCard({ item }: { item: EventCardItem }) {
   const t = await getT();
   const locale = await getLocale();
   const intlLocale = locale === "ru" ? "ru-RU" : "en-US";
-  const href = item.href ?? `/movement-events/${item.id}`;
   const Icon = KIND_ICON[item.kind];
   const tone = KIND_TONE[item.kind];
   const toneClass =
     tone === "up" ? "text-up" : tone === "down" ? "text-down" : "text-text";
   const kindLabel = t(kindTitleKey(item.kind)).toLocaleUpperCase(intlLocale);
 
-  return (
-    <Link
-      href={href}
-      className={cn(
-        "group flex items-stretch gap-4 rounded-md border border-border bg-surface p-4 transition-all hover:bg-subtle hover:border-border-strong",
-        item.className,
-      )}
-    >
+  const sharedClass = cn(
+    "group flex items-stretch gap-4 rounded-md border border-border bg-surface p-4",
+    item.className,
+  );
+
+  const inner = (
+    <>
       <div className="flex flex-1 flex-col gap-2 min-w-0">
         <div className="flex items-center gap-2 text-[11px] text-text-tertiary">
           <span className="inline-flex items-center gap-1.5">
@@ -177,7 +175,9 @@ export async function EventCard({ item }: { item: EventCardItem }) {
           <span className="font-mono text-[9px] uppercase tracking-[0.16em] text-text-tertiary">
             {t("eventCard.tag")}
           </span>
-          <ArrowUpRight className="h-3.5 w-3.5 text-text-tertiary opacity-0 transition-opacity group-hover:opacity-100" />
+          {item.href !== undefined && (
+            <ArrowUpRight className="h-3.5 w-3.5 text-text-tertiary opacity-0 transition-opacity group-hover:opacity-100" />
+          )}
         </div>
         <div className="text-right">
           <p className={cn("font-serif text-[26px] leading-none tabular-nums", toneClass)}>
@@ -188,6 +188,26 @@ export async function EventCard({ item }: { item: EventCardItem }) {
           </p>
         </div>
       </div>
+    </>
+  );
+
+  // When href is absent, render a static article so the card is not a dead link.
+  // When href is provided (including the list's default /movement-events/<id>),
+  // render as a navigable Link with hover/focus styles.
+  if (item.href === undefined) {
+    return (
+      <article className={sharedClass}>
+        {inner}
+      </article>
+    );
+  }
+
+  return (
+    <Link
+      href={item.href}
+      className={cn(sharedClass, "transition-all hover:bg-subtle hover:border-border-strong")}
+    >
+      {inner}
     </Link>
   );
 }

@@ -167,6 +167,7 @@ function SortableHead({
 }) {
   return (
     <TableHead
+      aria-sort={active ? (dir === "asc" ? "ascending" : "descending") : "none"}
       className={
         "font-mono text-[10px] uppercase tracking-[0.14em] " +
         (align === "right" ? "text-right" : "text-left") +

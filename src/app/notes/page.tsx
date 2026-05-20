@@ -19,6 +19,7 @@ import { listAllNotes, countAllNotes, type NoteListFilters } from "@/lib/db/note
 import { listAllTagsForUser } from "@/lib/db/satellite";
 import { NotesBrowser } from "@/components/notes/notes-browser";
 import { getT } from "@/lib/i18n/server";
+import { ListRowsSkeleton } from "@/components/list-rows-skeleton";
 
 export const dynamic = "force-dynamic";
 
@@ -94,7 +95,7 @@ export default async function NotesPage({ searchParams }: NotesPageProps) {
   ]);
 
   return (
-    <Suspense fallback={null}>
+    <Suspense fallback={<ListRowsSkeleton variant="notes" />}>
       <NotesBrowser
         initialNotes={notes}
         totalCount={totalCount}
