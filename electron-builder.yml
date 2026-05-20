@@ -56,7 +56,13 @@ asar: true
 asarUnpack:
   - .next/standalone/**/*
 compression: maximum
-artifactName: ${productName}-${version}-${os}-${arch}.${ext}
+# Version-LESS artifact names. This is deliberate: it makes
+#   https://github.com/<owner>/<repo>/releases/latest/download/Journal-mac-arm64.dmg
+# a permanent direct-download URL that always serves the newest release, so
+# the README can link straight to the installer without editing it per
+# release. electron-updater doesn't need the version in the filename — it
+# reads the `version:` field inside latest-mac.yml / latest.yml instead.
+artifactName: ${productName}-${os}-${arch}.${ext}
 
 # Skip @electron/rebuild — we have no native node deps that need recompiling
 # (PGlite is WASM, postgres.js is pure JS). The rebuild step was triggering

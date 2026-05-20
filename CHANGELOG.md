@@ -6,6 +6,8 @@ All notable changes to Journal are documented here. The format is based on [Keep
 
 ### Added
 
+- **Desktop app for macOS and Windows.** Downloadable `.dmg` / `.exe` installers — no database, runtime, or command line to set up. The app carries an in-process [PGlite](https://pglite.dev) database (Postgres compiled to WebAssembly); the schema's 22 migrations apply automatically on first launch. Auto-update via GitHub Releases.
+- **`pglite-shim.ts`** — a `postgres.js`-compatible layer (tagged templates, transactions with SAVEPOINT-backed nesting, `sql()` identifier helpers, `sql.json()`, the snake_case → camelCase row transform) so every existing query runs unchanged against PGlite with no TCP connection. 30 unit tests against a live PGlite instance.
 - **Russian locale** with cookie-driven switcher in the sidebar; full translation pass across analytics, wizard fields/review pages, detail pages, settings, and the `/add` flow.
 - **`/partners` marketing page** with nine referral cards and a savings calculator.
 - **Universal CCXT-backed adapter** covering 10 exchanges (Binance, Bybit, OKX, BingX, Gate, MEXC, KuCoin, Bitget, HTX, Phemex) via per-venue `VenueConfig` modules. Adding a new ccxt-supported exchange is now ~30 LOC of config plus a catalog row.
@@ -23,6 +25,7 @@ All notable changes to Journal are documented here. The format is based on [Keep
 
 ### Changed
 
+- **Desktop database path rebuilt.** The earlier experimental `@electric-sql/pglite-socket` wire-protocol bridge — which produced `ECONNRESET` on the first query of every page — is removed. PGlite now runs in-process inside the Next.js server via the new shim. No socket, no protocol gaps.
 - **Editorial debug pass** across pages with logo coverage sweep.
 - **i18n quality pass** plus retrofit on seven additional page groups; settings shell forced to dynamic rendering with translated layout chrome.
 - **Status enum expansion** alongside detail-page i18n retrofit.

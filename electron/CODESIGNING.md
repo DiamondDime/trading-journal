@@ -1,17 +1,30 @@
 # Code signing & notarization — macOS
 
-This document covers what's required to ship a fully signed, notarized Journal
-build for macOS. Until these are configured, the GitHub Actions release
-workflow produces **unsigned** `.dmg` files, which users have to bypass
-manually (see "End-user workaround" below).
+This document covers what's required to ship a fully signed, **notarized**
+Journal build for macOS. Until a Developer ID certificate is configured,
+builds are **ad-hoc signed but not notarized** — they launch, but users see a
+one-time Gatekeeper prompt (see "End-user workaround" below).
 
 ## State today
 
+`../electron-builder.yml` sets `mac.identity: "-"`, which makes electron-builder
+**ad-hoc sign** the whole bundle (`codesign --sign -`) at packaging time. This
+is required: arm64 binaries on macOS 11+ will not launch without *any*
+signature, and the deep ad-hoc sign covers the Electron framework and helper
+processes that macOS would otherwise kill silently.
+
+Ad-hoc signing is **not** the same as Developer ID signing + notarization:
+
+- **Ad-hoc (today):** the app launches, but macOS shows a "cannot verify"
+  prompt on first open. The user clicks through it once (System Settings →
+  Privacy & Security → Open Anyway).
+- **Developer ID + notarized (this doc):** no prompt at all. Required for
+  frictionless distribution to non-technical users.
+
 The release workflow at `.github/workflows/release-desktop.yml` and the
-electron-builder config at `../electron-builder.yml` are already wired to read
-the standard signing env vars. They're empty strings today; electron-builder
-treats absent signing config as "skip signing entirely" and emits an unsigned
-build.
+electron-builder config already read the standard signing env vars. They're
+empty today; when you add the secrets below, electron-builder upgrades the
+ad-hoc sign to a full Developer ID sign + notarization automatically.
 
 ## What you need
 
