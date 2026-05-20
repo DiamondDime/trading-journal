@@ -4,9 +4,10 @@ All notable changes to Journal are documented here. The format is based on [Keep
 
 ## [Unreleased]
 
-## [0.1.0] - 2026-05-20
+## [0.2.0] - 2026-05-20
 
-First tagged release. Desktop installers for macOS and Windows.
+First working desktop release — macOS and Windows installers with a
+launch-clean in-process database.
 
 ### Added
 
@@ -43,5 +44,5 @@ First tagged release. Desktop installers for macOS and Windows.
 - Exchange credentials encrypted at rest with AES-256-GCM in both the TypeScript and Python paths; ciphertext is byte-identical across runtimes.
 - Adapter `connect()` rejects API keys that grant withdraw permission; venues without permission introspection surface `withdraw:unverified` and force UI attestation.
 
-[Unreleased]: https://github.com/DiamondDime/trading-journal/compare/v0.1.0...HEAD
-[0.1.0]: https://github.com/DiamondDime/trading-journal/releases/tag/v0.1.0
+[Unreleased]: https://github.com/DiamondDime/trading-journal/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/DiamondDime/trading-journal/releases/tag/v0.2.0
