@@ -37,8 +37,6 @@ const PASSTHROUGH_KEYS = [
   "marketplace",
   "royaltyPct",
   "strategyTag",
-  "taxTaxable",
-  "taxJurisdiction",
   "positionId",
 ] as const;
 
@@ -54,14 +52,12 @@ function partitionExtras(
   body: Record<string, string>;
   extras: Pick<ExtendedTradeInput, (typeof PASSTHROUGH_KEYS)[number]> & {
     tradeStatus?: "open" | "closed" | "liquidated";
-    taxTaxable?: boolean;
     positionId?: string;
   };
 } {
   const body: Record<string, string> = {};
   const extras = {} as Pick<ExtendedTradeInput, (typeof PASSTHROUGH_KEYS)[number]> & {
     tradeStatus?: "open" | "closed" | "liquidated";
-    taxTaxable?: boolean;
     positionId?: string;
   };
 
@@ -79,10 +75,6 @@ function partitionExtras(
           `Unknown trade status "${v}". Allowed: open / closed / liquidated.`,
         );
       }
-      continue;
-    }
-    if (k === "taxTaxable") {
-      extras.taxTaxable = v === "on" || v === "true" || v === "1";
       continue;
     }
     if (k === "positionId") {

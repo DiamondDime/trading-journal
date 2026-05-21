@@ -51,8 +51,6 @@ export interface OptionEditActivityRow {
   realizedPnlUsd: Decimal | null;
   feesUsd: Decimal;
   netPnlUsd: Decimal | null;
-  taxTaxable: boolean;
-  taxJurisdiction: string | null;
   strategyTag: string | null;
 }
 
@@ -214,7 +212,7 @@ export async function createOption(
         opened_at, closed_at,
         capital_deployed_usd, realized_pnl_usd, fees_usd, net_pnl_usd,
         regime_tags, custom_tags,
-        tax_taxable, tax_jurisdiction, strategy_tag
+        strategy_tag
       ) VALUES (
         ${userId}::uuid, 'option', ${status}::activity_status,
         ${name},
@@ -223,7 +221,6 @@ export async function createOption(
         ${capitalDeployed.toString()}, ${null},
         ${totalFeesUsd.toString()}, ${null},
         ${input.regime_tags as string[]}, ${input.custom_tags as string[]},
-        ${input.tax_taxable}, ${input.tax_jurisdiction ?? null},
         ${input.strategy_tag ?? null}
       )
       RETURNING id
@@ -339,8 +336,6 @@ export async function updateOption(
           fees_usd = ${totalFeesUsd.toString()},
           regime_tags = ${input.regime_tags as string[]},
           custom_tags = ${input.custom_tags as string[]},
-          tax_taxable = ${input.tax_taxable},
-          tax_jurisdiction = ${input.tax_jurisdiction ?? null},
           strategy_tag = ${input.strategy_tag ?? null}
         WHERE id = ${activityId}::uuid
           AND user_id = ${userId}::uuid
@@ -438,8 +433,6 @@ export async function getOptionForEdit(
       realized_pnl_usd AS "realizedPnlUsd",
       fees_usd AS "feesUsd",
       net_pnl_usd AS "netPnlUsd",
-      tax_taxable AS "taxTaxable",
-      tax_jurisdiction AS "taxJurisdiction",
       strategy_tag AS "strategyTag"
     FROM public.activity
     WHERE id = ${activityId}::uuid

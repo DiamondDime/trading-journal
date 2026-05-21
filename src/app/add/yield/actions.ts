@@ -143,8 +143,6 @@ function buildCreateInput(fd: FormData): Record<string, unknown> {
     regime_tags: parseTags(fd.get("regimeTags")),
     custom_tags: parseTags(fd.get("customTags")),
     strategy_tag: strOpt(fd.get("strategyTag")),
-    tax_taxable: str(fd.get("taxTaxable")) === "true",
-    tax_jurisdiction: strOpt(fd.get("taxJurisdiction")),
     kind_meta: buildKindMeta(fd),
   };
 }
@@ -199,8 +197,6 @@ export async function logYieldPosition(formData: FormData): Promise<void> {
         regimeTags: input.regime_tags as string[],
         customTags: input.custom_tags as string[],
         strategyTag: input.strategy_tag ?? null,
-        taxTaxable: input.tax_taxable,
-        taxJurisdiction: input.tax_jurisdiction ?? null,
         kindMeta: input.kind_meta,
       });
       if (!ok) throw new Error("Yield position not found or not owned by you");

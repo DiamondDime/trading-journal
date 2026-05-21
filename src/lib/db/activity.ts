@@ -120,8 +120,6 @@ export interface ActivityDetailRow {
   regimeTags: string[];
   customTags: string[];
   strategyTag: string | null;
-  taxTaxable: boolean | null;
-  taxJurisdiction: string | null;
   createdAt: string;
   updatedAt: string;
   deletedAt: string | null;
@@ -293,8 +291,6 @@ export async function getActivity(
     regimeTags: string[];
     customTags: string[];
     strategyTag: string | null;
-    taxTaxable: boolean | null;
-    taxJurisdiction: string | null;
     createdAt: string;
     updatedAt: string;
     deletedAt: string | null;
@@ -369,8 +365,6 @@ export async function getActivity(
     regimeTags: a.regimeTags,
     customTags: a.customTags,
     strategyTag: a.strategyTag,
-    taxTaxable: a.taxTaxable,
-    taxJurisdiction: a.taxJurisdiction,
     createdAt: a.createdAt,
     updatedAt: a.updatedAt,
     deletedAt: a.deletedAt,

@@ -272,8 +272,6 @@ export const ActivitySchema = z.object({
   net_pnl_usd:          DecimalSchema.nullable(),
   regime_tags:          z.array(z.string()),
   custom_tags:          z.array(z.string()),
-  tax_taxable:          z.boolean(),
-  tax_jurisdiction:     z.string().nullable(),
   strategy_tag:         z.string().nullable(),
   created_at:           z.string().datetime(),
   updated_at:           z.string().datetime(),
@@ -395,8 +393,6 @@ export const ActivityFeedRowSchema = z.object({
   regime_tags:          z.array(z.string()),
   custom_tags:          z.array(z.string()),
   strategy_tag:         z.string().nullable(),
-  tax_taxable:          z.boolean(),
-  tax_jurisdiction:     z.string().nullable(),
   headline_value:       DecimalSchema.nullable(),
   headline_kind:        HeadlineKindSchema,
   headline_format:      HeadlineFormatSchema,
@@ -698,8 +694,6 @@ export const UpdateActivityBody = z
     custom_tags:      z.array(z.string().max(40)).max(20).optional(),
     status:           ActivityStatusSchema.optional(),
     strategy_tag:     z.string().max(60).nullable().optional(),
-    tax_taxable:      z.coerce.boolean().optional(),
-    tax_jurisdiction: z.string().max(60).nullable().optional(),
   })
   .strict();
 
@@ -788,8 +782,6 @@ const YieldPositionBase = z.object({
   regime_tags:        z.array(z.string().max(40)).max(20).optional().default([]),
   custom_tags:        z.array(z.string().max(40)).max(20).optional().default([]),
   strategy_tag:       z.string().max(60).optional(),
-  tax_taxable:        z.coerce.boolean().optional().default(false),
-  tax_jurisdiction:   z.string().max(60).optional(),
 });
 
 /**
@@ -847,8 +839,6 @@ export const UpdateYieldPositionBody = z
     regime_tags:       z.array(z.string().max(40)).max(20).optional(),
     custom_tags:       z.array(z.string().max(40)).max(20).optional(),
     strategy_tag:      z.string().max(60).optional(),
-    tax_taxable:       z.coerce.boolean().optional(),
-    tax_jurisdiction:  z.string().max(60).optional(),
   })
   .strict();
 
@@ -923,8 +913,6 @@ export const CreateOptionBody = z
     regime_tags:       z.array(z.string().max(40)).max(20).optional().default([]),
     custom_tags:       z.array(z.string().max(40)).max(20).optional().default([]),
     strategy_tag:      z.string().max(60).optional(),
-    tax_taxable:       z.coerce.boolean().optional().default(false),
-    tax_jurisdiction:  z.string().max(60).optional(),
     legs:              z.array(OptionLegBody).min(1).max(8),
   })
   .strict()
@@ -982,8 +970,6 @@ export const UpdateOptionBody = z
     regime_tags:      z.array(z.string().max(40)).max(20).optional(),
     custom_tags:      z.array(z.string().max(40)).max(20).optional(),
     strategy_tag:     z.string().max(60).optional(),
-    tax_taxable:      z.coerce.boolean().optional(),
-    tax_jurisdiction: z.string().max(60).optional(),
   })
   .strict();
 

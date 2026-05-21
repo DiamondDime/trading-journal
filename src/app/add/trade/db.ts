@@ -6,8 +6,8 @@
 // foundation's createTrade in activity.ts only writes a subset of the columns
 // migration v5 added. Routing all trade writes through this module keeps the
 // new fields (kind / leverage / margin_mode / target_price / stop_price /
-// exit_plan / entry_thesis / fees split / funding / borrow / strategy_tag /
-// tax_taxable / tax_jurisdiction) reachable from the wizard without forking
+// exit_plan / entry_thesis / fees split / funding / borrow / strategy_tag)
+// reachable from the wizard without forking
 // the shared activity.ts helper.
 //
 // All money values stay as Decimal strings — never f64. The single f64 use is
@@ -210,8 +210,8 @@ export async function tradeExistsForPosition(positionId: string): Promise<boolea
 
 // ─── createTrade — extended write path ──────────────────────────────────────
 // Writes every column the v5 schema exposes (target/stop, exit plan, fees
-// split, perp leverage + margin + funding, borrow cost, strategy_tag,
-// tax_taxable, tax_jurisdiction). Open trades are supported by deferring the
+// split, perp leverage + margin + funding, borrow cost, strategy_tag).
+// Open trades are supported by deferring the
 // position to status='open' with NULL avg_exit_price / closed_at; the activity
 // row mirrors the open status.
 
@@ -233,10 +233,8 @@ export interface ExtendedTradeInput extends CreateTradeData {
   tokenId?: string;
   marketplace?: string;
   royaltyPct?: string;
-  // Strategy + tax (activity supertype, v5)
+  // Strategy (activity supertype, v5)
   strategyTag?: string;
-  taxTaxable?: boolean;
-  taxJurisdiction?: string;
 }
 
 function parseDecForCompute(s: string | undefined): number {
@@ -425,7 +423,7 @@ export async function createTradeFromWizard(
         opened_at, closed_at,
         capital_deployed_usd, realized_pnl_usd, fees_usd, net_pnl_usd,
         regime_tags, custom_tags,
-        tax_taxable, tax_jurisdiction, strategy_tag
+        strategy_tag
       ) VALUES (
         ${userId}::uuid, 'trade'::activity_type,
         ${activityStatus}::activity_status,
@@ -436,8 +434,6 @@ export async function createTradeFromWizard(
         ${feesTotal.toString()},
         ${isOpen ? null : net.toString()},
         ${input.regimeTags as string[]}, ${[] as string[]},
-        ${input.taxTaxable ?? false},
-        ${input.taxJurisdiction ?? null},
         ${input.strategyTag ?? null}
       )
       RETURNING id
@@ -541,8 +537,6 @@ export async function updateTradeFromWizard(
              fees_usd             = ${feesTotal.toString()},
              net_pnl_usd          = ${isOpen ? null : net.toString()},
              regime_tags          = ${input.regimeTags as string[]},
-             tax_taxable          = ${input.taxTaxable ?? false},
-             tax_jurisdiction     = ${input.taxJurisdiction ?? null},
              strategy_tag         = ${input.strategyTag ?? null}
        WHERE id = ${activityId}::uuid
          AND user_id = ${userId}::uuid
@@ -595,8 +589,6 @@ export async function getTradeForEdit(
   closedAt: string | null;
   regimeTags: string[];
   strategyTag: string | null;
-  taxTaxable: boolean;
-  taxJurisdiction: string | null;
   symbol: string;
   exchange: string;
   instrumentKind: "spot" | "perp" | "dated_future" | "option";
@@ -627,8 +619,6 @@ export async function getTradeForEdit(
       closedAt: string | null;
       regimeTags: string[];
       strategyTag: string | null;
-      taxTaxable: boolean;
-      taxJurisdiction: string | null;
       symbol: string;
       exchange: string;
       instrumentKind: "spot" | "perp" | "dated_future" | "option";
@@ -658,8 +648,6 @@ export async function getTradeForEdit(
            a.closed_at AS "closedAt",
            a.regime_tags AS "regimeTags",
            a.strategy_tag AS "strategyTag",
-           a.tax_taxable AS "taxTaxable",
-           a.tax_jurisdiction AS "taxJurisdiction",
            t.symbol,
            t.exchange,
            t.instrument_kind::text AS "instrumentKind",

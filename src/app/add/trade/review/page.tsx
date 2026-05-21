@@ -55,8 +55,6 @@ const TRADE_FIELDS = [
   "royaltyPct",
   // Rollups
   "strategyTag",
-  "taxTaxable",
-  "taxJurisdiction",
 ] as const;
 
 type Search = Promise<{ [key: string]: string | string[] | undefined }>;
@@ -207,8 +205,6 @@ export default async function TradeReviewPage(props: { searchParams: Search }) {
     marketplace: getStr(sp, "marketplace"),
     royaltyPct: getStr(sp, "royaltyPct"),
     strategyTag: getStr(sp, "strategyTag"),
-    taxTaxable: getStr(sp, "taxTaxable"),
-    taxJurisdiction: getStr(sp, "taxJurisdiction"),
   };
 
   const kindRaw = getStr(sp, "kind", "spot");
@@ -572,20 +568,6 @@ export default async function TradeReviewPage(props: { searchParams: Search }) {
         <WizardSummaryRow
           label={t("wizard.trade.review.labels.strategyTag")}
           value={v.strategyTag || "—"}
-          editHref={editAllHref}
-        />
-        <WizardSummaryRow
-          label={t("wizard.trade.review.labels.taxJurisdiction")}
-          value={v.taxJurisdiction || "—"}
-          editHref={editAllHref}
-        />
-        <WizardSummaryRow
-          label={t("wizard.trade.review.labels.taxTaxable")}
-          value={
-            v.taxTaxable === "on" || v.taxTaxable === "true"
-              ? t("wizard.trade.review.taxTaxableYes")
-              : t("wizard.trade.review.taxTaxableNo")
-          }
           editHref={editAllHref}
         />
 

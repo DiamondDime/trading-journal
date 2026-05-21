@@ -38,8 +38,6 @@ const SALE_FIELDS = [
   "tier",
   "bonusPct",
   "strategyTag",
-  "taxTaxable",
-  "taxJurisdiction",
   "eligibilityReason",
   "edit",
 ] as const;
@@ -379,8 +377,6 @@ export default async function SaleReviewPage(props: { searchParams: Search }) {
     tier: getStr(sp, "tier"),
     bonusPct: getStr(sp, "bonusPct"),
     strategyTag: getStr(sp, "strategyTag"),
-    taxTaxable: getStr(sp, "taxTaxable"),
-    taxJurisdiction: getStr(sp, "taxJurisdiction"),
     eligibilityReason: getStr(sp, "eligibilityReason"),
   };
 
@@ -768,20 +764,6 @@ export default async function SaleReviewPage(props: { searchParams: Search }) {
           <WizardSummaryRow
             label={t("wizard.sale.review.rows.strategyTag")}
             value={v.strategyTag || "—"}
-            editHref={editAllHref}
-          />
-          <WizardSummaryRow
-            label={t("wizard.sale.review.rows.taxTaxable")}
-            value={
-              v.taxTaxable === "on"
-                ? t("wizard.sale.review.taxYes")
-                : t("wizard.sale.review.taxNo")
-            }
-            editHref={editAllHref}
-          />
-          <WizardSummaryRow
-            label={t("wizard.sale.review.rows.taxJurisdiction")}
-            value={v.taxJurisdiction || "—"}
             editHref={editAllHref}
           />
           <WizardSummaryRow

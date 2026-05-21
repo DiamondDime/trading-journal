@@ -82,7 +82,7 @@ export async function createYieldPosition(
         opened_at, closed_at,
         capital_deployed_usd, realized_pnl_usd, fees_usd, net_pnl_usd,
         regime_tags, custom_tags,
-        tax_taxable, tax_jurisdiction, strategy_tag
+        strategy_tag
       ) VALUES (
         ${userId}::uuid, 'yield_position',
         ${input.status ?? "open"}::activity_status,
@@ -92,7 +92,6 @@ export async function createYieldPosition(
         ${capitalUsd > 0 ? capitalUsd.toString() : null},
         '0', ${feesUsd.toString()}, ${(-feesUsd).toString()},
         ${input.regime_tags as string[]}, ${input.custom_tags as string[]},
-        ${input.tax_taxable ?? false}, ${input.tax_jurisdiction ?? null},
         ${input.strategy_tag ?? null}
       )
       RETURNING id
@@ -141,8 +140,6 @@ export interface YieldPositionDetailRow {
   feesUsd: Decimal;
   regimeTags: string[];
   customTags: string[];
-  taxTaxable: boolean;
-  taxJurisdiction: string | null;
   strategyTag: string | null;
   createdAt: string;
   updatedAt: string;
@@ -180,7 +177,7 @@ export async function getYieldPositionForEdit(
       a.id, a.status, a.name, a.opened_at, a.closed_at,
       a.capital_deployed_usd, a.realized_pnl_usd, a.fees_usd, a.net_pnl_usd,
       a.regime_tags, a.custom_tags,
-      a.tax_taxable, a.tax_jurisdiction, a.strategy_tag,
+      a.strategy_tag,
       a.created_at, a.updated_at,
       ayp.kind, ayp.protocol, ayp.venue, ayp.chain, ayp.asset,
       ayp.amount, ayp.amount_usd_at_open, ayp.expected_apy_pct, ayp.realized_apy_pct,
@@ -215,8 +212,6 @@ export interface YieldPositionPatch {
   regimeTags?: string[];
   customTags?: string[];
   strategyTag?: string | null;
-  taxTaxable?: boolean;
-  taxJurisdiction?: string | null;
   // Sub-kind-specific JSON payload, validated by the caller via
   // YieldKindMetaSchema. The wizard's edit flow always rewrites the meta
   // payload wholesale — kind itself is immutable post-create (changing it
@@ -258,9 +253,6 @@ export async function updateYieldPosition(
     if (patch.regimeTags !== undefined) parentPatches.regime_tags = patch.regimeTags;
     if (patch.customTags !== undefined) parentPatches.custom_tags = patch.customTags;
     if (patch.strategyTag !== undefined) parentPatches.strategy_tag = patch.strategyTag;
-    if (patch.taxTaxable !== undefined) parentPatches.tax_taxable = patch.taxTaxable;
-    if (patch.taxJurisdiction !== undefined)
-      parentPatches.tax_jurisdiction = patch.taxJurisdiction;
 
     if (Object.keys(parentPatches).length > 0) {
       const rows = await tx`

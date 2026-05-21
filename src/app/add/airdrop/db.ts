@@ -5,7 +5,7 @@
  *   Migration v5 added a swath of new columns to `activity_airdrop`
  *   (token_chain, snapshot_date, claim_tx_hash, claim_wallet,
  *   eligibility_reason, gas_cost_usd, claim_window_start/end) and to the
- *   `activity` supertype (strategy_tag, tax_taxable, tax_jurisdiction). The
+ *   `activity` supertype (strategy_tag). The
  *   shared `createAirdrop()` / `updateAirdropActivity()` in
  *   `src/lib/db/activity.ts` only know about the v1 column set and live
  *   outside the Wave-2D scope. Wave 2D writes its own wizard-local SQL so
@@ -35,8 +35,6 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
  *  in `actions.ts` and passes them in via this extras bag. */
 export interface AirdropExtras {
   strategyTag: string | null;
-  taxTaxable: boolean;
-  taxJurisdiction: string | null;
   /** Free-form custom tags, comma-separated string from the form. */
   customTagsRaw: string;
   /** Confidence radio value — folded into eligibility_reason as a prefix. */
@@ -174,16 +172,14 @@ export async function createAirdropV5(
         opened_at, closed_at,
         capital_deployed_usd, realized_pnl_usd, fees_usd, net_pnl_usd,
         regime_tags, custom_tags,
-        strategy_tag, tax_taxable, tax_jurisdiction
+        strategy_tag
       ) VALUES (
         ${userId}::uuid, 'airdrop', ${status},
         ${deriveAirdropName(input.asset, input.protocol)},
         ${openedIso}::timestamptz, ${closedIso}::timestamptz,
         '0', ${realized.toString()}, ${fees.toString()}, ${netPnl.toString()},
         ${input.regimeTags as string[]}, ${[] as string[]},
-        ${extras.strategyTag},
-        ${extras.taxTaxable},
-        ${extras.taxJurisdiction}
+        ${extras.strategyTag}
       )
       RETURNING id
     `;
@@ -277,9 +273,7 @@ export async function updateAirdropV5(
           fees_usd = ${fees.toString()},
           net_pnl_usd = ${netPnl.toString()},
           regime_tags = ${input.regimeTags as string[]},
-          strategy_tag = ${extras.strategyTag},
-          tax_taxable = ${extras.taxTaxable},
-          tax_jurisdiction = ${extras.taxJurisdiction}
+          strategy_tag = ${extras.strategyTag}
       WHERE id = ${activityId}::uuid
         AND user_id = ${userId}::uuid
         AND deleted_at IS NULL

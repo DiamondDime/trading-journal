@@ -122,9 +122,6 @@ export async function logOption(formData: FormData): Promise<void> {
       ...cleanedRaw,
       regime_tags: regimeTags,
       custom_tags: customTags,
-      // tax_taxable arrives as "on" / undefined from a checkbox; coerce.
-      tax_taxable: formData.get("tax_taxable") === "on" ||
-        cleanedRaw.tax_taxable === "true",
       legs: parsedLegs,
     };
 
@@ -174,7 +171,6 @@ export async function logOption(formData: FormData): Promise<void> {
       if (typeof v !== "string") continue;
       if (k.startsWith("legs[")) params.append(k, v);
       if (k === "regime_tags" || k === "custom_tags") params.set(k, v);
-      if (k === "tax_taxable") params.set(k, v);
     }
     params.set("error", redirectError ?? "Unknown error logging option");
     if (editId) params.set("edit", editId);

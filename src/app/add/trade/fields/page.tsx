@@ -64,7 +64,7 @@ function isoToDateTimeLocal(iso: string | null): string {
  *   - nft-only       (collection, token id, marketplace, royalty %)
  *   - common         (target_price, stop_price, exit_plan, entry_thesis, exit_note)
  *   - cost           (fees_entry / fees_exit — sum into fees_usd server-side)
- *   - rollups        (strategy_tag, tax_taxable, tax_jurisdiction)
+ *   - rollups        (strategy_tag)
  *
  * The form is a native GET that targets /review. Conditional fieldsets are
  * rendered server-side based on `kind` so we stay client-JS-free.
@@ -124,8 +124,6 @@ export default async function TradeFieldsPage(props: { searchParams: Search }) {
     targetPrice: string;
     stopPrice: string;
     strategyTag: string;
-    taxTaxable: string;
-    taxJurisdiction: string;
     status: string;
   }> = {};
   let editValid = false;
@@ -172,8 +170,6 @@ export default async function TradeFieldsPage(props: { searchParams: Search }) {
         targetPrice: row.targetPrice ?? "",
         stopPrice: row.stopPrice ?? "",
         strategyTag: row.strategyTag ?? "",
-        taxTaxable: row.taxTaxable ? "on" : "",
-        taxJurisdiction: row.taxJurisdiction ?? "",
         status: row.status,
       };
       editValid = true;
@@ -228,14 +224,7 @@ export default async function TradeFieldsPage(props: { searchParams: Search }) {
     royaltyPct: getStr(sp, "royaltyPct"),
     // Rollups
     strategyTag: getStr(sp, "strategyTag") || dbDefaults.strategyTag || "",
-    taxTaxable:
-      getStr(sp, "taxTaxable") || dbDefaults.taxTaxable
-        ? getStr(sp, "taxTaxable") || dbDefaults.taxTaxable!
-        : "",
-    taxJurisdiction: getStr(sp, "taxJurisdiction") || dbDefaults.taxJurisdiction || "",
   };
-
-  const taxTaxableChecked = defaults.taxTaxable === "on" || defaults.taxTaxable === "true";
 
   const backHref = editValid
     ? `/trades/${editId}`
@@ -829,7 +818,7 @@ export default async function TradeFieldsPage(props: { searchParams: Search }) {
           />
         </WizardField>
 
-        {/* ── Strategy / tax rollups ─────────────────────────────────── */}
+        {/* ── Strategy rollups ──────────────────────────────────────── */}
         <SectionLabel>{t("wizard.trade.fields.sections.rollups")}</SectionLabel>
         <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
           <WizardField
@@ -845,37 +834,7 @@ export default async function TradeFieldsPage(props: { searchParams: Search }) {
               autoComplete="off"
             />
           </WizardField>
-          <WizardField
-            label={t("wizard.trade.fields.labels.taxJurisdiction")}
-            htmlFor="taxJurisdiction"
-            helper={t("wizard.trade.fields.helpers.taxJurisdiction")}
-          >
-            <WizardInput
-              id="taxJurisdiction"
-              name="taxJurisdiction"
-              defaultValue={defaults.taxJurisdiction}
-              placeholder="EU/DE"
-              autoComplete="off"
-            />
-          </WizardField>
         </div>
-        <label className="flex items-start gap-2 text-[12px]">
-          <input
-            type="checkbox"
-            name="taxTaxable"
-            value="on"
-            defaultChecked={taxTaxableChecked}
-            className="mt-0.5 h-3.5 w-3.5 accent-text"
-          />
-          <span className="flex flex-col gap-0.5">
-            <span className="font-mono text-[10px] uppercase tracking-[0.16em] text-text-tertiary">
-              {t("wizard.trade.fields.labels.taxTaxable")}
-            </span>
-            <span className="font-serif italic text-text-tertiary">
-              {t("wizard.trade.fields.helpers.taxTaxable")}
-            </span>
-          </span>
-        </label>
 
         {/* ── Footer: nav ────────────────────────────────────────────── */}
         <div className="mt-6 border-t border-border pt-6">

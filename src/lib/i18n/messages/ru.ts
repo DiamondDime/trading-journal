@@ -2443,7 +2443,7 @@ export const ru: MessageDict = {
           otc: 'OTC',
           nft: 'NFT',
           thesisTags: 'Идея и теги',
-          rollups: 'Стратегия и налоги',
+          rollups: 'Стратегия',
         },
         liquidated: {
           label: 'Позиция была ликвидирована',
@@ -2484,8 +2484,6 @@ export const ru: MessageDict = {
           marketplace: 'Маркетплейс',
           royaltyPct: 'Роялти %',
           strategyTag: 'Тег стратегии',
-          taxJurisdiction: 'Налоговая юрисдикция',
-          taxTaxable: 'Налогооблагаемое событие',
         },
         helpers: {
           symbol: 'напр. BTC-PERP, ETH-USD, SOL-PERP',
@@ -2507,8 +2505,6 @@ export const ru: MessageDict = {
           collection: 'Название NFT-коллекции',
           royaltyPct: 'Роялти автора при продаже',
           strategyTag: 'Группирует сделку под названной стратегией',
-          taxJurisdiction: 'Свободный формат. Напр. US, EU/DE, AE',
-          taxTaxable: 'Отметь, если сделка создаёт налогооблагаемое событие.',
           exitPriceOpen: 'Оставь пустым — позиция ещё открыта',
           closedAtOpen: 'Оставь пустым — позиция ещё открыта',
         },
@@ -2552,8 +2548,6 @@ export const ru: MessageDict = {
         onCapital: 'на капитал {capital}',
         heldSuffix: 'в позиции {days}',
         openPlaceholder: '— (открыта)',
-        taxTaxableYes: 'Да',
-        taxTaxableNo: 'Нет',
         positionLink: 'Привязанная позиция · {positionId}',
         duration: {
           minutes: '{value} мин',
@@ -2573,7 +2567,7 @@ export const ru: MessageDict = {
           nft: 'NFT',
           timing: 'Время',
           thesisTags: 'Идея и теги',
-          rollups: 'Стратегия и налоги',
+          rollups: 'Стратегия',
         },
         labels: {
           kind: 'Тип',
@@ -2616,8 +2610,6 @@ export const ru: MessageDict = {
           marketplace: 'Маркетплейс',
           royaltyPct: 'Роялти %',
           strategyTag: 'Тег стратегии',
-          taxJurisdiction: 'Налоговая юрисдикция',
-          taxTaxable: 'Налогооблагаемое',
         },
       },
     },
@@ -2749,12 +2741,6 @@ export const ru: MessageDict = {
           label: 'Тег стратегии', helper: 'Группировка для разбивки',
           placeholder: 'рестейкинг-q1',
         },
-        taxTaxable: {
-          label: 'Облагается налогом', helper: 'Отметь, если налогооблагаемая', toggle: 'Облагается налогом',
-        },
-        taxJurisdiction: {
-          label: 'Налоговая юрисдикция', helper: 'Произвольная юрисдикция', placeholder: 'US',
-        },
         saleDate: {
           label: 'Дата продажи', helper: 'Когда оплатил аллокацию',
         },
@@ -2797,8 +2783,6 @@ export const ru: MessageDict = {
         nextUnlockValue: '{date} (~{pct}%)',
         daysValue: '{days}д',
         customEntriesValue: '{count} строк',
-        taxYes: 'Да',
-        taxNo: 'Нет',
         sections: {
           sale: 'Продажа',
           round: 'Раунд',
@@ -2837,8 +2821,6 @@ export const ru: MessageDict = {
           eligibilityReason: 'Право на клейм',
           regimeTags: 'Теги режима',
           strategyTag: 'Стратегия',
-          taxTaxable: 'Облагается налогом',
-          taxJurisdiction: 'Юрисдикция',
           note: 'Заметка',
         },
         scheduleVariants: {
@@ -2909,7 +2891,7 @@ export const ru: MessageDict = {
           claim: 'Клейм',
           claimPending: 'Клейм (опционально, пока в ожидании)',
           thesisTags: 'Идея и теги',
-          attribution: 'Стратегия и налоги',
+          attribution: 'Стратегия',
         },
         status: {
           legend: 'Какой статус сейчас?',
@@ -3016,15 +2998,6 @@ export const ru: MessageDict = {
           helper: 'Произвольные теги для фильтра — через запятую.',
           placeholder: 'jito, ретро',
         },
-        taxTaxable: {
-          label: 'Налоговый флаг',
-          helper: 'Отметь, если ждёшь налоговое событие по этому дропу.',
-          checkboxLabel: 'Считать налогооблагаемым доходом',
-        },
-        taxJurisdiction: {
-          label: 'Налоговая юрисдикция',
-          helper: 'Произвольная юрисдикция (например US, EU/DE, AE)',
-        },
         note: {
           label: 'Заметка',
           helper: 'Почему именно этот протокол словил дроп, почему держишь или продал — любой контекст.',
@@ -3072,7 +3045,7 @@ export const ru: MessageDict = {
           claim: 'Клейм',
           claimPending: 'Клейм (когда случится)',
           thesisTags: 'Идея и теги',
-          attribution: 'Стратегия и налоги',
+          attribution: 'Стратегия',
         },
         row: {
           status: 'Статус',
@@ -3100,10 +3073,6 @@ export const ru: MessageDict = {
           strategyTag: 'Тег стратегии',
           regimeTags: 'Теги режима',
           customTags: 'Свои теги',
-          taxTaxable: 'Облагается?',
-          taxJurisdiction: 'Юрисдикция',
-          taxYes: 'Да — облагается',
-          taxNo: 'Нет / не знаю',
           note: 'Заметка',
         },
         satellite: {
@@ -3150,7 +3119,7 @@ export const ru: MessageDict = {
           position: 'Позиция',
           economics: 'Экономика доходности',
           lifecycle: 'Жизненный цикл',
-          strategy: 'Стратегия, налоги, теги',
+          strategy: 'Стратегия и теги',
         },
       },
       reviewStep: {
@@ -3174,7 +3143,7 @@ export const ru: MessageDict = {
           position: 'Позиция',
           economics: 'Экономика доходности',
           lifecycle: 'Жизненный цикл',
-          strategy: 'Стратегия, налоги, теги',
+          strategy: 'Стратегия и теги',
           kindDetailsHeading: '{kind} — детали',
         },
         rows: {
@@ -3195,8 +3164,6 @@ export const ru: MessageDict = {
           closedAt: 'Закрыта',
           daysHeld: 'Дней в позиции',
           strategy: 'Стратегия',
-          taxable: 'Налогооблагаемо',
-          jurisdiction: 'Юрисдикция',
           regimeTags: 'Теги режима',
           validatorAddress: 'Адрес валидатора',
           operator: 'Оператор',
@@ -3279,8 +3246,6 @@ export const ru: MessageDict = {
           helper: 'Выбери «open» для активной позиции, «unwinding» если уже выводишь, но ещё не вышел полностью, «closed» если завершена.',
         },
         strategyTag: { label: 'Тег стратегии', helper: 'Группировка (например, ETH basis carry Q1)' },
-        taxTaxable: { label: 'Облагается?', helper: 'Отметь, если в твоей юрисдикции это налогооблагаемое событие' },
-        taxJurisdiction: { label: 'Налоговая юрисдикция', helper: 'Свободный формат (например, US, EU/DE, AE)' },
         regimeTags: { label: 'Теги режима', placeholder: 'пост-мердж', helper: 'Через запятую (например, бычий-рынок, пост-мердж)' },
         name: { label: 'Название позиции', placeholder: 'ETH · Lido · стейк', helper: 'Опционально — если пусто, соберём из актива/протокола/типа' },
       },
@@ -3327,7 +3292,7 @@ export const ru: MessageDict = {
           style: 'Стиль спреда',
           intent: 'Замысел при открытии',
           thesis: 'Идея и план выхода',
-          strategy: 'Стратегия и налоги',
+          strategy: 'Стратегия',
         },
         styleLegend: 'Стиль спреда',
         exitPlanDefault: 'Закрыть на 50% от макс. прибыли или перекатить при просадке 1.5x.',
@@ -3346,12 +3311,6 @@ export const ru: MessageDict = {
         name: { label: 'Название', placeholder: 'BTC vertical CPI', helper: 'Опционально' },
         strategyTag: { label: 'Стратегия', placeholder: 'IV term Q2', helper: 'Группировка стратегий' },
         regimeTags: { label: 'Метки режима', placeholder: 'high-iv, post-fed', helper: 'Через запятую' },
-        taxTaxable: {
-          label: 'Налоговое событие',
-          helper: 'Помеить как генерирующее налоговое событие',
-          checkboxLabel: 'Создаёт налоговое событие',
-        },
-        taxJurisdiction: { label: 'Юрисдикция', placeholder: 'US / EU-DE / AE', helper: 'Свободная подсказка' },
       },
       review: {
         title: 'Посмотрим',

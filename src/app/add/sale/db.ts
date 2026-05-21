@@ -5,8 +5,8 @@
  *   The canonical createSale/updateSaleActivity in activity.ts only touch the
  *   v1 column set (token_symbol/sale_kind/sale_venue/usd_paid/tokens_allocated/
  *   vesting_schedule/current_price_usd). Migration v5 added 6 more columns to
- *   activity_sale plus 3 supertype columns (tax_taxable, tax_jurisdiction,
- *   strategy_tag) and a refined vesting jsonb shape (4 variants incl. custom).
+ *   activity_sale plus 2 supertype columns (strategy_tag) and a refined vesting
+ *   jsonb shape (4 variants incl. custom).
  *   This wrapper owns the full column write so the wizard can be "absolute"
  *   per the master plan §5 quality bar without bumping the canonical helpers
  *   (which are shared with /api routes and would risk wider blast radius).
@@ -39,8 +39,6 @@ export interface SaleEditRow {
   openedAt: string | null;
   regimeTags: string[];
   customTags: string[];
-  taxTaxable: boolean;
-  taxJurisdiction: string | null;
   strategyTag: string | null;
   // subtype — v1 columns
   tokenSymbol: string;
@@ -90,8 +88,6 @@ export async function getSaleForEdit(
       a.opened_at             AS opened_at,
       a.regime_tags           AS regime_tags,
       a.custom_tags           AS custom_tags,
-      a.tax_taxable           AS tax_taxable,
-      a.tax_jurisdiction      AS tax_jurisdiction,
       a.strategy_tag          AS strategy_tag,
       s.token_symbol          AS token_symbol,
       s.sale_kind::text       AS sale_kind,
@@ -212,8 +208,6 @@ export interface SaleExtendedInput {
   tier: string | null;
   bonusPct: string | null;
   strategyTag: string | null;
-  taxTaxable: boolean;
-  taxJurisdiction: string | null;
 }
 
 /**
@@ -257,7 +251,7 @@ export async function createSaleFull(
         opened_at,
         capital_deployed_usd, realized_pnl_usd, fees_usd, net_pnl_usd,
         regime_tags, custom_tags,
-        tax_taxable, tax_jurisdiction, strategy_tag
+        strategy_tag
       ) VALUES (
         ${userId}::uuid, 'sale',
         ${status}::activity_status,
@@ -265,7 +259,7 @@ export async function createSaleFull(
         ${openedIso}::timestamptz,
         ${usdPaidNum.toString()}, '0', '0', ${netPnl.toString()},
         ${input.regimeTags as string[]}, ${[] as string[]},
-        ${extra.taxTaxable}, ${extra.taxJurisdiction}, ${extra.strategyTag}
+        ${extra.strategyTag}
       )
       RETURNING id
     `;
@@ -345,8 +339,6 @@ export async function updateSaleFull(
         capital_deployed_usd = ${usdPaidNum.toString()},
         realized_pnl_usd = '0',
         net_pnl_usd = ${netPnl.toString()},
-        tax_taxable = ${extra.taxTaxable},
-        tax_jurisdiction = ${extra.taxJurisdiction},
         strategy_tag = ${extra.strategyTag}
       WHERE id = ${activityId}::uuid
         AND user_id = ${userId}::uuid

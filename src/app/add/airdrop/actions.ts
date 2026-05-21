@@ -25,16 +25,12 @@ const EXTRAS_KEYS = new Set([
   "eligibilityConfidence",
   "customTags",
   "strategyTag",
-  "taxTaxable",
-  "taxJurisdiction",
 ]);
 
 function extractExtras(raw: Record<string, string>): AirdropExtras {
   const confidence = raw.eligibilityConfidence ?? "";
   return {
     strategyTag: raw.strategyTag?.trim() ? raw.strategyTag.trim() : null,
-    taxTaxable: raw.taxTaxable === "1" || raw.taxTaxable === "on" || raw.taxTaxable === "true",
-    taxJurisdiction: raw.taxJurisdiction?.trim() ? raw.taxJurisdiction.trim() : null,
     customTagsRaw: raw.customTags ?? "",
     eligibilityConfidence:
       confidence === "snapshot_listed" ||

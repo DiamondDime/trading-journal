@@ -776,7 +776,7 @@ export type YieldKindMeta =
  * Supertype for all journaled activities. Joins to exactly one of
  * activity_spread / activity_trade / activity_sale / activity_airdrop /
  * activity_yield_position / activity_option based on `type`. Holds shared
- * lifecycle + denormalized aggregate columns + tax / strategy attribution.
+ * lifecycle + denormalized aggregate columns + strategy attribution.
  */
 export interface Activity {
   id:                   ActivityId;
@@ -793,11 +793,6 @@ export interface Activity {
   net_pnl_usd:          Decimal | null;
   regime_tags:          string[];
   custom_tags:          string[];
-  /** v5: tax classification flag — true if the trader expects this activity
-   *  to generate a taxable event in their jurisdiction. */
-  tax_taxable:          boolean;
-  /** v5: free-form jurisdiction hint (e.g. "US", "EU/DE", "AE"). */
-  tax_jurisdiction:     string | null;
   /** v5: strategy rollup grouping (e.g. "ETH basis carry Q1"). */
   strategy_tag:         string | null;
   created_at:           Iso8601;
@@ -1056,8 +1051,8 @@ export interface EventLog {
  * driving the unified feed's activity-agnostic card rendering, plus a
  * primary_symbol hint and a short card_subtitle.
  *
- * v5 adds strategy_tag, tax_taxable, tax_jurisdiction surface columns and
- * the card_subtitle / headline_format fields.
+ * v5 adds the strategy_tag surface column and the card_subtitle /
+ * headline_format fields.
  */
 export interface ActivityFeedRow {
   id:                   ActivityId;
@@ -1075,8 +1070,6 @@ export interface ActivityFeedRow {
   regime_tags:          string[];
   custom_tags:          string[];
   strategy_tag:         string | null;
-  tax_taxable:          boolean;
-  tax_jurisdiction:     string | null;
   headline_value:       Decimal | null;
   headline_kind:        HeadlineKind;
   headline_format:      HeadlineFormat;

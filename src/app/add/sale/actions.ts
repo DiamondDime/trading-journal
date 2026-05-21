@@ -23,8 +23,7 @@ import type { VestingSchedule } from "@/types/canonical";
  *   - vesting schedule arrives as a JSON-encoded discriminated union from
  *     the WizardVestingEditor (4 variants incl. custom)
  *   - additional columns: tokenChain, claimWallet, fundraisingRound,
- *     allocationMethod, tier, bonusPct, strategyTag, taxTaxable,
- *     taxJurisdiction, eligibilityReason
+ *     allocationMethod, tier, bonusPct, strategyTag, eligibilityReason
  *   - status is derived from {tgeUnlockPct, tgeDate, vesting duration} —
  *     see deriveSaleStatus in db.ts
  *
@@ -106,8 +105,6 @@ function buildExtendedInput(
         ? raw.bonusPct
         : null,
     strategyTag: raw.strategyTag || null,
-    taxTaxable: raw.taxTaxable === "on",
-    taxJurisdiction: raw.taxJurisdiction || null,
   };
 }
 
@@ -133,8 +130,8 @@ export async function logSale(formData: FormData): Promise<void> {
     const { id: userId } = await requireUser();
 
     // CreateSaleBody is .strict() — fields it doesn't know about (the v5
-    // extras + the vesting JSON blob + the tax flags) would 400 unless we
-    // remove them before parsing. Pull them out into `extras` first.
+    // extras + the vesting JSON blob) would 400 unless we remove them before
+    // parsing. Pull them out into `extras` first.
     const extras = buildExtendedInput(cleanedRaw);
     const bodyOnly: Record<string, string> = { ...cleanedRaw };
     [
@@ -147,8 +144,6 @@ export async function logSale(formData: FormData): Promise<void> {
       "bonusPct",
       "vestingScheduleJson",
       "strategyTag",
-      "taxTaxable",
-      "taxJurisdiction",
       "eligibilityReason",
     ].forEach((k) => delete bodyOnly[k]);
 

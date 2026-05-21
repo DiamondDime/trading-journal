@@ -32,8 +32,6 @@ const ALL_FIELDS = [
   "closedAt",
   "status",
   "strategyTag",
-  "taxTaxable",
-  "taxJurisdiction",
   "regimeTags",
   "customTags",
   "name",
@@ -143,8 +141,6 @@ export default async function YieldReviewPage(props: { searchParams: Search }) {
     closedAt: getStr(sp, "closedAt"),
     status: getStr(sp, "status", "open"),
     strategyTag: getStr(sp, "strategyTag"),
-    taxTaxable: getStr(sp, "taxTaxable", "false"),
-    taxJurisdiction: getStr(sp, "taxJurisdiction"),
     regimeTags: getStr(sp, "regimeTags"),
     customTags: getStr(sp, "customTags"),
     name: getStr(sp, "name"),
@@ -429,10 +425,7 @@ export default async function YieldReviewPage(props: { searchParams: Search }) {
           )}
         </div>
 
-        {(v.strategyTag ||
-          v.taxTaxable === "true" ||
-          v.taxJurisdiction ||
-          v.regimeTags) && (
+        {(v.strategyTag || v.regimeTags) && (
           <>
             <h2 className="mb-2 mt-8 font-serif text-[11px] font-semibold uppercase tracking-[0.18em] text-text-tertiary">
               {t("wizard.yield.reviewStep.sections.strategy")}
@@ -442,18 +435,6 @@ export default async function YieldReviewPage(props: { searchParams: Search }) {
                 <WizardSummaryRow
                   label={t("wizard.yield.reviewStep.rows.strategy")}
                   value={v.strategyTag}
-                  editHref={editAllHref}
-                />
-              )}
-              <WizardSummaryRow
-                label={t("wizard.yield.reviewStep.rows.taxable")}
-                value={v.taxTaxable === "true" ? t("common.yes") : t("common.no")}
-                editHref={editAllHref}
-              />
-              {v.taxJurisdiction && (
-                <WizardSummaryRow
-                  label={t("wizard.yield.reviewStep.rows.jurisdiction")}
-                  value={v.taxJurisdiction}
                   editHref={editAllHref}
                 />
               )}

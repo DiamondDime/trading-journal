@@ -41,7 +41,7 @@ function isoToDateTimeLocal(iso: string | null): string {
  *   - max_loss_usd_accepted (drives max_loss_usd on the activity_option header)
  *   - target_iv_change_bps (IV-target the trader was watching for)
  *   - exit thesis (defaults to "close at 50% of max profit")
- *   - strategy_tag + tax flags + regime tags
+ *   - strategy_tag + regime tags
  */
 export default async function OptionFieldsPage(props: { searchParams: Search }) {
   const t = await getT();
@@ -73,8 +73,6 @@ export default async function OptionFieldsPage(props: { searchParams: Search }) 
     name?: string;
     regime_tags?: string;
     strategy_tag?: string;
-    tax_taxable?: boolean;
-    tax_jurisdiction?: string;
   } = {};
   let editValid = false;
   if (editId && UUID_RE.test(editId)) {
@@ -96,8 +94,6 @@ export default async function OptionFieldsPage(props: { searchParams: Search }) 
         name: loaded.activity.name,
         regime_tags: loaded.activity.regimeTags.join(", "),
         strategy_tag: loaded.activity.strategyTag ?? "",
-        tax_taxable: loaded.activity.taxTaxable,
-        tax_jurisdiction: loaded.activity.taxJurisdiction ?? "",
       };
       editValid = true;
     }
@@ -135,11 +131,6 @@ export default async function OptionFieldsPage(props: { searchParams: Search }) 
       getStr(sp, "regime_tags") || dbDefaults.regime_tags || "",
     strategy_tag:
       getStr(sp, "strategy_tag") || dbDefaults.strategy_tag || "",
-    tax_taxable:
-      getStr(sp, "tax_taxable", dbDefaults.tax_taxable ? "true" : "") ||
-      (dbDefaults.tax_taxable ? "true" : ""),
-    tax_jurisdiction:
-      getStr(sp, "tax_jurisdiction") || dbDefaults.tax_jurisdiction || "",
     status: getStr(sp, "status") || "open",
   };
 
@@ -457,7 +448,7 @@ export default async function OptionFieldsPage(props: { searchParams: Search }) 
           />
         </WizardField>
 
-        {/* ── Strategy + tax ─────────────────────────────────────────── */}
+        {/* ── Strategy ───────────────────────────────────────────────── */}
         <SectionLabel>{t("wizard.option.fields.sections.strategy")}</SectionLabel>
         <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
           <WizardField
@@ -495,35 +486,6 @@ export default async function OptionFieldsPage(props: { searchParams: Search }) 
               defaultValue={defaults.regime_tags}
               placeholder={t("wizard.option.fields.regimeTags.placeholder")}
             />
-          </WizardField>
-          <WizardField
-            label={t("wizard.option.fields.taxJurisdiction.label")}
-            htmlFor="opt-tax-jurisdiction"
-            helper={t("wizard.option.fields.taxJurisdiction.helper")}
-          >
-            <WizardInput
-              id="opt-tax-jurisdiction"
-              name="tax_jurisdiction"
-              defaultValue={defaults.tax_jurisdiction}
-              placeholder={t("wizard.option.fields.taxJurisdiction.placeholder")}
-            />
-          </WizardField>
-          <WizardField
-            label={t("wizard.option.fields.taxTaxable.label")}
-            htmlFor="opt-tax-taxable"
-            helper={t("wizard.option.fields.taxTaxable.helper")}
-          >
-            <label className="flex cursor-pointer items-center gap-2 rounded-md border border-border bg-surface px-3 py-2 font-mono text-[12px] text-text-secondary hover:border-border-strong">
-              <input
-                type="checkbox"
-                id="opt-tax-taxable"
-                name="tax_taxable"
-                defaultChecked={defaults.tax_taxable === "true"}
-                value="true"
-                className="h-3 w-3 accent-text"
-              />
-              <span>{t("wizard.option.fields.taxTaxable.checkboxLabel")}</span>
-            </label>
           </WizardField>
         </div>
 

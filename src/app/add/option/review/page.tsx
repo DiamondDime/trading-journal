@@ -37,8 +37,6 @@ const SCALAR_FIELDS = [
   "regime_tags",
   "custom_tags",
   "strategy_tag",
-  "tax_taxable",
-  "tax_jurisdiction",
   "status",
   "edit",
 ] as const;

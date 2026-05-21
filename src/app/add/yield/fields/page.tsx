@@ -77,7 +77,7 @@ function decodeIssues(raw: string): WizardValidationIssue[] {
  * The largest step. Branches by `kind` into one of six layouts; each layout
  * shows kind-specific inputs at the top and a common "position-level"
  * block below (asset, amount, opened_at, expected_apy_pct, status hints,
- * tax/strategy fields).
+ * strategy fields).
  *
  * In edit mode (`?edit=<uuid>`), the page pre-fills from the DB row and
  * uses the same form fields — the wizard never builds a separate edit
@@ -123,8 +123,6 @@ export default async function YieldFieldsPage(props: { searchParams: Search }) {
         closedAt: isoToDateInput(row.closedAt),
         status: row.status,
         strategyTag: row.strategyTag ?? "",
-        taxTaxable: row.taxTaxable ? "true" : "false",
-        taxJurisdiction: row.taxJurisdiction ?? "",
         regimeTags: row.regimeTags.join(", "),
         customTags: row.customTags.join(", "),
         name: row.name,
@@ -196,8 +194,6 @@ export default async function YieldFieldsPage(props: { searchParams: Search }) {
     closedAt: v("closedAt"),
     status: v("status", "open"),
     strategyTag: v("strategyTag"),
-    taxTaxable: v("taxTaxable", "false"),
-    taxJurisdiction: v("taxJurisdiction"),
     regimeTags: v("regimeTags"),
     customTags: v("customTags"),
     name: v("name"),
@@ -487,7 +483,7 @@ export default async function YieldFieldsPage(props: { searchParams: Search }) {
           </WizardField>
         </div>
 
-        {/* ── Strategy + tax + tags ──────────────────────────────────────── */}
+        {/* ── Strategy + tags ───────────────────────────────────────────── */}
         <SectionLabel>{t("wizard.yield.fieldsStep.sections.strategy")}</SectionLabel>
         <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
           <WizardField
@@ -499,32 +495,6 @@ export default async function YieldFieldsPage(props: { searchParams: Search }) {
               id="strategyTag"
               name="strategyTag"
               defaultValue={defaults.strategyTag}
-              autoComplete="off"
-            />
-          </WizardField>
-          <WizardField
-            label={t("wizard.yield.fields.taxTaxable.label")}
-            htmlFor="taxTaxable"
-            helper={t("wizard.yield.fields.taxTaxable.helper")}
-          >
-            <WizardSelect
-              id="taxTaxable"
-              name="taxTaxable"
-              defaultValue={defaults.taxTaxable}
-            >
-              <option value="false">{t("common.no")}</option>
-              <option value="true">{t("common.yes")}</option>
-            </WizardSelect>
-          </WizardField>
-          <WizardField
-            label={t("wizard.yield.fields.taxJurisdiction.label")}
-            htmlFor="taxJurisdiction"
-            helper={t("wizard.yield.fields.taxJurisdiction.helper")}
-          >
-            <WizardInput
-              id="taxJurisdiction"
-              name="taxJurisdiction"
-              defaultValue={defaults.taxJurisdiction}
               autoComplete="off"
             />
           </WizardField>

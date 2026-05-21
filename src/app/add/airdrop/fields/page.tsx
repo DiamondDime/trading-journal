@@ -87,8 +87,6 @@ export default async function AirdropFieldsPage(props: {
     regimeTags: string;
     customTags: string;
     strategyTag: string;
-    taxTaxable: string;
-    taxJurisdiction: string;
     serial: string;
   }> = {};
   let editValid = false;
@@ -131,8 +129,6 @@ export default async function AirdropFieldsPage(props: {
         regimeTags: activity.regimeTags.join(", "),
         customTags: activity.customTags.join(", "),
         strategyTag: activity.strategyTag ?? "",
-        taxTaxable: activity.taxTaxable == null ? "" : activity.taxTaxable ? "true" : "false",
-        taxJurisdiction: activity.taxJurisdiction ?? "",
         serial: activity.id.slice(0, 4).toUpperCase(),
       };
       editValid = true;
@@ -183,8 +179,6 @@ export default async function AirdropFieldsPage(props: {
     regimeTags: getStr(sp, "regimeTags") || dbDefaults.regimeTags || "",
     customTags: getStr(sp, "customTags") || dbDefaults.customTags || "",
     strategyTag: getStr(sp, "strategyTag") || dbDefaults.strategyTag || "",
-    taxTaxable: getStr(sp, "taxTaxable") || dbDefaults.taxTaxable || "",
-    taxJurisdiction: getStr(sp, "taxJurisdiction") || dbDefaults.taxJurisdiction || "",
   };
 
   const backHref = editValid ? `/airdrops/${editId}` : "/add/airdrop";
@@ -560,7 +554,7 @@ export default async function AirdropFieldsPage(props: {
           </WizardField>
         </div>
 
-        {/* ── Tags / strategy / tax ───────────────────────────────── */}
+        {/* ── Tags / strategy ─────────────────────────────────────── */}
         <SectionLabel>{t("wizard.airdrop.fields.section.attribution")}</SectionLabel>
         <WizardField
           label={t("wizard.airdrop.fields.strategyTag.label")}
@@ -601,38 +595,6 @@ export default async function AirdropFieldsPage(props: {
             autoComplete="off"
           />
         </WizardField>
-
-        <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
-          <WizardField
-            label={t("wizard.airdrop.fields.taxTaxable.label")}
-            htmlFor="taxTaxable"
-            helper={t("wizard.airdrop.fields.taxTaxable.helper")}
-          >
-            <label className="flex items-center gap-2 rounded-md border border-border bg-surface px-3 py-2 font-mono text-[12px] text-text">
-              <input
-                id="taxTaxable"
-                name="taxTaxable"
-                type="checkbox"
-                value="1"
-                defaultChecked={defaults.taxTaxable === "1"}
-              />
-              <span>{t("wizard.airdrop.fields.taxTaxable.checkboxLabel")}</span>
-            </label>
-          </WizardField>
-          <WizardField
-            label={t("wizard.airdrop.fields.taxJurisdiction.label")}
-            htmlFor="taxJurisdiction"
-            helper={t("wizard.airdrop.fields.taxJurisdiction.helper")}
-          >
-            <WizardInput
-              id="taxJurisdiction"
-              name="taxJurisdiction"
-              defaultValue={defaults.taxJurisdiction}
-              placeholder="AE"
-              autoComplete="off"
-            />
-          </WizardField>
-        </div>
 
         {/* ── Note (legacy free-form, kept for compatibility) ─────── */}
         <WizardField

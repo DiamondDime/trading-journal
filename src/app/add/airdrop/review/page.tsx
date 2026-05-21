@@ -35,8 +35,6 @@ const AIRDROP_FIELDS = [
   "regimeTags",
   "customTags",
   "strategyTag",
-  "taxTaxable",
-  "taxJurisdiction",
   "edit",
 ] as const;
 
@@ -128,8 +126,6 @@ export default async function AirdropReviewPage(props: { searchParams: Search })
     regimeTags: getStr(sp, "regimeTags"),
     customTags: getStr(sp, "customTags"),
     strategyTag: getStr(sp, "strategyTag"),
-    taxTaxable: getStr(sp, "taxTaxable"),
-    taxJurisdiction: getStr(sp, "taxJurisdiction"),
   };
 
   const isPending = v.status === "pending";
@@ -460,21 +456,6 @@ export default async function AirdropReviewPage(props: { searchParams: Search })
           <WizardSummaryRow
             label={t("wizard.airdrop.review.row.customTags")}
             value={v.customTags || "—"}
-            editHref={editAllHref}
-          />
-          <WizardSummaryRow
-            label={t("wizard.airdrop.review.row.taxTaxable")}
-            value={
-              v.taxTaxable === "1"
-                ? t("wizard.airdrop.review.row.taxYes")
-                : t("wizard.airdrop.review.row.taxNo")
-            }
-            editHref={editAllHref}
-            mono={false}
-          />
-          <WizardSummaryRow
-            label={t("wizard.airdrop.review.row.taxJurisdiction")}
-            value={v.taxJurisdiction || "—"}
             editHref={editAllHref}
           />
           {v.note && (

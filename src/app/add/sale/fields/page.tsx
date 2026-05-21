@@ -55,7 +55,7 @@ function isoToDate(iso: string | null): string {
  *   - vesting schedule via the 4-variant editor (replaces the v1
  *     months×cliff approximation; emits days-granular JSON)
  *   - eligibilityReason (structured, separate from free-form note/thesis)
- *   - strategyTag / taxTaxable / taxJurisdiction (activity supertype v5 cols)
+ *   - strategyTag (activity supertype v5 cols)
  *
  * Edit mode (`?edit=<uuid>`): pre-fill via getSaleForEdit, which loads the
  * full v5 column set (more than the canonical getActivity returns). Hidden
@@ -96,8 +96,6 @@ export default async function SaleFieldsPage(props: { searchParams: Search }) {
     bonusPct: string;
     vestingScheduleJson: string;
     strategyTag: string;
-    taxTaxable: string;
-    taxJurisdiction: string;
     eligibilityReason: string;
   }> = {};
   let editValid = false;
@@ -128,8 +126,6 @@ export default async function SaleFieldsPage(props: { searchParams: Search }) {
           ? JSON.stringify(row.vestingSchedule)
           : "",
         strategyTag: row.strategyTag ?? "",
-        taxTaxable: row.taxTaxable ? "on" : "",
-        taxJurisdiction: row.taxJurisdiction ?? "",
         eligibilityReason: row.eligibilityReason ?? "",
       };
       editValid = true;
@@ -162,10 +158,6 @@ export default async function SaleFieldsPage(props: { searchParams: Search }) {
     vestingScheduleJson:
       getStr(sp, "vestingScheduleJson") || dbDefaults.vestingScheduleJson || "",
     strategyTag: getStr(sp, "strategyTag") || dbDefaults.strategyTag || "",
-    taxTaxable:
-      getStr(sp, "taxTaxable") || dbDefaults.taxTaxable || "",
-    taxJurisdiction:
-      getStr(sp, "taxJurisdiction") || dbDefaults.taxJurisdiction || "",
     eligibilityReason:
       getStr(sp, "eligibilityReason") || dbDefaults.eligibilityReason || "",
   };
@@ -535,7 +527,7 @@ export default async function SaleFieldsPage(props: { searchParams: Search }) {
           </WizardField>
         </div>
 
-        {/* ── Thesis + tags + tax + strategy ─────────────────────────── */}
+        {/* ── Thesis + tags + strategy ─────────────────────────────── */}
         <SectionLabel>
           {t("wizard.sale.fields.sections.thesis")}
         </SectionLabel>
@@ -593,37 +585,6 @@ export default async function SaleFieldsPage(props: { searchParams: Search }) {
               placeholder={t("wizard.sale.fields.strategyTag.placeholder")}
               autoComplete="off"
             />
-          </WizardField>
-          <WizardField
-            label={t("wizard.sale.fields.taxJurisdiction.label")}
-            htmlFor="taxJurisdiction"
-            helper={t("wizard.sale.fields.taxJurisdiction.helper")}
-          >
-            <WizardInput
-              id="taxJurisdiction"
-              name="taxJurisdiction"
-              defaultValue={defaults.taxJurisdiction}
-              placeholder={t(
-                "wizard.sale.fields.taxJurisdiction.placeholder",
-              )}
-              autoComplete="off"
-            />
-          </WizardField>
-          <WizardField
-            label={t("wizard.sale.fields.taxTaxable.label")}
-            htmlFor="taxTaxable"
-            helper={t("wizard.sale.fields.taxTaxable.helper")}
-          >
-            <label className="flex cursor-pointer items-center gap-2 rounded-md border border-border bg-surface px-3 py-2 font-mono text-[11px] uppercase tracking-[0.14em] text-text-secondary has-[input:checked]:border-text has-[input:checked]:bg-subtle has-[input:checked]:text-text">
-              <input
-                type="checkbox"
-                id="taxTaxable"
-                name="taxTaxable"
-                defaultChecked={defaults.taxTaxable === "on"}
-                className="h-3 w-3 accent-text"
-              />
-              {t("wizard.sale.fields.taxTaxable.toggle")}
-            </label>
           </WizardField>
         </div>
 
