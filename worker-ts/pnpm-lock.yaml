@@ -11,6 +11,9 @@ importers:
       ccxt:
         specifier: ^4.4.94
         version: 4.5.54
+      decimal.js:
+        specifier: ^10.6.0
+        version: 10.6.0
       pino:
         specifier: ^9.5.0
         version: 9.14.0
@@ -398,6 +401,9 @@ packages:
 
   dateformat@4.6.3:
     resolution: {integrity: sha512-2P0p0pFGzHS5EMnhdxQi7aJN+iMheud0UhG4dlE1DLAlvL8JHjJJTX/CSm4JXwV0Ka5nGk3zC5mcb5bUQUxxMA==}
+
+  decimal.js@10.6.0:
+    resolution: {integrity: sha512-YpgQiITW3JXGntzdUmyUR1V812Hn8T1YVXhCu+wO3OpS4eU9l4YdD3qjyiKdV6mvV29zapkMeD390UVEf2lkUg==}
 
   detect-libc@2.1.2:
     resolution: {integrity: sha512-Btj2BOOO83o3WyH59e8MgXsxEQVcarkUOpEYrubB0urwnN10yQ364rsiByU11nZlqWYZm05i/of7io4mzihBtQ==}
@@ -1040,6 +1046,8 @@ snapshots:
   convert-source-map@2.0.0: {}
 
   dateformat@4.6.3: {}
+
+  decimal.js@10.6.0: {}
 
   detect-libc@2.1.2: {}
 
