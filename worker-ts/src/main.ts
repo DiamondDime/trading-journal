@@ -55,6 +55,17 @@ interface SyncResult {
   fillsAdded?: number;
   pages?: number;
   lastFillAt?: string | null;
+  fundingAdded?: number;
+  positionsInserted?: number;
+  fillsAttached?: number;
+  fundingLinked?: number;
+  /**
+   * Set when fills synced cleanly but a downstream step (funding sync,
+   * aggregation, or funding linking) failed. The sync is still reported `ok`
+   * — raw fills are persisted and the watermark advanced — but the post-sync
+   * gap is surfaced so the caller / UI can see it.
+   */
+  postSyncError?: string;
 }
 
 async function syncOneConnection(
@@ -147,17 +158,91 @@ async function syncOneConnection(
     return await handleAdapterError(sql, row, baseCtx, err, fillsAdded);
   }
 
+  // Funding events — fetched after fills, in the same window. Adapters whose
+  // `capabilities.supportsFundingHistory` is false throw
+  // `AdapterUnsupportedError`; that is a graceful skip, NOT a sync failure
+  // (mirrors Python `sync_one_connection`'s `except AdapterUnsupportedError`).
+  // Any other funding error is non-fatal too — fills already committed and the
+  // watermark must still advance; we surface it via `postSyncError`.
+  let fundingAdded = 0;
+  let postSyncError: string | undefined;
+  try {
+    for await (const fevPage of adapter.fetchFundingEvents(credentials, window)) {
+      if (fevPage.length === 0) continue;
+      const insertedFev = await dbx.insertFundingEvents(sql, {
+        userId: row.userId,
+        exchangeConnectionId: row.id,
+        events: fevPage,
+      });
+      fundingAdded += insertedFev;
+      log.info(
+        { ...baseCtx, rows: fevPage.length, inserted: insertedFev },
+        'sync.funding_page_committed',
+      );
+    }
+  } catch (err) {
+    if (err instanceof AdapterUnsupportedError) {
+      // Spot-only venues, etc. Expected — not an error.
+      log.info(baseCtx, 'sync.funding_unsupported');
+    } else {
+      const e = err as Error;
+      log.error(
+        { ...baseCtx, err: e.name, errorMsg: (e.message ?? '').slice(0, 200) },
+        'sync.funding_failed',
+      );
+      postSyncError = `funding: ${e.name}`;
+    }
+  }
+
   await dbx.markConnectionSynced(sql, row.id, {
     fillsAdded,
     lastFillAt,
   });
 
-  log.info({ ...baseCtx, fillsAdded, pages }, 'sync.complete');
+  // Build positions from the freshly-synced fills, then link funding events to
+  // them. Order matters: funding links to positions, so positions must exist
+  // first (mirrors Python `_aggregate_and_link_for_users`). Migration 005's
+  // triggers recompute position P&L/fees/funding once fills/funding link.
+  //
+  // Failures here are non-fatal: raw fills are already persisted and the
+  // watermark advanced. We log + surface via `postSyncError` (first failure
+  // wins) but still report the sync `ok` — the next cycle retries aggregation
+  // since unmatched fills / unlinked funding are picked up idempotently.
+  let positionsInserted = 0;
+  let fillsAttached = 0;
+  let fundingLinked = 0;
+  try {
+    const aggResult = await dbx.aggregateConnectionPositions(sql, row.id);
+    positionsInserted = aggResult.positionsInserted;
+    fillsAttached = aggResult.fillsAttached;
+    fundingLinked = await dbx.linkFundingEvents(sql, row.id);
+    log.info(
+      { ...baseCtx, positionsInserted, fillsAttached, fundingLinked },
+      'sync.aggregated',
+    );
+  } catch (err) {
+    const e = err as Error;
+    log.error(
+      { ...baseCtx, err: e.name, errorMsg: (e.message ?? '').slice(0, 200) },
+      'sync.aggregation_failed',
+    );
+    postSyncError ??= `aggregation: ${e.name}`;
+  }
+
+  log.info(
+    { ...baseCtx, fillsAdded, fundingAdded, pages, positionsInserted },
+    'sync.complete',
+  );
   return {
     status: 'ok',
     fillsAdded,
     pages,
     lastFillAt: lastFillAt ? lastFillAt.toISOString() : null,
+    fundingAdded,
+    positionsInserted,
+    fillsAttached,
+    fundingLinked,
+    ...(postSyncError !== undefined ? { postSyncError } : {}),
   };
 }
 
@@ -251,7 +336,9 @@ async function runOnce(opts: { lookbackDays: number }): Promise<{
     }
   }
 
-  // TODO: matcher (not in this session's scope).
+  // Positions aggregation + funding linking run per-connection inside
+  // `syncOneConnection`. The spread matcher is the remaining gap — it is a
+  // separate port (`worker/csj_worker/matcher/`) and out of this scope.
 
   log.info(summary, 'cycle.complete');
   return summary;

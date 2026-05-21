@@ -19,12 +19,21 @@ import postgres from 'postgres';
 
 import { type EncryptedField, decryptCredential } from './crypto.js';
 import { log } from './log.js';
+import { aggregateFills } from './positions.js';
 import type {
   ApiKeyCredentials,
   CanonicalFill,
+  CanonicalFundingEvent,
+  CanonicalInstrument,
   ConnectionRow,
   ConnectionStatus,
   Credentials,
+  Exchange,
+  FeeKind,
+  InstrumentKind,
+  PositionSide,
+  PositionStatus,
+  Side,
   WalletCredentials,
 } from './types.js';
 
@@ -400,4 +409,445 @@ export async function insertFills(
     inserted += result.count ?? 0;
   }
   return inserted;
+}
+
+// ---------------------------------------------------------------------------
+// Positions aggregation — TS port of `positions_aggregator.py`'s DB layer.
+//
+// The pure fills→positions fold lives in `./positions.ts` (`aggregateFills`).
+// Here we mirror the Python DB plumbing: load unmatched fills, run the fold,
+// then INSERT position rows + link `fills.position_id`.
+//
+// The DB trigger `tg_fills_recompute_position` (migration 005) owns the money
+// math (`realized_pnl_quote`, `total_fees_quote`, `total_funding_quote`); the
+// worker only writes position STRUCTURE and links fills. We never compute or
+// write those columns.
+//
+// Divergence from Python (deliberate): the Python aggregator tracks DB `id`s
+// and attaches fills by `id`. The TS `aggregateFills` carries
+// `CanonicalFill.externalTradeId` (== the DB `fills.raw_exchange_id` column),
+// so `attachFills` matches on `raw_exchange_id`.
+// ---------------------------------------------------------------------------
+
+/**
+ * Best-effort parse of `(base, quote)` from a venue symbol.
+ *
+ * The DB only stores the venue symbol text (`fills.instrument`); the canonical
+ * `(base, quote)` split is not persisted. `aggregateFills` only ever reads
+ * `instrument.rawSymbol` (for grouping) and threads `instrument` through to the
+ * emitted `CanonicalPosition`, so the split here is purely cosmetic for the
+ * INSERT path — `insertPosition` writes the raw symbol text, not base/quote.
+ * We still populate the fields so the reconstructed `CanonicalFill` is a valid
+ * shape.
+ *
+ * Handles ccxt-style `BASE/QUOTE` and `BASE/QUOTE:SETTLE`. Symbols without a
+ * `/` separator (bare `BASEQUOTE`) are not split — we yield `('', '')` rather
+ * than guess a boundary wrongly.
+ */
+function splitSymbol(rawSymbol: string): { base: string; quote: string } {
+  // Strip a `:SETTLE` suffix (perp/future settlement currency).
+  const core = rawSymbol.split(':')[0] ?? rawSymbol;
+  const slash = core.indexOf('/');
+  if (slash > 0) {
+    return {
+      base: core.slice(0, slash),
+      quote: core.slice(slash + 1),
+    };
+  }
+  // No separator — give up on a clean split rather than guessing wrongly.
+  return { base: '', quote: '' };
+}
+
+/** Row shape returned by the unmatched-fills query (post-camelCase). */
+interface UnmatchedFillRow {
+  rawExchangeId: string;
+  orderId: string | null;
+  instrument: string;
+  instrumentType: string;
+  side: string;
+  positionSide: string | null;
+  reduceOnly: boolean | null;
+  qty: string;
+  price: string;
+  notional: string;
+  fee: string;
+  feeCurrency: string;
+  feeKind: string;
+  isMaker: boolean;
+  liquidityRole: string | null;
+  rawPayload: unknown;
+  executedAt: Date;
+  exchangeCode: string;
+}
+
+/**
+ * Load every unmatched fill for a connection, oldest first, as
+ * `CanonicalFill` objects ready for `aggregateFills`.
+ *
+ * TS port of Python `_load_unmatched_fills`, scoped to one connection
+ * (`exchange_connection_id`) rather than a user. We join
+ * `exchange_connections` only to recover `exchange_code` for the
+ * `CanonicalInstrument.exchange` field.
+ *
+ * `externalTradeId` is mapped from the DB `raw_exchange_id` column — this is
+ * the value `attachFills` matches on.
+ */
+export async function loadUnmatchedFills(
+  sql: SqlClient,
+  exchangeConnectionId: string,
+): Promise<CanonicalFill[]> {
+  const rows = (await sql.unsafe(
+    `
+      select
+        f.raw_exchange_id,
+        f.order_id,
+        f.instrument,
+        f.instrument_type::text   as instrument_type,
+        f.side::text              as side,
+        f.position_side::text     as position_side,
+        f.reduce_only,
+        f.qty::text               as qty,
+        f.price::text             as price,
+        f.notional::text          as notional,
+        f.fee::text               as fee,
+        f.fee_currency,
+        f.fee_kind::text          as fee_kind,
+        f.is_maker,
+        f.liquidity_role,
+        f.raw_payload,
+        f.executed_at,
+        c.exchange_code
+      from public.fills f
+      join public.exchange_connections c
+        on c.id = f.exchange_connection_id
+     where f.exchange_connection_id = $1::uuid
+       and f.position_id is null
+     order by f.executed_at asc
+    `,
+    [exchangeConnectionId],
+  )) as unknown as UnmatchedFillRow[];
+
+  return rows.map((r): CanonicalFill => {
+    const { base, quote } = splitSymbol(r.instrument);
+    const instrument: CanonicalInstrument = {
+      exchange: r.exchangeCode as Exchange,
+      kind: r.instrumentType as InstrumentKind,
+      base,
+      quote,
+      expiry: null,
+      rawSymbol: r.instrument,
+    };
+    return {
+      externalTradeId: r.rawExchangeId,
+      externalOrderId: r.orderId,
+      instrument,
+      side: r.side as Side,
+      qty: r.qty,
+      price: r.price,
+      notional: r.notional,
+      fee: r.fee,
+      feeCurrency: r.feeCurrency,
+      feeKind: r.feeKind as FeeKind,
+      isMaker: r.isMaker,
+      liquidity: (r.liquidityRole as 'maker' | 'taker' | null) ?? null,
+      positionSide: (r.positionSide as PositionSide | null) ?? null,
+      reduceOnly: r.reduceOnly ?? null,
+      filledAt: r.executedAt,
+      raw:
+        r.rawPayload && typeof r.rawPayload === 'object'
+          ? (r.rawPayload as Record<string, unknown>)
+          : {},
+    };
+  });
+}
+
+/**
+ * Insert one `positions` row. Returns the new id (text uuid).
+ *
+ * TS port of Python `_insert_position`. Rules mirrored exactly:
+ *  - `margin_mode` = `'spot'` for spot instruments, `'cross'` otherwise.
+ *  - `total_qty` is deliberately set to `qty_open` (NOT lifetime qty) — the
+ *    Python aggregator does the same for spread-matcher compatibility.
+ *  - We never write `realized_pnl_quote` / `total_fees_quote` /
+ *    `total_funding_quote`; the DB trigger owns those.
+ */
+export async function insertPosition(
+  sql: SqlClient,
+  opts: {
+    userId: string;
+    exchangeConnectionId: string;
+    instrument: string;
+    instrumentType: InstrumentKind;
+    side: PositionSide;
+    qtyOpen: string;
+    avgEntryPrice: string;
+    openedAt: Date;
+    closedAt: Date | null;
+    status: PositionStatus;
+  },
+): Promise<string> {
+  // margin_mode: 'spot' for spot, 'cross' for derivatives (best default).
+  const marginMode = opts.instrumentType === 'spot' ? 'spot' : 'cross';
+  // total_qty mirrors qty_open — Python `_insert_position` does the same so
+  // the spread matcher reads a consistent "current size" figure.
+  const totalQty = opts.qtyOpen;
+  const rows = await sql.unsafe(
+    `
+      insert into public.positions (
+        user_id,
+        exchange_connection_id,
+        instrument,
+        instrument_type,
+        side,
+        margin_mode,
+        total_qty,
+        qty_open,
+        avg_entry_price,
+        opened_at,
+        closed_at,
+        status
+      ) values (
+        $1::uuid, $2::uuid, $3, $4::instrument_type, $5::position_side,
+        $6::margin_mode,
+        $7, $8, $9,
+        $10, $11, $12::position_status
+      )
+      returning id::text as id
+    `,
+    [
+      opts.userId,
+      opts.exchangeConnectionId,
+      opts.instrument,
+      opts.instrumentType,
+      opts.side,
+      marginMode,
+      totalQty,
+      opts.qtyOpen,
+      opts.avgEntryPrice,
+      opts.openedAt,
+      opts.closedAt,
+      opts.status,
+    ],
+  );
+  const head = rows[0] as { id: string } | undefined;
+  if (!head) {
+    // The RETURNING clause guarantees a row; this is belt-and-braces.
+    throw new Error('insertPosition: INSERT ... RETURNING produced no row');
+  }
+  return head.id;
+}
+
+/**
+ * Set `fills.position_id` for the given fills. Returns the count updated.
+ *
+ * TS port of Python `_attach_fills`. Matches on `raw_exchange_id` (not `id`)
+ * because `aggregateFills` carries `externalTradeId` values, which equal that
+ * column. Re-checks `position_id IS NULL` so concurrent re-runs are safe.
+ *
+ * No-op (returns 0) on an empty id list — side-flip openers have empty
+ * `fillIds` (the flip fill stays linked to the closed position).
+ */
+export async function attachFills(
+  sql: SqlClient,
+  exchangeConnectionId: string,
+  positionId: string,
+  externalTradeIds: readonly string[],
+): Promise<number> {
+  if (externalTradeIds.length === 0) return 0;
+  // `raw_exchange_id` is a `text` column; cast the bound array to `text[]`
+  // explicitly so Postgres can resolve the parameter type (mirrors the
+  // Python aggregator's `any(%s::uuid[])` and the webapp's `ANY(..::text[])`).
+  const result = await sql.unsafe(
+    `
+      update public.fills
+         set position_id = $2::uuid
+       where exchange_connection_id = $1::uuid
+         and raw_exchange_id = any($3::text[])
+         and position_id is null
+    `,
+    [exchangeConnectionId, positionId, externalTradeIds as string[]],
+  );
+  return result.count ?? 0;
+}
+
+/**
+ * Build positions from a connection's unmatched fills.
+ *
+ * TS port of Python `aggregate_positions`, scoped to one connection. Loads
+ * unmatched fills, folds them with `aggregateFills`, then per emitted position
+ * INSERTs the row and links its fills. The caller owns the transaction
+ * boundary (mirrors Python — "caller commits").
+ *
+ * Idempotent: re-running with no unmatched fills returns zero counters.
+ */
+export async function aggregateConnectionPositions(
+  sql: SqlClient,
+  exchangeConnectionId: string,
+): Promise<{ positionsInserted: number; fillsAttached: number }> {
+  const fills = await loadUnmatchedFills(sql, exchangeConnectionId);
+  if (fills.length === 0) {
+    return { positionsInserted: 0, fillsAttached: 0 };
+  }
+
+  // Recover user_id from the first fill's row is not possible (CanonicalFill
+  // carries no user_id); read it from the connection instead.
+  const connRows = await sql.unsafe(
+    `select user_id::text as user_id from public.exchange_connections where id::text = $1`,
+    [exchangeConnectionId],
+  );
+  const connHead = connRows[0] as { userId: string } | undefined;
+  if (!connHead) {
+    throw new Error(
+      `aggregateConnectionPositions: connection ${exchangeConnectionId} not found`,
+    );
+  }
+  const userId = connHead.userId;
+
+  const aggregated = aggregateFills(fills, exchangeConnectionId);
+
+  let positionsInserted = 0;
+  let fillsAttached = 0;
+  for (const agg of aggregated) {
+    const positionId = await insertPosition(sql, {
+      userId,
+      exchangeConnectionId,
+      instrument: agg.position.instrument.rawSymbol,
+      instrumentType: agg.position.instrument.kind,
+      side: agg.position.side,
+      qtyOpen: agg.position.qtyOpen,
+      avgEntryPrice: agg.position.avgEntryPrice,
+      // `openedAt` is set by the aggregator from the first contributing fill;
+      // `positions.opened_at` is NOT NULL so fall back defensively.
+      openedAt: agg.position.openedAt ?? new Date(),
+      closedAt: agg.closedAt,
+      status: agg.status,
+    });
+    positionsInserted += 1;
+    fillsAttached += await attachFills(
+      sql,
+      exchangeConnectionId,
+      positionId,
+      agg.fillIds,
+    );
+  }
+  return { positionsInserted, fillsAttached };
+}
+
+// ---------------------------------------------------------------------------
+// Funding-event persistence + linking — TS port of the Python funding path.
+// ---------------------------------------------------------------------------
+
+/**
+ * Insert a page of funding events idempotently. Returns the count inserted.
+ *
+ * TS port of Python `insert_funding_events`. Uses `ON CONFLICT
+ * (exchange_connection_id, raw_exchange_id) DO NOTHING` so page replays are
+ * no-ops. `position_id` is left NULL — `linkFundingEvents` sets it once the
+ * positions exist. Caller owns the transaction.
+ *
+ * Sign convention: `funding_events.amount` is SIGNED (positive = received,
+ * negative = paid). The adapter emits an ABSOLUTE `amount` plus a `direction`
+ * enum; we apply the sign here.
+ *
+ * Null `externalId`: the adapter-supplied `externalId` is preferred when
+ * present; when null we synthesize a stable composite
+ * `"<rawSymbol>-<occurredAtMs>"` — byte-identical to what the Python worker
+ * does — so the idempotency key stays deterministic across re-syncs.
+ */
+export async function insertFundingEvents(
+  sql: SqlClient,
+  opts: {
+    userId: string;
+    exchangeConnectionId: string;
+    events: readonly CanonicalFundingEvent[];
+  },
+): Promise<number> {
+  if (opts.events.length === 0) return 0;
+
+  let inserted = 0;
+  for (const ev of opts.events) {
+    // Sign the amount: received → positive, paid → negative.
+    const signedAmount =
+      ev.direction === 'received' ? ev.amount : `-${ev.amount}`;
+    // raw_exchange_id: adapter external id when present, else a stable
+    // composite (instrument + epoch-ms). Mirrors Python's fallback.
+    const externalId =
+      ev.externalId ??
+      `${ev.instrument.rawSymbol}-${ev.occurredAt.getTime()}`;
+    const result = await sql.unsafe(
+      `
+        insert into public.funding_events (
+          user_id,
+          exchange_connection_id,
+          raw_exchange_id,
+          instrument,
+          amount,
+          funding_rate,
+          position_qty,
+          currency,
+          event_time,
+          raw_payload
+        ) values (
+          $1::uuid, $2::uuid, $3, $4, $5, $6, $7, $8, $9, $10::jsonb
+        )
+        on conflict (exchange_connection_id, raw_exchange_id) do nothing
+      `,
+      [
+        opts.userId,
+        opts.exchangeConnectionId,
+        externalId,
+        ev.instrument.rawSymbol,
+        signedAmount,
+        ev.fundingRate,
+        ev.positionQty,
+        ev.amountCurrency,
+        ev.occurredAt,
+        JSON.stringify(ev.raw ?? {}),
+      ],
+    );
+    inserted += result.count ?? 0;
+  }
+  return inserted;
+}
+
+/**
+ * Link unlinked funding events to the position open at the funding tick.
+ *
+ * TS port of Python `link_funding_events`, scoped to one connection. For each
+ * `position_id IS NULL` funding event we pick the position whose lifecycle
+ * (`opened_at <= event_time < coalesce(closed_at, 'infinity')`, same
+ * `exchange_connection_id` + `instrument`) contains the event. Events with no
+ * candidate position stay NULL and are retried next cycle. Returns the count
+ * updated.
+ *
+ * Must run AFTER `aggregateConnectionPositions` — funding links to positions,
+ * so the positions must exist first.
+ */
+export async function linkFundingEvents(
+  sql: SqlClient,
+  exchangeConnectionId: string,
+): Promise<number> {
+  const result = await sql.unsafe(
+    `
+      update public.funding_events fe
+         set position_id = sub.position_id
+        from (
+            select fe2.id as fe_id,
+                   p.id   as position_id
+              from public.funding_events fe2
+              join public.positions p
+                on p.exchange_connection_id = fe2.exchange_connection_id
+               and p.instrument = fe2.instrument
+               and p.opened_at <= fe2.event_time
+               and coalesce(p.closed_at, 'infinity'::timestamptz) > fe2.event_time
+             where fe2.position_id is null
+               and fe2.exchange_connection_id = $1::uuid
+               and p.deleted_at is null
+        ) as sub
+       where fe.id = sub.fe_id
+         and fe.position_id is null
+    `,
+    [exchangeConnectionId],
+  );
+  return result.count ?? 0;
 }
