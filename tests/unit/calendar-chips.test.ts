@@ -5,8 +5,10 @@
 import { describe, expect, it } from "vitest";
 import type { ActivityByDateRow } from "../../src/lib/db/activity";
 import type { ActivityId, ActivityType } from "../../src/types/canonical";
+import type { CalendarDeadline } from "../../src/lib/db/calendar-deadlines";
 import {
   bucketChipsByDate,
+  bucketDeadlinesByDate,
   rowToChip,
   totalForMonth,
   totalPnlByDate,
@@ -109,5 +111,46 @@ describe("totalForMonth", () => {
     const summary = totalForMonth(rows, "2026-05-01", "2026-05-31");
     expect(summary.total).toBeCloseTo(120);
     expect(summary.count).toBe(3);
+  });
+});
+
+describe("bucketDeadlinesByDate", () => {
+  function mkDeadline(over: Partial<CalendarDeadline> = {}): CalendarDeadline {
+    return {
+      id: "option_expiry:aaaa",
+      date: "2026-05-20",
+      kind: "option_expiry",
+      name: "BTC 70k call",
+      href: "/options/aaaa",
+      ...over,
+    };
+  }
+
+  it("groups deadlines by date, preserving order within a day", () => {
+    const a = mkDeadline({ id: "a", date: "2026-05-20", name: "Alpha" });
+    const b = mkDeadline({ id: "b", date: "2026-05-20", name: "Beta" });
+    const c = mkDeadline({
+      id: "c",
+      date: "2026-05-21",
+      kind: "reminder",
+      name: "Gamma",
+    });
+    const m = bucketDeadlinesByDate([a, b, c]);
+    expect(m.size).toBe(2);
+    expect(m.get("2026-05-20")?.map((x) => x.id)).toEqual(["a", "b"]);
+    expect(m.get("2026-05-21")?.[0]?.id).toBe("c");
+  });
+
+  it("returns an empty Map for no deadlines", () => {
+    expect(bucketDeadlinesByDate([]).size).toBe(0);
+  });
+
+  it("keeps deadlines of different kinds on the same day together", () => {
+    const m = bucketDeadlinesByDate([
+      mkDeadline({ id: "x", date: "2026-05-20", kind: "option_expiry" }),
+      mkDeadline({ id: "y", date: "2026-05-20", kind: "vesting_unlock" }),
+      mkDeadline({ id: "z", date: "2026-05-20", kind: "reminder" }),
+    ]);
+    expect(m.get("2026-05-20")).toHaveLength(3);
   });
 });

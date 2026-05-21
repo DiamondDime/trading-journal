@@ -9,6 +9,7 @@
 import type {
   ActivityByDateRow,
 } from "@/lib/db/activity";
+import type { CalendarDeadline } from "@/lib/db/calendar-deadlines";
 
 export interface CalendarChip {
   /** Stable React key. */
@@ -84,6 +85,26 @@ export function bucketChipsByDate(
       bucket.push(chip);
     } else {
       byDate.set(r.closedDate, [chip]);
+    }
+  }
+  return byDate;
+}
+
+/**
+ * Bucket upcoming deadlines by YYYY-MM-DD. Result is a Map keyed by date with
+ * deadlines preserved in the query's order (date asc, then name). Used by the
+ * calendar to render a forward-looking "due" badge on each affected cell.
+ */
+export function bucketDeadlinesByDate(
+  deadlines: CalendarDeadline[],
+): Map<string, CalendarDeadline[]> {
+  const byDate = new Map<string, CalendarDeadline[]>();
+  for (const d of deadlines) {
+    const bucket = byDate.get(d.date);
+    if (bucket) {
+      bucket.push(d);
+    } else {
+      byDate.set(d.date, [d]);
     }
   }
   return byDate;

@@ -32,6 +32,7 @@ import {
 import { WizardSubmitButton } from "@/components/wizard/wizard-submit-button";
 import { WizardInput } from "@/components/wizard/wizard-field";
 import { DeleteButton } from "@/components/activity/delete-button";
+import { SetReminderButton } from "@/components/reminders/set-reminder-button";
 import { getT, getLocale } from "@/lib/i18n/server";
 import type { Locale } from "@/lib/i18n/types";
 import type { TFunction } from "@/lib/i18n/resolve";
@@ -557,6 +558,10 @@ export default async function YieldPositionDetailPage({
                   </button>
                 </form>
               )}
+              <SetReminderButton
+                activityId={row.id}
+                activityName={row.name}
+              />
               <DeleteButton
                 activityId={row.id}
                 activityType="yield_position"

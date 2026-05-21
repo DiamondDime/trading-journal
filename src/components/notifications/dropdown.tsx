@@ -4,6 +4,7 @@ import * as React from "react";
 import Link from "next/link";
 import {
   AlertCircle,
+  Bell,
   Clock,
   CalendarDays,
   X,
@@ -208,6 +209,8 @@ function KindIcon({
       return <CalendarDays className={cn("text-text-secondary", className)} />;
     case "drift_warning":
       return <AlertCircle className={cn("text-info", className)} />;
+    case "manual_reminder":
+      return <Bell className={cn("text-info", className)} />;
   }
 }
 

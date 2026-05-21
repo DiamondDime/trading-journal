@@ -20,6 +20,7 @@ import {
   listTagsForActivity,
 } from "@/lib/db/satellite";
 import { DeleteButton } from "@/components/activity/delete-button";
+import { SetReminderButton } from "@/components/reminders/set-reminder-button";
 import { NotesEditor } from "@/components/activity/notes-editor";
 import { ScreenshotsSection } from "@/components/activity/screenshots-section";
 import { toScreenshotItems } from "@/components/activity/screenshots-data";
@@ -316,6 +317,10 @@ export default async function AirdropDetailPage({
                 <Pencil className="h-3 w-3" />
                 {t("airdropDetail.edit")}
               </Link>
+              <SetReminderButton
+                activityId={activity.id}
+                activityName={activity.name}
+              />
               <DeleteButton
                 activityId={activity.id}
                 activityType="airdrop"

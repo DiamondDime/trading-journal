@@ -8,6 +8,7 @@ import {
 } from "@/lib/calendar/month-grid";
 import {
   bucketChipsByDate,
+  bucketDeadlinesByDate,
   totalForMonth,
   totalPnlByDate,
 } from "@/lib/calendar/chips";
@@ -15,6 +16,7 @@ import {
   getActivitiesByDateRange,
   getTotals,
 } from "@/lib/db/activity";
+import { getUpcomingDeadlines } from "@/lib/db/calendar-deadlines";
 import { getT } from "@/lib/i18n/server";
 
 /**
@@ -71,14 +73,20 @@ export default async function CalendarPage({ searchParams }: CalendarPageProps) 
   //
   //    `getTotals` gives us the first-close anchor for the empty-state
   //    banner — single cheap aggregate read.
-  const [activitiesInWindow, totals] = await Promise.all([
+  //    `getUpcomingDeadlines` adds the forward-looking half — option
+  //    expiries, vesting unlocks, airdrop claim windows, spread convergence
+  //    dates, and manual reminders that fall inside the grid window. They
+  //    render as a distinct "due" badge, not as past-activity chips.
+  const [activitiesInWindow, totals, deadlinesInWindow] = await Promise.all([
     getActivitiesByDateRange(userId, grid.gridStart, grid.gridEnd),
     getTotals(userId),
+    getUpcomingDeadlines(userId, grid.gridStart, grid.gridEnd),
   ]);
 
-  // 4. Bucket into the two Maps the view needs.
+  // 4. Bucket into the Maps the view needs.
   const chipsByDate = bucketChipsByDate(activitiesInWindow);
   const totalsByDate = totalPnlByDate(activitiesInWindow);
+  const deadlinesByDate = bucketDeadlinesByDate(deadlinesInWindow);
 
   // Header total — only the focused month's days count (out-of-month cells
   // don't add to the month total, by design).
@@ -98,6 +106,7 @@ export default async function CalendarPage({ searchParams }: CalendarPageProps) 
       grid={grid}
       chipsByDate={chipsByDate}
       totalsByDate={totalsByDate}
+      deadlinesByDate={deadlinesByDate}
       yearOptions={yearOptions}
       todayYm={todayYm}
       monthSummary={monthSummary}

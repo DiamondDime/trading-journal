@@ -7,6 +7,8 @@ import {
   type WatchlistCategory,
   type WatchlistRow,
 } from "@/lib/db/watchlist";
+import { listRemindersWithActivity } from "@/lib/db/reminders";
+import { RemindersSection } from "@/components/reminders/reminders-section";
 import { fmtUsd } from "@/lib/data/archive-data";
 import { cn } from "@/lib/utils";
 
@@ -51,7 +53,10 @@ export default async function WatchlistPage() {
   const locale = await getLocale();
   const intlLocale = locale === "ru" ? "ru-RU" : "en-US";
 
-  const rows = await listWatchlistItems(userId);
+  const [rows, reminders] = await Promise.all([
+    listWatchlistItems(userId),
+    listRemindersWithActivity(userId),
+  ]);
 
   // Bucket by category in a single pass so the four sub-sections render
   // independently. CATEGORY_ORDER drives the visual order; categories with
@@ -115,6 +120,8 @@ export default async function WatchlistPage() {
       </header>
 
       <div className="flex flex-col gap-8 px-8 py-8 lg:px-12">
+        <RemindersSection items={reminders} />
+
         {descriptors.map((d) => {
           const items = sections.get(d.category) ?? [];
           return (

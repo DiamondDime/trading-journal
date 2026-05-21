@@ -3,7 +3,7 @@
 import * as React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ChevronLeft, ChevronRight } from "lucide-react";
+import { CalendarClock, ChevronLeft, ChevronRight } from "lucide-react";
 import {
   Popover,
   PopoverContent,
@@ -19,6 +19,10 @@ import { useT, useLocale } from "@/lib/i18n/client";
 import type { MonthGrid } from "@/lib/calendar/month-grid";
 import { fmtYearMonth, addMonths } from "@/lib/calendar/month-grid";
 import type { CalendarChip } from "@/lib/calendar/chips";
+import type {
+  CalendarDeadline,
+  DeadlineKind,
+} from "@/lib/db/calendar-deadlines";
 
 /**
  * Full-page calendar view. Renders the month grid + navigation controls.
@@ -44,6 +48,8 @@ interface CalendarViewProps {
   chipsByDate: Map<string, CalendarChip[]>;
   /** Per-day signed P&L total — empty Map if there's no activity. */
   totalsByDate: Map<string, number>;
+  /** Upcoming deadlines per YYYY-MM-DD — empty Map if nothing is due. */
+  deadlinesByDate: Map<string, CalendarDeadline[]>;
   /** Year extents for the year-picker popover. */
   yearOptions: number[];
   /** Today's YYYY-MM in the same encoding as URL `ym` — used by the Today button. */
@@ -81,6 +87,7 @@ export function CalendarView({
   grid,
   chipsByDate,
   totalsByDate,
+  deadlinesByDate,
   yearOptions,
   todayYm,
   monthSummary,
@@ -213,6 +220,7 @@ export function CalendarView({
               }}
               chips={chipsByDate.get(c.ymd) ?? []}
               total={totalsByDate.get(c.ymd) ?? 0}
+              deadlines={deadlinesByDate.get(c.ymd) ?? []}
               locale={locale}
             />
           ))}
@@ -380,14 +388,28 @@ interface CalendarCellProps {
   };
   chips: CalendarChip[];
   total: number;
+  deadlines: CalendarDeadline[];
   locale: "en" | "ru";
 }
 
-function CalendarCell({ cell, chips, total, locale }: CalendarCellProps) {
+// How many deadlines a cell badge counts toward before the tooltip shows the
+// rest — the badge itself is compact; the tooltip carries the full list.
+const MAX_DEADLINES_IN_TOOLTIP = 6;
+
+function CalendarCell({
+  cell,
+  chips,
+  total,
+  deadlines,
+  locale,
+}: CalendarCellProps) {
   const t = useT();
   const totalTone =
     total > 0 ? "text-up" : total < 0 ? "text-down" : "text-text-tertiary";
   const hasActivity = chips.length > 0;
+  // Deadlines are forward-looking — show them on out-of-month cells too so a
+  // deadline that lands in the next month's leading days is still visible.
+  const hasDeadlines = deadlines.length > 0;
 
   // Date-range deep-link into the archive. Archive doesn't honor `from`/`to`
   // today (Wave 12D follow-up); the params are emitted anyway so the link
@@ -400,7 +422,7 @@ function CalendarCell({ cell, chips, total, locale }: CalendarCellProps) {
 
   // Note on accessibility: the cell is a Link so keyboard nav and screen
   // readers get the standard "drill into day" affordance for free. The
-  // tooltip exposes the chip detail without making click required.
+  // tooltip exposes the chip + deadline detail without making click required.
   const inner = (
     <div
       className={cn(
@@ -412,7 +434,7 @@ function CalendarCell({ cell, chips, total, locale }: CalendarCellProps) {
       )}
       style={{ aspectRatio: "4 / 3", minHeight: "92px" }}
     >
-      {/* Top row: day number + total */}
+      {/* Top row: day number + deadline badge + total */}
       <div className="flex items-baseline justify-between gap-1">
         <span
           className={cn(
@@ -423,16 +445,19 @@ function CalendarCell({ cell, chips, total, locale }: CalendarCellProps) {
         >
           {cell.day}
         </span>
-        {hasActivity && cell.inMonth && (
-          <span
-            className={cn(
-              "font-mono text-[10px] tabular-nums",
-              totalTone,
-            )}
-          >
-            {fmtSignedUsd(total, locale)}
-          </span>
-        )}
+        <span className="flex items-center gap-1.5">
+          {hasDeadlines && <DeadlineBadge count={deadlines.length} />}
+          {hasActivity && cell.inMonth && (
+            <span
+              className={cn(
+                "font-mono text-[10px] tabular-nums",
+                totalTone,
+              )}
+            >
+              {fmtSignedUsd(total, locale)}
+            </span>
+          )}
+        </span>
       </div>
 
       {/* Chips */}
@@ -451,15 +476,33 @@ function CalendarCell({ cell, chips, total, locale }: CalendarCellProps) {
     </div>
   );
 
-  // Wrap in tooltip only when there's something to show — empty cells get
-  // a lighter affordance, no tooltip noise.
-  if (hasActivity) {
+  // Wrap in tooltip when there's anything to show — past activity OR an
+  // upcoming deadline. Empty cells get a lighter affordance, no tooltip noise.
+  if (hasActivity || hasDeadlines) {
+    const ariaParts: string[] = [fmtTooltipDate(cell.ymd, locale)];
+    if (hasActivity) {
+      ariaParts.push(t.plural("plurals.activities", chips.length));
+    }
+    if (hasDeadlines) {
+      ariaParts.push(
+        t.plural("calendar.deadlines.badgeCount", deadlines.length),
+      );
+    }
+    // Activity cells drill into the archive. A deadline-only cell links
+    // straight to its target when exactly one deadline lands there (e.g. a
+    // reminder linked to an activity → that activity's detail page); with
+    // several it routes to the watchlist, where pending items are managed.
+    const cellHref = hasActivity
+      ? href
+      : deadlines.length === 1
+        ? deadlines[0].href
+        : "/watchlist";
     return (
       <Tooltip>
         <TooltipTrigger asChild>
           <Link
-            href={href}
-            aria-label={`${fmtTooltipDate(cell.ymd, locale)} · ${t.plural("plurals.activities", chips.length)}`}
+            href={cellHref}
+            aria-label={ariaParts.join(" · ")}
             className="block focus:outline-none focus-visible:ring-2 focus-visible:ring-text rounded-md"
           >
             {inner}
@@ -470,6 +513,7 @@ function CalendarCell({ cell, chips, total, locale }: CalendarCellProps) {
             ymd={cell.ymd}
             chips={chips}
             total={total}
+            deadlines={deadlines}
             locale={locale}
           />
         </TooltipContent>
@@ -489,6 +533,26 @@ function CalendarCell({ cell, chips, total, locale }: CalendarCellProps) {
     >
       {inner}
     </div>
+  );
+}
+
+/**
+ * Forward-looking "due" badge. Visually distinct from past-activity chips:
+ * an amber outlined pill with a clock glyph (chips are filled up/down/neutral
+ * P&L tones). Sits in the cell's top row next to the day number.
+ */
+function DeadlineBadge({ count }: { count: number }) {
+  const t = useT();
+  return (
+    <span
+      className={cn(
+        "inline-flex items-center gap-0.5 rounded-sm border border-warn/50 bg-warn/10 px-1 py-px",
+        "font-mono text-[9px] uppercase tracking-[0.08em] text-warn",
+      )}
+    >
+      <CalendarClock className="h-2.5 w-2.5" aria-hidden />
+      {count > 1 ? count : t("calendar.deadlines.badge")}
+    </span>
   );
 }
 
@@ -516,44 +580,90 @@ function CellTooltipBody({
   ymd,
   chips,
   total,
+  deadlines,
   locale,
 }: {
   ymd: string;
   chips: CalendarChip[];
   total: number;
+  deadlines: CalendarDeadline[];
   locale: "en" | "ru";
 }) {
   const t = useT();
+  const hasActivity = chips.length > 0;
+  const hasDeadlines = deadlines.length > 0;
   return (
     <div className="flex flex-col gap-1">
       <span className="text-text-tertiary">{fmtTooltipDate(ymd, locale)}</span>
-      <span
-        className={
-          total > 0 ? "text-up" : total < 0 ? "text-down" : "text-text-tertiary"
-        }
-      >
-        {fmtSignedUsd(total, locale)} · {t.plural("plurals.activities", chips.length)}
-      </span>
-      <div className="mt-1 flex flex-col gap-0.5">
-        {chips.slice(0, 6).map((chip) => (
+
+      {/* Past activity — P&L summary + per-chip lines */}
+      {hasActivity && (
+        <>
           <span
-            key={chip.id}
-            className={cn(
-              "truncate",
-              chip.tone === "up"
+            className={
+              total > 0
                 ? "text-up"
-                : chip.tone === "down"
+                : total < 0
                   ? "text-down"
-                  : "text-text-tertiary",
-            )}
+                  : "text-text-tertiary"
+            }
           >
-            {chip.serial} · {chip.name} · {fmtSignedUsd(chip.netPnl, locale)}
+            {fmtSignedUsd(total, locale)} ·{" "}
+            {t.plural("plurals.activities", chips.length)}
           </span>
-        ))}
-        {chips.length > 6 && (
-          <span className="text-text-tertiary">{t("calendar.moreOverflow", { count: chips.length - 6 })}</span>
-        )}
-      </div>
+          <div className="mt-1 flex flex-col gap-0.5">
+            {chips.slice(0, 6).map((chip) => (
+              <span
+                key={chip.id}
+                className={cn(
+                  "truncate",
+                  chip.tone === "up"
+                    ? "text-up"
+                    : chip.tone === "down"
+                      ? "text-down"
+                      : "text-text-tertiary",
+                )}
+              >
+                {chip.serial} · {chip.name} · {fmtSignedUsd(chip.netPnl, locale)}
+              </span>
+            ))}
+            {chips.length > 6 && (
+              <span className="text-text-tertiary">
+                {t("calendar.moreOverflow", { count: chips.length - 6 })}
+              </span>
+            )}
+          </div>
+        </>
+      )}
+
+      {/* Upcoming deadlines — distinct heading + per-deadline lines */}
+      {hasDeadlines && (
+        <div className={cn("flex flex-col gap-0.5", hasActivity && "mt-1.5 border-t border-border pt-1.5")}>
+          <span className="text-warn uppercase tracking-[0.08em]">
+            {t("calendar.deadlines.tooltipHeading")}
+          </span>
+          {deadlines.slice(0, MAX_DEADLINES_IN_TOOLTIP).map((d) => (
+            <span key={d.id} className="truncate text-text-tertiary">
+              {deadlineKindLabel(d.kind, t)} · {d.name}
+            </span>
+          ))}
+          {deadlines.length > MAX_DEADLINES_IN_TOOLTIP && (
+            <span className="text-text-tertiary">
+              {t("calendar.moreOverflow", {
+                count: deadlines.length - MAX_DEADLINES_IN_TOOLTIP,
+              })}
+            </span>
+          )}
+        </div>
+      )}
     </div>
   );
+}
+
+/** Resolve a deadline kind to its localized label. */
+function deadlineKindLabel(
+  kind: DeadlineKind,
+  t: ReturnType<typeof useT>,
+): string {
+  return t(`calendar.deadlines.kinds.${kind}` as Parameters<typeof t>[0]);
 }

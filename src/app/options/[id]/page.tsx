@@ -30,6 +30,7 @@ import { getOptionForEdit } from "@/app/add/option/db";
 import { closeOptionPosition } from "@/app/add/option/actions";
 import { getT, getLocale } from "@/lib/i18n/server";
 import { DeleteButton } from "@/components/activity/delete-button";
+import { SetReminderButton } from "@/components/reminders/set-reminder-button";
 
 export const dynamic = "force-dynamic";
 
@@ -486,6 +487,10 @@ export default async function OptionDetailPage({
                 <Pencil className="h-3 w-3" />
                 {t("optionDetail.actions.edit")}
               </Link>
+              <SetReminderButton
+                activityId={activity.id}
+                activityName={activity.name}
+              />
               <DeleteButton
                 activityId={activity.id}
                 activityType="option"

@@ -23,6 +23,7 @@ import {
 } from "@/lib/db/satellite";
 import { computeMoreMetrics } from "@/lib/analytics";
 import { DeleteButton } from "@/components/activity/delete-button";
+import { SetReminderButton } from "@/components/reminders/set-reminder-button";
 import { NotesEditor } from "@/components/activity/notes-editor";
 import { ScreenshotsSection } from "@/components/activity/screenshots-section";
 import { toScreenshotItems } from "@/components/activity/screenshots-data";
@@ -444,6 +445,10 @@ export default async function SpreadDetailPage({
             <Pencil className="h-3 w-3" />
             {t("spreadDetail.actions.edit")}
           </Link>
+          <SetReminderButton
+            activityId={activity.id}
+            activityName={activity.name}
+          />
           <DeleteButton
             activityId={activity.id}
             activityType="spread"
