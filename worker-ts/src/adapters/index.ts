@@ -14,6 +14,8 @@
  */
 import { CcxtGenericAdapter } from './ccxt-generic.js';
 import { BINANCE_CONFIG } from './configs/binance.js';
+import { BYBIT_CONFIG } from './configs/bybit.js';
+import { MEXC_CONFIG } from './configs/mexc.js';
 import type { ExchangeAdapter } from './base.js';
 import { AdapterUnsupportedError } from './base.js';
 import type { Exchange } from '../types.js';
@@ -21,7 +23,9 @@ import type { VenueConfig } from './venue-config.js';
 
 const ALL_CONFIGS: Partial<Record<Exchange, VenueConfig>> = {
   binance: BINANCE_CONFIG,
-  // bybit / okx / bitget / kucoin / phemex / mexc / bingx / htx / gate:
+  bybit: BYBIT_CONFIG,
+  mexc: MEXC_CONFIG,
+  // okx / bitget / kucoin / phemex / bingx / htx / gate:
   // TODO — port from worker/csj_worker/adapters/configs/.
 };
 
@@ -33,7 +37,6 @@ const REAL_ADAPTERS = new Set(Object.keys(ALL_CONFIGS));
  * letting the daemon log + skip the connection.
  */
 const STUB_ADAPTERS: Exchange[] = [
-  'bybit',
   'hyperliquid',
   'okx',
   'deribit',
@@ -41,7 +44,6 @@ const STUB_ADAPTERS: Exchange[] = [
   'aster',
   'phemex',
   'bitget',
-  'mexc',
   'kucoin',
   'kraken',
   'gate',
