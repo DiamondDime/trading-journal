@@ -522,7 +522,7 @@ export async function loadUnmatchedFills(
         on c.id = f.exchange_connection_id
      where f.exchange_connection_id = $1::uuid
        and f.position_id is null
-     order by f.executed_at asc
+     order by f.executed_at asc, f.raw_exchange_id asc
     `,
     [exchangeConnectionId],
   )) as unknown as UnmatchedFillRow[];

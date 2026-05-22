@@ -29,6 +29,7 @@ import ccxt, {
   type Position as CcxtPosition,
   type Market as CcxtMarket,
 } from 'ccxt';
+import { Decimal } from 'decimal.js';
 
 import { log } from '../log.js';
 import type {
@@ -158,6 +159,28 @@ function decMul(a: Dec, b: Dec): Dec {
   return (x * y).toString();
 }
 
+/**
+ * Contract size for a ccxt market, as a decimal string. `'1'` for spot and
+ * for any market that does not declare one.
+ *
+ * ccxt's `fetchMyTrades` reports `trade.amount` as the number of CONTRACTS
+ * for derivatives, not base-currency units. `contractSize` is the base
+ * amount one contract represents (e.g. 0.001 for MEXC's OPENAI/USDT:USDT),
+ * so `base qty = amount * contractSize`. Linear venues whose contract is
+ * 1:1 with the base (Bybit, Binance, Hyperliquid) report `contractSize` 1,
+ * making the multiplication a no-op.
+ */
+export function contractSizeOf(
+  market: Partial<CcxtMarket> | null | undefined,
+): Dec {
+  if (!market || market.contract !== true) return '1';
+  const cs = market.contractSize;
+  if (cs === null || cs === undefined || !Number.isFinite(cs) || cs <= 0) {
+    return '1';
+  }
+  return String(cs);
+}
+
 function msToDate(ms: unknown, field: string): Date {
   if (ms === null || ms === undefined) {
     throw new AdapterInvalidDataError(`Missing timestamp field: ${field}`);
@@ -263,9 +286,10 @@ function normalizeInstrument(
 // ccxt unified trade → CanonicalFill
 // ---------------------------------------------------------------------------
 
-function parseCcxtTrade(
+export function parseCcxtTrade(
   trade: CcxtTrade,
   instrument: CanonicalInstrument,
+  market: Partial<CcxtMarket> | null | undefined,
 ): CanonicalFill {
   const id = trade.id;
   if (id === null || id === undefined) {
@@ -279,7 +303,17 @@ function parseCcxtTrade(
   const isMaker = trade.takerOrMaker === 'maker';
   const feeKind: FeeKind = isMaker ? 'maker' : 'taker';
 
-  const qty = toDec(trade.amount, 'amount');
+  // ccxt reports `trade.amount` in CONTRACTS for derivatives; scale by the
+  // market's contract size to land on base-currency units. `notional` from
+  // ccxt's `cost` already incorporates contract size, so it is left as-is.
+  // The scaling uses decimal.js — qty is a primary stored quantity, so it
+  // must not pick up the float noise that `decMul` tolerates.
+  const contractSize = contractSizeOf(market);
+  const rawAmount = toDec(trade.amount, 'amount');
+  const qty =
+    contractSize === '1'
+      ? rawAmount
+      : new Decimal(rawAmount).times(contractSize).toString();
   const price = toDec(trade.price, 'price');
   const notional = trade.cost !== undefined && trade.cost !== null
     ? toDec(trade.cost, 'cost')
@@ -323,11 +357,22 @@ function parseCcxtTrade(
 function parseCcxtFunding(
   record: CcxtFundingRecord,
   markets: Record<string, CcxtMarket>,
+  marketsById: Record<string, CcxtMarket>,
   exchange: Exchange,
 ): CanonicalFundingEvent {
-  const symbol = String(record.symbol ?? '');
-  const marketInfo = markets[symbol] ?? null;
-  const instrument = normalizeInstrument(symbol, marketInfo, exchange);
+  const info = (record.info ?? {}) as Record<string, unknown>;
+
+  // ccxt's unified funding record only carries `symbol` when the caller
+  // queried a specific market. Account-wide funding queries (MEXC) leave it
+  // undefined and expose the venue's own market id on `info.symbol` instead.
+  // Resolve either form to a ccxt market so the event normalises to the same
+  // canonical instrument as the fills — otherwise it cannot link to a position.
+  const unifiedSymbol = String(record.symbol ?? '');
+  const rawSymbol = typeof info.symbol === 'string' ? info.symbol : '';
+  const market =
+    markets[unifiedSymbol] ?? (rawSymbol ? marketsById[rawSymbol] : null) ?? null;
+  const symbol = market?.symbol ?? (unifiedSymbol || rawSymbol);
+  const instrument = normalizeInstrument(symbol, market, exchange);
 
   const occurredAt = msToDate(record.timestamp, 'timestamp');
   const amountRaw = toDec(record.amount ?? 0, 'amount');
@@ -337,7 +382,6 @@ function parseCcxtFunding(
   // ccxt does not surface fundingRate / positionQty in the unified shape.
   // Try to pluck from `info` (many venues include them as fundingRate /
   // positionAmt). Default to '0' when unknown.
-  const info = (record.info ?? {}) as Record<string, unknown>;
   const fundingRate = toDecSafe(info.fundingRate, '0');
   const positionQty = toDecSafe(info.positionAmt, '0');
 
@@ -751,7 +795,9 @@ export class CcxtGenericAdapter implements ExchangeAdapter {
             }
 
             if (inWindow.length > 0) {
-              const fills = inWindow.map((t) => parseCcxtTrade(t, instrument));
+              const fills = inWindow.map((t) =>
+                parseCcxtTrade(t, instrument, market),
+              );
               yield fills;
             }
 
@@ -807,7 +853,7 @@ export class CcxtGenericAdapter implements ExchangeAdapter {
   ): AsyncIterable<CanonicalFundingEvent[]> {
     const sinceMs = window.since.getTime();
     const untilMs = window.until.getTime();
-    const pageSize = this.config.pageSize;
+    const pageSize = this.config.fundingPageSize;
     const marketTypes = this.config.fundingMarketTypes ?? this.config.marketTypes;
 
     for (const marketType of marketTypes) {
@@ -821,6 +867,12 @@ export class CcxtGenericAdapter implements ExchangeAdapter {
           throw mapCcxtError(err, this.config.code);
         }
         const markets = (client.markets ?? {}) as Record<string, CcxtMarket>;
+        // Index markets by the venue's own id — MEXC funding records identify
+        // their market via `info.symbol` (a raw venue id), not the unified one.
+        const marketsById: Record<string, CcxtMarket> = {};
+        for (const m of Object.values(markets)) {
+          if (m && typeof m.id === 'string') marketsById[m.id] = m;
+        }
 
         let cursorMs = sinceMs;
         let requestCount = 0;
@@ -885,7 +937,9 @@ export class CcxtGenericAdapter implements ExchangeAdapter {
             return ts >= sinceMs && ts <= untilMs;
           });
           if (inWindow.length > 0) {
-            yield inWindow.map((r) => parseCcxtFunding(r, markets, this.exchange));
+            yield inWindow.map((r) =>
+              parseCcxtFunding(r, markets, marketsById, this.exchange),
+            );
           }
 
           const lastTs = rawRecords.reduce(

@@ -64,6 +64,9 @@ export const MEXC_CONFIG: VenueConfig = defineVenueConfig({
   supportsKlines: true,
   maxLookbackDays: 30,
   pageSize: 1000,
+  // MEXC's contract funding-records endpoint caps page_size at 100; a larger
+  // value is rejected with `code 600 pageSize error`.
+  fundingPageSize: 100,
   marketTypes: ['swap', 'spot'],
   fundingMarketTypes: ['swap'],
   fetchPermissions,

@@ -51,6 +51,13 @@ export interface VenueConfig {
   readonly maxLookbackDays: number;
   readonly pageSize: number;
 
+  /**
+   * Page size for `fetchFundingHistory`. Some venues cap the funding
+   * endpoint lower than the trades endpoint (MEXC: max 100) — defaults to
+   * `pageSize` when not overridden.
+   */
+  readonly fundingPageSize: number;
+
   /** ccxt market types to iterate when fetching fills. */
   readonly marketTypes: readonly string[];
 
@@ -86,6 +93,7 @@ export interface VenueConfigInput {
   supportsFetchMyTrades?: boolean;
   maxLookbackDays?: number;
   pageSize?: number;
+  fundingPageSize?: number;
   marketTypes?: readonly string[];
   fundingMarketTypes?: readonly string[] | null;
   fetchPermissions?: PermissionFetcher | null;
@@ -114,6 +122,7 @@ export function defineVenueConfig(input: VenueConfigInput): VenueConfig {
     supportsFetchMyTrades: input.supportsFetchMyTrades ?? true,
     maxLookbackDays: input.maxLookbackDays ?? 90,
     pageSize: input.pageSize ?? 200,
+    fundingPageSize: input.fundingPageSize ?? input.pageSize ?? 200,
     marketTypes: Object.freeze(
       input.marketTypes ? [...input.marketTypes] : ['swap'],
     ),
