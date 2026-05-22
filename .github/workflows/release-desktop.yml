@@ -63,28 +63,25 @@ jobs:
       - name: Typecheck (electron main process)
         run: pnpm electron:typecheck
 
-      # Builds the universal-ish DMG. electron-builder uses the publish
-      # section in electron-builder.yml to know where to upload.
+      # Builds the macOS DMGs. electron-builder uses the publish section in
+      # electron-builder.yml to know where to upload.
       #
-      # Signing/notarization env vars (passed through but not present yet):
-      #   CSC_LINK                — base64-encoded .p12 cert OR file URL
-      #   CSC_KEY_PASSWORD        — password for the .p12
-      #   APPLE_ID                — Apple Developer account email
-      #   APPLE_APP_SPECIFIC_PASSWORD — app-specific password
-      #   APPLE_TEAM_ID           — 10-char team ID
+      # Code-signing env (CSC_LINK / CSC_KEY_PASSWORD / APPLE_*) is
+      # deliberately NOT passed. When a secret is absent, `${{ secrets.X }}`
+      # expands to an empty string — and electron-builder resolves an empty
+      # CSC_LINK to the project directory, failing the whole build with
+      # `<projectDir> not a file`. With the vars unset, electron-builder skips
+      # certificate signing and falls back to the ad-hoc `identity: "-"` in
+      # electron-builder.yml, which is what ships today. When a Developer ID
+      # cert is available, add the repo secrets AND re-introduce CSC_LINK /
+      # CSC_KEY_PASSWORD / APPLE_ID / APPLE_APP_SPECIFIC_PASSWORD /
+      # APPLE_TEAM_ID to the env block below.
       #
       # GITHUB_TOKEN is provided by Actions and lets electron-builder upload
       # to the release that softprops/action-gh-release creates below.
       - name: Build electron app
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          # Code-signing env (will be empty strings until secrets are added —
-          # electron-builder treats empty as "skip signing"):
-          CSC_LINK: ${{ secrets.CSC_LINK }}
-          CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
-          APPLE_ID: ${{ secrets.APPLE_ID }}
-          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
-          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         run: pnpm electron:build
 
       - name: List artifacts (debug)
