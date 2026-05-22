@@ -63,7 +63,9 @@ When the dashboard appears, you can start right away:
 
 ## Updating
 
-Journal checks for new versions automatically. When an update is available it downloads quietly in the background and installs the next time you restart the app. You never have to re-download manually.
+On **Windows**, Journal updates itself: new versions download in the background and install when you restart the app.
+
+On **macOS**, updates are manual for now — download the latest `.dmg` from the [releases page](https://github.com/DiamondDime/trading-journal/releases/latest) and install it over the previous version. Your journal data is never touched: it lives in a separate folder (see [Where your data lives](#where-your-data-lives)) and every install preserves it. (Seamless macOS auto-update requires Apple code-signing, which isn't enabled yet.)
 
 ---
 
