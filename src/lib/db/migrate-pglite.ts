@@ -33,6 +33,42 @@ export interface MigrationResult {
   skipped: string[];
 }
 
+export interface PendingMigrations {
+  /** Migration files present on disk but not yet in `schema_migrations`. */
+  pending: string[];
+  /** How many migrations are already recorded as applied. */
+  appliedCount: number;
+}
+
+/**
+ * Inspect — without applying anything — which migrations are pending.
+ *
+ * Used by the desktop boot path to decide whether to snapshot the data
+ * directory before `runPendingMigrations` mutates the schema. `appliedCount`
+ * distinguishes a fresh install (0 applied — nothing to protect) from an
+ * update of a populated database (>0 applied — snapshot first).
+ */
+export async function listPendingMigrations(
+  db: PGlite,
+  migrationsDir: string = defaultMigrationsDir()
+): Promise<PendingMigrations> {
+  await db.query(SCHEMA_MIGRATIONS_DDL);
+
+  const applied = await db.query<{ filename: string }>(
+    'select filename from public.schema_migrations'
+  );
+  const alreadyApplied = new Set(applied.rows.map((r) => r.filename));
+
+  const files = (await readdir(migrationsDir))
+    .filter((f) => f.endsWith('.sql'))
+    .sort();
+
+  return {
+    pending: files.filter((f) => !alreadyApplied.has(f)),
+    appliedCount: alreadyApplied.size,
+  };
+}
+
 /**
  * Apply pending migrations. Returns the file names applied this run.
  */

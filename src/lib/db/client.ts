@@ -73,7 +73,8 @@ async function bootPGlite() {
     { pgcrypto },
     { pg_trgm },
     { uuid_ossp },
-    { runPendingMigrations },
+    { runPendingMigrations, listPendingMigrations },
+    { backupPgliteDataDir },
     fsMod,
   ] = await Promise.all([
     import("@electric-sql/pglite"),
@@ -82,6 +83,7 @@ async function bootPGlite() {
     import("@electric-sql/pglite/contrib/pg_trgm"),
     import("@electric-sql/pglite/contrib/uuid_ossp"),
     import("./migrate-pglite"),
+    import("./backup-pglite"),
     import("node:fs"),
   ]);
 
@@ -90,11 +92,12 @@ async function bootPGlite() {
   // creates `<userData>` itself, but anything under it is on us.
   fsMod.mkdirSync(dataDir, { recursive: true });
 
-  console.log(`[db] opening PGlite at ${dataDir}`);
-  const db = await PGlite.create({
+  const createOptions = {
     dataDir,
     extensions: { citext, pgcrypto, pg_trgm, uuid_ossp },
-  });
+  };
+  console.log(`[db] opening PGlite at ${dataDir}`);
+  let db = await PGlite.create(createOptions);
 
   // Migrations live in `<resourcesPath>/supabase/migrations` inside the asar.
   // The Electron main process passes PGLITE_MIGRATIONS_DIR pointing there.
@@ -104,6 +107,34 @@ async function bootPGlite() {
     process.env.PGLITE_MIGRATIONS_DIR ??
     `${process.cwd().replace(/\/\.next\/standalone.*$/, "")}/supabase/migrations`;
   console.log(`[db] PGlite open, applying migrations from ${migrationsDir}`);
+
+  // Pre-migration snapshot. A migration can fail midway and leave the schema
+  // half-applied; before taking that risk on a database that already holds
+  // the user's journal, copy the data directory so they can roll back. The
+  // copy runs while PGlite is closed so the snapshot is consistent on disk.
+  // Skipped on a fresh install (appliedCount 0 — no user data to protect).
+  // Best effort: a failed snapshot logs and boot continues.
+  const { pending, appliedCount } = await listPendingMigrations(
+    db,
+    migrationsDir,
+  );
+  if (pending.length > 0 && appliedCount > 0) {
+    console.log(
+      `[db] ${pending.length} migration(s) pending — snapshotting data dir`,
+    );
+    await db.close();
+    try {
+      const snapshot = backupPgliteDataDir(dataDir, fsMod);
+      if (snapshot) console.log(`[db] pre-migration backup → ${snapshot}`);
+    } catch (err) {
+      console.error(
+        `[db] pre-migration backup failed (continuing): ${
+          err instanceof Error ? err.message : String(err)
+        }`,
+      );
+    }
+    db = await PGlite.create(createOptions);
+  }
 
   const { applied, skipped } = await runPendingMigrations(db, migrationsDir);
   console.log(
