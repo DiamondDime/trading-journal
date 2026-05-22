@@ -42,7 +42,7 @@
     "electron:tsc": "tsc -p electron/tsconfig.json",
     "electron:tsc:watch": "tsc -p electron/tsconfig.json --watch --preserveWatchOutput",
     "electron:emit": "tsc -p electron/tsconfig.json || node -e \"if(!require('fs').existsSync('electron/dist/main.js')){console.error('electron:emit produced no main.js — fix the type errors above');process.exit(1)}\"",
-    "electron:prepare-standalone": "node -e \"const{cpSync,existsSync,mkdirSync}=require('fs');mkdirSync('.next/standalone/.next',{recursive:true});if(existsSync('.next/static'))cpSync('.next/static','.next/standalone/.next/static',{recursive:true});if(existsSync('public'))cpSync('public','.next/standalone/public',{recursive:true});console.log('standalone assets copied')\"",
+    "electron:prepare-standalone": "node scripts/prepare-standalone.mjs",
     "electron:dev": "pnpm electron:emit && concurrently -k -n next,electron -c blue,magenta \"next dev\" \"wait-on tcp:3000 && cross-env DESKTOP_DEV=1 DESKTOP_DEV_PORT=3000 electron .\"",
     "electron:clean": "rm -rf dist-electron",
     "electron:pack": "pnpm electron:clean && pnpm electron:emit && next build && pnpm electron:prepare-standalone && electron-builder --dir --mac",

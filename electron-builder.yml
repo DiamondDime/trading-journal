@@ -31,9 +31,17 @@ directories:
 # Globs are relative to the project root.
 #
 # .next/standalone already contains its own server.js + minimum node_modules.
-# `pnpm electron:prepare-standalone` (run before electron-builder) copies
-# .next/static and public/ INTO .next/standalone/ — Next's documented layout
-# requirement — so we don't ship duplicate top-level copies.
+# `pnpm electron:prepare-standalone` (scripts/prepare-standalone.mjs, run
+# before electron-builder) copies .next/static and public/ INTO
+# .next/standalone/ — Next's documented layout requirement — so we don't
+# ship duplicate top-level copies.
+#
+# That step ALSO dereferences every symlink inside .next/standalone. Next 16
+# standalone output (with serverExternalPackages) emits a hash-suffixed
+# symlink for PGlite under .next/standalone/.next/node_modules; a symlink
+# inside the asar payload breaks packaging on BOTH platforms (macOS asar
+# packer: "not a file"; Windows 7za: "path not found"). Dereferencing turns
+# the bundle into a plain file tree. See scripts/prepare-standalone.mjs.
 files:
   - electron/dist/**/*
   - .next/standalone/**/*
