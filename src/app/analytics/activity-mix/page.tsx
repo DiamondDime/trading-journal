@@ -81,7 +81,7 @@ const SPREAD_SUBTYPE_I18N_KEY: Record<SpreadType, MessageKey> = {
 
 function spreadTypeLabel(t: TFn, dbKey: string): string {
   const ui = SPREAD_TYPE_DB_TO_UI[dbKey];
-  return ui ? t(SPREAD_SUBTYPE_I18N_KEY[ui]) : dbKey;
+  return ui ? t(SPREAD_SUBTYPE_I18N_KEY[ui]) : dbKey.replace(/_/g, " ");
 }
 
 function fmtUsdCompact(v: number): string {

@@ -3,7 +3,7 @@
 import * as React from "react";
 import { Loader2, Tag } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { useT } from "@/lib/i18n/client";
+import { useT, useLocale } from "@/lib/i18n/client";
 import {
   Dialog,
   DialogContent,
@@ -16,10 +16,21 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import type { UntaggedActivityRow } from "@/lib/db/activity";
+import type { ActivityType } from "@/types/canonical";
+import type { MessageKey } from "@/lib/i18n/resolve";
 import {
   fetchUntaggedActivities,
   applyBulkRegimeTag,
 } from "@/app/analytics/regime/actions";
+
+const ACTIVITY_TYPE_I18N_KEY: Record<ActivityType, MessageKey> = {
+  spread: "activity.spread",
+  trade: "activity.trade",
+  sale: "activity.sale",
+  airdrop: "activity.airdrop",
+  yield_position: "activity.yieldPosition",
+  option: "activity.option",
+};
 
 interface Props {
   /** Total untagged count for the trigger label — avoids a client fetch just to show the number. */
@@ -30,6 +41,7 @@ type Step = "list" | "done";
 
 export function BulkRegimeTagDialog({ untaggedCount }: Props) {
   const t = useT();
+  const locale = useLocale();
   const [open, setOpen] = React.useState(false);
   const [step, setStep] = React.useState<Step>("list");
   const [activities, setActivities] = React.useState<UntaggedActivityRow[]>([]);
@@ -58,7 +70,7 @@ export function BulkRegimeTagDialog({ untaggedCount }: Props) {
       setLoading(false);
     }).catch(() => {
       if (cancelled) return;
-      setError("Failed to load activities");
+      setError(t("analytics.regime.bulkTagErrorLoad"));
       setLoading(false);
     });
 
@@ -98,7 +110,7 @@ export function BulkRegimeTagDialog({ untaggedCount }: Props) {
     const result = await applyBulkRegimeTag([...selected], tagInput.trim());
     setApplying(false);
     if (!result.ok) {
-      setError(result.error ?? "Failed to apply tag");
+      setError(result.error ?? t("analytics.regime.bulkTagErrorApply"));
       return;
     }
     setUpdatedCount(result.updated);
@@ -112,7 +124,8 @@ export function BulkRegimeTagDialog({ untaggedCount }: Props) {
     if (!iso) return "";
     const d = new Date(iso);
     if (!Number.isFinite(d.getTime())) return "";
-    return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+    const intl = locale === "ru" ? "ru-RU" : "en-US";
+    return d.toLocaleDateString(intl, { month: "short", day: "numeric", year: "numeric" });
   }
 
   return (
@@ -236,7 +249,9 @@ export function BulkRegimeTagDialog({ untaggedCount }: Props) {
                           {a.name}
                         </span>
                         <span className="shrink-0 font-mono text-[10px] text-text-tertiary uppercase tracking-[0.12em]">
-                          {a.type}
+                          {ACTIVITY_TYPE_I18N_KEY[a.type]
+                            ? t(ACTIVITY_TYPE_I18N_KEY[a.type])
+                            : a.type}
                         </span>
                         {a.openedAt && (
                           <span className="shrink-0 font-mono text-[10px] text-text-disabled">

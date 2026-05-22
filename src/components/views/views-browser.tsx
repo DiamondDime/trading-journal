@@ -25,10 +25,68 @@ interface ViewsBrowserProps {
   prefillFrom?: string;
 }
 
+/** Map a raw activity-type token to a localized label, falling back to the token. */
+function labelActivity(token: string, t: TFunction): string {
+  const map: Record<string, () => string> = {
+    spread:         () => t("activity.spread"),
+    trade:          () => t("activity.trade"),
+    sale:           () => t("activity.sale"),
+    airdrop:        () => t("activity.airdrop"),
+    yield_position: () => t("activity.yieldPosition"),
+    option:         () => t("activity.option"),
+  };
+  return map[token]?.() ?? token;
+}
+
+/** Map a raw spread-type token to a localized label, falling back to the token. */
+function labelSpreadType(token: string, t: TFunction): string {
+  const map: Record<string, () => string> = {
+    cash_carry:              () => t("spreadDetail.spreadType.cash_carry"),
+    funding:                 () => t("spreadDetail.spreadType.funding_capture"),
+    funding_capture:         () => t("spreadDetail.spreadType.funding_capture"),
+    cross_exchange:          () => t("spreadDetail.spreadType.cross_exchange_perp_arb"),
+    cross_exchange_perp_arb: () => t("spreadDetail.spreadType.cross_exchange_perp_arb"),
+    calendar:                () => t("spreadDetail.spreadType.calendar"),
+    dex_cex:                 () => t("spreadDetail.spreadType.dex_cex_arb"),
+    dex_cex_arb:             () => t("spreadDetail.spreadType.dex_cex_arb"),
+    custom:                  () => t("spreadDetail.spreadType.custom"),
+  };
+  return map[token]?.() ?? token;
+}
+
+/** Map a raw status token to a localized label, falling back to the token. */
+function labelStatus(token: string, t: TFunction): string {
+  const map: Record<string, () => string> = {
+    open:         () => t("status.open"),
+    closed:       () => t("status.closed"),
+    pending:      () => t("status.pending"),
+    vesting:      () => t("status.vesting"),
+    claimed:      () => t("status.claimed"),
+    winding_down: () => t("status.winding_down"),
+    unwinding:    () => t("status.unwinding"),
+    orphaned:     () => t("status.orphaned"),
+    liquidated:   () => t("status.liquidated"),
+    expired:      () => t("status.expired"),
+  };
+  return map[token]?.() ?? token;
+}
+
+/** Map a raw outcome token to a localized label, falling back to the token. */
+function labelOutcome(token: string, t: TFunction): string {
+  const map: Record<string, () => string> = {
+    winners:   () => t("outcome.winners"),
+    losers:    () => t("outcome.losers"),
+    breakeven: () => t("outcome.breakeven"),
+  };
+  return map[token]?.() ?? token;
+}
+
 /**
  * Pretty-print a saved view's URL for the description column. Strips the
  * leading "/spreads/archive" so the eye lands on the differentiating part of
- * the URL (the filter params). Empty string → localized "all activity".
+ * the URL (the filter params). Maps raw DB enum tokens through i18n labels
+ * so the display shows "Spread · Cash-and-carry" rather than
+ * "spread · cash_carry". Empty string → localized "all activity".
  */
 function prettyPath(qs: string, t: TFunction): string {
   if (!qs) return "—";
@@ -42,11 +100,23 @@ function prettyPath(qs: string, t: TFunction): string {
     const status = search.get("status");
     const outcome = search.get("outcome");
     const q = search.get("q");
-    if (activity) parts.push(activity.replace(/,/g, "+"));
-    if (type) parts.push(type.replace(/,/g, "+"));
+    if (activity)
+      parts.push(
+        activity.split(",").map((v) => labelActivity(v.trim(), t)).join("+"),
+      );
+    if (type)
+      parts.push(
+        type.split(",").map((v) => labelSpreadType(v.trim(), t)).join("+"),
+      );
     if (asset) parts.push(asset.replace(/,/g, "+"));
-    if (status) parts.push(status.replace(/,/g, "+"));
-    if (outcome) parts.push(outcome);
+    if (status)
+      parts.push(
+        status.split(",").map((v) => labelStatus(v.trim(), t)).join("+"),
+      );
+    if (outcome)
+      parts.push(
+        outcome.split(",").map((v) => labelOutcome(v.trim(), t)).join("+"),
+      );
     if (q) parts.push(`"${q}"`);
     if (parts.length === 0) return t("views.allActivity");
     return parts.join(" · ");

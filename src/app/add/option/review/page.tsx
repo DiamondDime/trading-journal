@@ -10,11 +10,23 @@ import {
   deriveOptionMetrics,
   type PayoffChartLegInput,
 } from "@/components/activity/option-payoff-chart";
-import { getT } from "@/lib/i18n/server";
+import { getT, getLocale } from "@/lib/i18n/server";
 import type { ActivityStatus } from "@/types/canonical";
 import { logOption } from "../actions";
+import { WizardTagInput } from "@/components/activity/wizard-tag-input";
+import { listTagsForActivity } from "@/lib/db/satellite";
+import { requireUser } from "@/lib/auth/server";
+import {
+  getStr,
+  parseNum,
+  parseTagsParam,
+  fmtUsd as fmtUsdShared,
+  fmtDate as fmtDateShared,
+} from "@/app/add/_lib/review-helpers";
 
 export const dynamic = "force-dynamic";
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 type Search = Promise<{ [key: string]: string | string[] | undefined }>;
 
@@ -59,18 +71,6 @@ const LEG_FIELDS = [
   "rho",
 ] as const;
 
-function getStr(sp: Awaited<Search>, key: string, fallback = ""): string {
-  const v = sp[key];
-  if (typeof v === "string") return v;
-  if (Array.isArray(v) && typeof v[0] === "string") return v[0];
-  return fallback;
-}
-
-function parseNum(s: string): number {
-  const n = Number(s);
-  return Number.isFinite(n) ? n : 0;
-}
-
 // Narrow a raw spread_style value to its typed label key. Falls back to
 // "custom" if the value doesn't match a known style — defensive against
 // bad GET-param round-trips.
@@ -87,30 +87,10 @@ function spreadStyleKey(
   }
 }
 
-function fmtUsd(n: number, signed = false): string {
+/** Locale-aware fixed-fraction number formatter. `intl` is the BCP-47 tag. */
+function fmtNumber(n: number, intl: string, fraction = 4): string {
   if (!Number.isFinite(n)) return "—";
-  const abs = Math.abs(n).toLocaleString("en-US", {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  });
-  const sign = signed ? (n >= 0 ? "+" : "−") : n < 0 ? "−" : "";
-  return `${sign}$${abs}`;
-}
-
-function fmtNumber(n: number, fraction = 4): string {
-  if (!Number.isFinite(n)) return "—";
-  return n.toLocaleString("en-US", { maximumFractionDigits: fraction });
-}
-
-function fmtDate(s: string): string {
-  if (!s) return "—";
-  const d = new Date(s);
-  if (!Number.isFinite(d.getTime())) return s;
-  return d.toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  });
+  return n.toLocaleString(intl, { maximumFractionDigits: fraction });
 }
 
 interface ExtractedLeg {
@@ -188,6 +168,11 @@ export default async function OptionReviewPage(props: {
   searchParams: Search;
 }) {
   const t = await getT();
+  const locale = await getLocale();
+  const intl = locale === "ru" ? "ru-RU" : "en-US";
+  const fmtUsd = (n: number, signed = false) => fmtUsdShared(n, locale, signed);
+  const fmtDate = (s: string) => fmtDateShared(s, locale);
+  const num = (n: number, fraction = 4) => fmtNumber(n, intl, fraction);
   const STEP_LABELS = [
     t("wizard.option.stepLabels.kind"),
     t("wizard.option.stepLabels.legs"),
@@ -195,6 +180,7 @@ export default async function OptionReviewPage(props: {
     t("wizard.option.stepLabels.review"),
   ] as const;
 
+  const { id: userId } = await requireUser();
   const sp = await props.searchParams;
   const legs = extractLegsFromSearch(sp);
   const subtype = getStr(sp, "subtype", "single_leg");
@@ -202,8 +188,16 @@ export default async function OptionReviewPage(props: {
   const spreadStyle = getStr(sp, "spread_style");
   const underlying = getStr(sp, "underlying") || "—";
   const exchange = getStr(sp, "exchange") || "—";
-  const isEditing = getStr(sp, "edit") !== "";
+  const editIdRaw = getStr(sp, "edit");
+  const isEditing = editIdRaw !== "";
   const errorMsg = getStr(sp, "error");
+
+  // Free-form tags pre-fill: edit mode reads existing activity_tag rows; a
+  // failed-submit round-trip rehydrates from the `tags` JSON query param.
+  const defaultTags =
+    isEditing && UUID_RE.test(editIdRaw)
+      ? await listTagsForActivity(userId, editIdRaw)
+      : parseTagsParam(getStr(sp, "tags"));
 
   // Build the payoff-chart inputs as f64s for math + display.
   const chartLegs: PayoffChartLegInput[] = legs.map((l) => ({
@@ -384,7 +378,7 @@ export default async function OptionReviewPage(props: {
             label={t("wizard.option.review.rows.breakevens")}
             value={
               metrics.breakevens.length > 0
-                ? metrics.breakevens.map((b) => fmtNumber(b, 2)).join(" / ")
+                ? metrics.breakevens.map((b) => num(b, 2)).join(" / ")
                 : "—"
             }
           />
@@ -400,19 +394,19 @@ export default async function OptionReviewPage(props: {
           </h2>
           <WizardSummaryRow
             label={t("wizard.option.review.rows.delta")}
-            value={fmtNumber(totalDelta, 3)}
+            value={num(totalDelta, 3)}
           />
           <WizardSummaryRow
             label={t("wizard.option.review.rows.gamma")}
-            value={fmtNumber(totalGamma, 4)}
+            value={num(totalGamma, 4)}
           />
           <WizardSummaryRow
             label={t("wizard.option.review.rows.theta")}
-            value={fmtNumber(totalTheta, 2)}
+            value={num(totalTheta, 2)}
           />
           <WizardSummaryRow
             label={t("wizard.option.review.rows.vega")}
-            value={fmtNumber(totalVega, 2)}
+            value={num(totalVega, 2)}
           />
         </div>
       </section>
@@ -467,20 +461,24 @@ export default async function OptionReviewPage(props: {
                   <td className="px-3 py-2">{leg.exchange}</td>
                   <td className="px-3 py-2">{fmtDate(leg.expiry)}</td>
                   <td className="px-3 py-2 text-right">
-                    {fmtNumber(parseNum(leg.strike), 2)}
+                    {num(parseNum(leg.strike), 2)}
                   </td>
-                  <td className="px-3 py-2 uppercase">{leg.option_kind}</td>
+                  <td className="px-3 py-2 uppercase">
+                    {leg.option_kind === "put"
+                      ? t("wizard.legList.put")
+                      : t("wizard.legList.call")}
+                  </td>
                   <td
                     className={
                       "px-3 py-2 uppercase " +
                       (leg.side === "long" ? "text-up" : "text-down")
                     }
                   >
-                    {leg.side}
+                    {leg.side === "short" ? t("side.short") : t("side.long")}
                   </td>
                   <td className="px-3 py-2 text-right">{leg.contracts}</td>
                   <td className="px-3 py-2 text-right">
-                    {fmtNumber(parseNum(leg.premium_per_contract), 2)}
+                    {num(parseNum(leg.premium_per_contract), 2)}
                   </td>
                 </tr>
               ))}
@@ -539,12 +537,12 @@ export default async function OptionReviewPage(props: {
           </h2>
           <WizardSummaryRow
             label={t("wizard.option.review.rows.targetPrice")}
-            value={getStr(sp, "target_price") ? fmtNumber(parseNum(getStr(sp, "target_price")), 2) : "—"}
+            value={getStr(sp, "target_price") ? num(parseNum(getStr(sp, "target_price")), 2) : "—"}
             editHref={editAllHref}
           />
           <WizardSummaryRow
             label={t("wizard.option.review.rows.stopPrice")}
-            value={getStr(sp, "stop_price") ? fmtNumber(parseNum(getStr(sp, "stop_price")), 2) : "—"}
+            value={getStr(sp, "stop_price") ? num(parseNum(getStr(sp, "stop_price")), 2) : "—"}
             editHref={editAllHref}
           />
           <WizardSummaryRow
@@ -604,6 +602,17 @@ export default async function OptionReviewPage(props: {
             />
           )),
         )}
+
+        {/* ── Tags ──────────────────────────────────────────────────────── */}
+        <div className="mb-8">
+          <h2 className="mb-1 font-serif text-[11px] font-semibold uppercase tracking-[0.18em] text-text-tertiary">
+            {t("fields.tags")}
+          </h2>
+          <p className="mb-3 font-serif text-[12px] italic leading-snug text-text-tertiary">
+            {t("activity.tags.idleEmpty")}
+          </p>
+          <WizardTagInput defaultTags={defaultTags} />
+        </div>
 
         <div className="flex items-center justify-between border-t border-border pt-6">
           <Link

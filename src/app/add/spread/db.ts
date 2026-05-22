@@ -21,6 +21,7 @@
  * "Decimals as strings" rule.
  */
 import { sql } from '@/lib/db/client';
+import { setTagsForActivity } from '@/lib/db/satellite';
 import type {
   ActivityId,
   ActivityStatus,
@@ -95,6 +96,8 @@ export interface CreateSpreadInput {
   legs: SpreadLegInput[];
   // manual-entry legs (position_id = NULL in DB — requires 20260519100000 migration)
   manualLegs?: ManualSpreadLegInput[];
+  /** Free-form activity_tag strings — set-replace semantics post-insert. */
+  tags?: readonly string[];
 }
 
 /** Per-leg patch shape used by update + edit-mode pre-fill. */
@@ -117,6 +120,8 @@ export interface UpdateSpreadInput {
   primaryBase?: string;
   legCount?: number;
   openIntent?: SpreadOpenIntent;
+  /** Free-form activity_tag strings — set-replace semantics post-update. */
+  tags?: readonly string[];
 }
 
 /** Read-back shape for the edit pre-fill path. */
@@ -337,6 +342,10 @@ export async function createSpreadV2(
     for (let i = 0; i < (input.manualLegs?.length ?? 0); i++) {
       const leg = input.manualLegs![i];
       if (!leg.symbol?.trim()) continue; // skip incomplete rows
+      // qty / entry / exit / fees stay as Decimal strings — Postgres parses
+      // numeric string literals natively. Routing them through Number() here
+      // would round-trip money through f64 and lose precision on large or
+      // many-decimal values, violating CLAUDE.md's "Decimals as strings".
       await tx`
         INSERT INTO public.spread_legs (
           activity_id, user_id, leg_index, role,
@@ -348,10 +357,10 @@ export async function createSpreadV2(
           ${leg.symbol.trim()},
           ${leg.exchangeLabel?.trim() ?? null},
           ${leg.side},
-          ${leg.qty ? Number(leg.qty) : null},
-          ${leg.entryPrice ? Number(leg.entryPrice) : null},
-          ${leg.exitPrice ? Number(leg.exitPrice) : null},
-          ${leg.feesUsd ? Number(leg.feesUsd) : null},
+          ${leg.qty ?? null},
+          ${leg.entryPrice ?? null},
+          ${leg.exitPrice ?? null},
+          ${leg.feesUsd ?? null},
           ${leg.instrumentType ?? null}
         )
       `;
@@ -359,6 +368,12 @@ export async function createSpreadV2(
 
     return activity.id;
   });
+
+  // Free-form tags via the satellite helper — runs after the transaction so
+  // the ownership check sees the freshly-committed activity row.
+  if (input.tags && input.tags.length > 0) {
+    await setTagsForActivity(userId, activityId, input.tags);
+  }
 
   return { id: activityId };
 }
@@ -396,7 +411,7 @@ export async function updateSpreadV2(
     if (dateErr) throw new Error(dateErr);
   }
 
-  return sql.begin(async (tx) => {
+  const ok = await sql.begin(async (tx) => {
     // 1. Supertype patch (and ownership gate)
     const parentPatches: Record<string, unknown> = {};
     if (patch.name !== undefined) parentPatches.name = patch.name;
@@ -472,6 +487,17 @@ export async function updateSpreadV2(
 
     return true;
   });
+
+  if (!ok) return false;
+
+  // Free-form tags — set-replace semantics (deletes + reinserts). Only runs
+  // when the caller passed a tags array; an undefined tags field leaves the
+  // existing activity_tag rows untouched.
+  if (patch.tags !== undefined) {
+    await setTagsForActivity(userId, activityId, patch.tags);
+  }
+
+  return true;
 }
 
 // ============================================================================

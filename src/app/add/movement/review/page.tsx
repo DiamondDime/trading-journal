@@ -13,6 +13,8 @@ export const dynamic = "force-dynamic";
 
 type Search = Promise<{ [key: string]: string | string[] | undefined }>;
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 function getStr(sp: Awaited<Search>, key: string, fallback = ""): string {
   const v = sp[key];
   if (typeof v === "string") return v;
@@ -120,6 +122,11 @@ export default async function MovementReviewPage(props: { searchParams: Search }
       ),
     ),
   ).toString()}`;
+
+  // Edit mode is signalled by a UUID `editId` carried forward from
+  // /movement-events/<id>?edit. The submit CTA must say "Save" (not "Log
+  // movement") so the user isn't told they're creating a new row.
+  const isEditing = UUID_RE.test(getStr(sp, "editId"));
 
   const kindI18nKey = kind === "nft_trade" ? "nftTrade" : kind;
   const kindLabel = t(`wizard.movement.kinds.${kindI18nKey}.title` as const);
@@ -291,7 +298,9 @@ export default async function MovementReviewPage(props: { searchParams: Search }
             {t("common.back")}
           </Link>
           <WizardSubmitButton>
-            {t("wizard.movement.review.nav.logMovement")}
+            {isEditing
+              ? t("common.save")
+              : t("wizard.movement.review.nav.logMovement")}
           </WizardSubmitButton>
         </div>
       </form>

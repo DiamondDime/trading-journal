@@ -122,7 +122,7 @@ const OVERLAY: Record<string, Overlay> = {
   okx: {
     requiresPassphrase: true,
     logoUrl: "/exchanges/okx.png",
-    referralUrl: "https://okx.com/ru-ae/join/44845570",
+    referralUrl: "https://okx.com/en-us/join/44845570",
     referralBlurb: "partners.blurb.okx",
     rebatePct: 20,
     welcomeBonus: "partners.bonus.okx",
@@ -137,7 +137,7 @@ const OVERLAY: Record<string, Overlay> = {
     requiresPassphrase: true,
     logoUrl: "/exchanges/bitget.png",
     referralUrl:
-      "https://www.bitgetapp.com/ru/referral/register?clacCode=QA7PEZ1K&from=%2Fru%2Fevents%2Freferral-all-program&source=events&utmSource=PremierInviter",
+      "https://www.bitgetapp.com/en/referral/register?clacCode=QA7PEZ1K&from=%2Fen%2Fevents%2Freferral-all-program&source=events&utmSource=PremierInviter",
     referralBlurb: "partners.blurb.bitget",
     rebatePct: 30,
     welcomeBonus: "partners.bonus.bitget",
@@ -222,7 +222,7 @@ const OVERLAY: Record<string, Overlay> = {
   htx: {
     requiresPassphrase: false,
     logoUrl: "/exchanges/htx.png",
-    referralUrl: "https://www.htx.com.ph/invite/ru-ru/1f?invite_code=9vxje223",
+    referralUrl: "https://www.htx.com.ph/invite/en-us/1f?invite_code=9vxje223",
     referralBlurb: "partners.blurb.htx",
     rebatePct: 50,
     welcomeBonus: "partners.bonus.htx",

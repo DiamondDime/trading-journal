@@ -85,7 +85,6 @@ export default async function AirdropFieldsPage(props: {
     eligibilityConfidence: string;
     note: string;
     regimeTags: string;
-    customTags: string;
     strategyTag: string;
     serial: string;
   }> = {};
@@ -127,7 +126,6 @@ export default async function AirdropFieldsPage(props: {
         eligibilityConfidence: confidence ?? "",
         note: text, // legacy alias — `note` slot in the form maps to eligibility text
         regimeTags: activity.regimeTags.join(", "),
-        customTags: activity.customTags.join(", "),
         strategyTag: activity.strategyTag ?? "",
         serial: activity.id.slice(0, 4).toUpperCase(),
       };
@@ -177,7 +175,6 @@ export default async function AirdropFieldsPage(props: {
       dbDefaults.eligibilityConfidence ||
       (isPending ? "expected_unconfirmed" : "claimed_confirmed"),
     regimeTags: getStr(sp, "regimeTags") || dbDefaults.regimeTags || "",
-    customTags: getStr(sp, "customTags") || dbDefaults.customTags || "",
     strategyTag: getStr(sp, "strategyTag") || dbDefaults.strategyTag || "",
   };
 
@@ -582,19 +579,9 @@ export default async function AirdropFieldsPage(props: {
             autoComplete="off"
           />
         </WizardField>
-        <WizardField
-          label={t("wizard.airdrop.fields.customTags.label")}
-          htmlFor="customTags"
-          helper={t("wizard.airdrop.fields.customTags.helper")}
-        >
-          <WizardInput
-            id="customTags"
-            name="customTags"
-            defaultValue={defaults.customTags}
-            placeholder={t("wizard.airdrop.fields.customTags.placeholder")}
-            autoComplete="off"
-          />
-        </WizardField>
+        {/* Free-form tags are collected on the review step via WizardTagInput
+            (writes to activity_tag) — kept off /fields so there is exactly one
+            tag-entry surface, matching the other wizards. */}
 
         {/* ── Note (legacy free-form, kept for compatibility) ─────── */}
         <WizardField

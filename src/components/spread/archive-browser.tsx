@@ -34,8 +34,6 @@ import {
   type Asset,
   type SpreadType,
   type SpreadRow,
-  ACTIVITY_TYPE_LABELS,
-  SPREAD_TYPE_LABELS,
   STATUS_STYLES,
   fmtCapital,
   fmtUsd,
@@ -77,14 +75,21 @@ const TYPE_ORDER: SpreadType[] = [
 
 const STATUS_ORDER: ActivityStatus[] = ["closed", "expired", "claimed", "vested"];
 
-function describeActivity(a: Activity, retroDropLabel: string): string {
+function describeActivity(
+  a: Activity,
+  retroDropLabel: string,
+  spreadTypeLowerFn: (st: string) => string,
+  sideFn: (s: string) => string,
+  saleKindFn: (k: string) => string,
+  instrumentFn: (k: string) => string,
+): string {
   switch (a.type) {
     case "spread":
-      return `${SPREAD_TYPE_LABELS[a.spreadType]} · ${a.venues}`;
+      return `${spreadTypeLowerFn(a.spreadType)} · ${a.venues}`;
     case "trade":
-      return `${a.exchange} · ${a.instrument} · ${a.side}`;
+      return `${a.exchange} · ${instrumentFn(a.instrument)} · ${sideFn(a.side)}`;
     case "sale":
-      return `${a.saleKind.toUpperCase()} · ${a.venue}`;
+      return `${saleKindFn(a.saleKind)} · ${a.venue}`;
     case "airdrop":
       return `${a.protocol} · ${retroDropLabel}`;
   }
@@ -105,11 +110,16 @@ function rowToListItem(
   retroDropLabel: string,
   statusLabel: string,
   activityBadgeLabel: string,
+  spreadTypeLowerFn: (st: string) => string,
+  sideFn: (s: string) => string,
+  saleKindFn: (k: string) => string,
+  instrumentFn: (k: string) => string,
+  locale: string,
 ): SpreadListItem {
   return {
     serial: r.serial,
     name: r.name,
-    typeLabel: describeActivity(r, retroDropLabel),
+    typeLabel: describeActivity(r, retroDropLabel, spreadTypeLowerFn, sideFn, saleKindFn, instrumentFn),
     status: r.status,
     statusLabel,
     activityBadgeLabel,
@@ -119,7 +129,7 @@ function rowToListItem(
     summary:
       r.type === "airdrop"
         ? `${r.daysLabel} · ${r.note}`
-        : `${fmtCapital(r.capital)} · ${r.daysLabel} · ${r.note}`,
+        : `${fmtCapital(r.capital, locale)} · ${r.daysLabel} · ${r.note}`,
     href: r.href,
     activityType: r.type,
     venues: venueOf(r),
@@ -232,8 +242,15 @@ function rowAsset(a: Activity): Asset | null {
   return null;
 }
 
-function rowSearchHaystack(a: Activity, retroDropLabel: string): string {
-  const parts: string[] = [a.name, a.serial, describeActivity(a, retroDropLabel), a.note];
+function rowSearchHaystack(
+  a: Activity,
+  retroDropLabel: string,
+  spreadTypeLowerFn: (st: string) => string,
+  sideFn: (s: string) => string,
+  saleKindFn: (k: string) => string,
+  instrumentFn: (k: string) => string,
+): string {
+  const parts: string[] = [a.name, a.serial, describeActivity(a, retroDropLabel, spreadTypeLowerFn, sideFn, saleKindFn, instrumentFn), a.note];
   if (a.type === "spread") parts.push(a.variant, a.venues);
   if (a.type === "trade") parts.push(a.symbol, a.exchange);
   if (a.type === "sale") parts.push(a.venue, a.saleKind);
@@ -246,7 +263,23 @@ export function ArchiveBrowser({ data }: { data: Activity[] }) {
   const searchParams = useSearchParams();
   const t = useT();
   const locale = useLocale();
+  const intlLocale = locale === "ru" ? "ru-RU" : "en-US";
   const retroDropLabel = t("spreadsList.retroDrop");
+
+  const spreadTypeLowerFn = (st: string): string => {
+    const key = st.replace(/_([a-z])/g, (_, c: string) => c.toUpperCase()) as
+      | "cashCarry" | "calendar" | "funding" | "crossExchange" | "dexCex";
+    return t(`spreadsList.spreadTypeLower.${key}` as Parameters<typeof t>[0]) || st;
+  };
+  const sideFn = (s: string): string =>
+    t(`side.${s}` as Parameters<typeof t>[0]) || s;
+  const saleKindFn = (k: string): string =>
+    t(`saleKind.${k}` as Parameters<typeof t>[0]) || k;
+  const instrumentFn = (k: string): string => {
+    // TradeRow.instrument uses "future"; i18n key is "dated_future".
+    const key = k === "future" ? "instrumentKind.dated_future" : `instrumentKind.${k}`;
+    return t(key as Parameters<typeof t>[0]) || k;
+  };
 
   // Earliest closed activity → "since" date for the footer. Empty dataset
   // falls back to the localized "today" label so we never render a hardcoded
@@ -262,13 +295,12 @@ export function ArchiveBrowser({ data }: { data: Activity[] }) {
     // closedAt is a YYYY-MM-DD string in archive-data display rows.
     const d = new Date(`${earliest.slice(0, 10)}T00:00:00`);
     if (!Number.isFinite(d.getTime())) return t("spreadsList.sinceToday");
-    const intlLocale = locale === "ru" ? "ru-RU" : "en-US";
     return d.toLocaleDateString(intlLocale, {
       month: "short",
       day: "numeric",
       year: "numeric",
     });
-  }, [data, locale, t]);
+  }, [data, intlLocale, locale, t]);
 
   // Initial state is decoded from URL search params on mount only. Once
   // mounted, chip toggles drive `router.replace` (see effect below) — we
@@ -377,9 +409,10 @@ export function ArchiveBrowser({ data }: { data: Activity[] }) {
     }
     const q = search.trim().toLowerCase();
     if (q) {
-      rows = rows.filter((r) => rowSearchHaystack(r, retroDropLabel).includes(q));
+      rows = rows.filter((r) => rowSearchHaystack(r, retroDropLabel, spreadTypeLowerFn, sideFn, saleKindFn, instrumentFn).includes(q));
     }
     return rows;
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [data, activityFilters, spreadTypeFilters, spreadSubtypeApplicable, assetFilters, statusFilters, outcome, strategyFilter, search, retroDropLabel]);
 
   const sorted = React.useMemo(() => {
@@ -389,7 +422,11 @@ export function ArchiveBrowser({ data }: { data: Activity[] }) {
         case "serial":
           return (a.serialNum - b.serialNum) * dir;
         case "closed":
-          return a.closedAt.localeCompare(b.closedAt) * dir;
+          // closedAt is YYYY-MM-DD (10 chars) from the adapter; localeCompare
+          // is lexicographically correct for ISO date strings. If a full ISO
+          // timestamp ever appears, slice(0,10) ensures only the date part is
+          // compared so the sort remains stable.
+          return a.closedAt.slice(0, 10).localeCompare(b.closedAt.slice(0, 10)) * dir;
         case "net_pnl":
           return (a.netPnl - b.netPnl) * dir;
         case "capital":
@@ -542,9 +579,25 @@ export function ArchiveBrowser({ data }: { data: Activity[] }) {
             </button>
           </div>
 
-          <button className="flex items-center gap-1.5 rounded-md border border-border bg-surface px-3 py-1.5 font-mono text-[10px] uppercase tracking-[0.14em] text-text-secondary hover:bg-subtle">
+          <a
+            href={`/api/activities/export${(() => {
+              const q = buildUrlQuery({
+                activity: activityFilters,
+                type: spreadTypeFilters,
+                asset: assetFilters,
+                status: statusFilters,
+                outcome,
+                strategy: strategyFilter,
+                sort,
+                q: search,
+              });
+              return q ? `?${q}` : "";
+            })()}`}
+            download
+            className="flex items-center gap-1.5 rounded-md border border-border bg-surface px-3 py-1.5 font-mono text-[10px] uppercase tracking-[0.14em] text-text-secondary hover:bg-subtle"
+          >
             <Download className="h-3 w-3" /> {t("archive.exportCsv")}
-          </button>
+          </a>
         </div>
       </header>
 
@@ -557,7 +610,7 @@ export function ArchiveBrowser({ data }: { data: Activity[] }) {
               (tt) => (activityCounts.get(tt) ?? 0) > 0
             ).map((tt) => ({
               key: tt,
-              label: ACTIVITY_TYPE_LABELS[tt],
+              label: t(`spreadListCard.activityBadge.${tt}` as Parameters<typeof t>[0]),
               count: activityCounts.get(tt) ?? 0,
               active: activityFilters.has(tt),
               onClick: () =>
@@ -567,14 +620,18 @@ export function ArchiveBrowser({ data }: { data: Activity[] }) {
           {spreadSubtypeApplicable && (
             <FilterRow
               label={t("archive.filters.type")}
-              chips={TYPE_ORDER.map((tt) => ({
-                key: tt,
-                label: SPREAD_TYPE_LABELS[tt],
-                count: spreadSubtypeCounts.get(tt) ?? 0,
-                active: spreadTypeFilters.has(tt),
-                onClick: () =>
-                  setSpreadTypeFilters((s) => toggleSetValue(s, tt)),
-              })).filter((c) => c.count > 0)}
+              chips={TYPE_ORDER.map((tt) => {
+                const camelKey = tt.replace(/_([a-z])/g, (_, c: string) => c.toUpperCase()) as
+                  | "cashCarry" | "calendar" | "funding" | "crossExchange" | "dexCex";
+                return {
+                  key: tt,
+                  label: t(`spreadsList.spreadTypeLower.${camelKey}` as Parameters<typeof t>[0]),
+                  count: spreadSubtypeCounts.get(tt) ?? 0,
+                  active: spreadTypeFilters.has(tt),
+                  onClick: () =>
+                    setSpreadTypeFilters((s) => toggleSetValue(s, tt)),
+                };
+              }).filter((c) => c.count > 0)}
             />
           )}
           <FilterRow
@@ -599,7 +656,7 @@ export function ArchiveBrowser({ data }: { data: Activity[] }) {
               (s) => (statusCounts.get(s) ?? 0) > 0
             ).map((s) => ({
               key: s,
-              label: STATUS_STYLES[s].label,
+              label: t(`status.${s}` as Parameters<typeof t>[0]),
               count: statusCounts.get(s) ?? 0,
               active: statusFilters.has(s),
               onClick: () =>
@@ -634,7 +691,7 @@ export function ArchiveBrowser({ data }: { data: Activity[] }) {
                   className="inline-flex items-center gap-1.5 rounded-md border border-signature/40 bg-signature/10 px-2 py-1 font-mono text-[10px] uppercase tracking-[0.14em] text-signature hover:bg-signature/15"
                   aria-label={`Clear strategy filter ${strategyFilter}`}
                 >
-                  <span className="text-text-tertiary">strategy:</span>
+                  <span className="text-text-tertiary">{t("archive.strategyPrefix")}:</span>
                   <span className="normal-case tracking-normal text-text">{strategyFilter}</span>
                   <X className="h-3 w-3" />
                 </button>
@@ -677,7 +734,7 @@ export function ArchiveBrowser({ data }: { data: Activity[] }) {
         />
         <StatCell
           label={t("archive.stats.netPnl")}
-          value={fmtUsd(stats.net, true)}
+          value={fmtUsd(stats.net, true, 2, intlLocale)}
           tone={stats.net >= 0 ? "up" : "down"}
         />
         <StatCell
@@ -685,10 +742,10 @@ export function ArchiveBrowser({ data }: { data: Activity[] }) {
           value={`${stats.winRate.toFixed(1)}%`}
           sub={t("archive.stats.winLoss", { w: stats.winners, l: stats.losers })}
         />
-        <StatCell label={t("archive.stats.capital")} value={fmtCapital(stats.cap)} />
+        <StatCell label={t("archive.stats.capital")} value={fmtCapital(stats.cap, intlLocale)} />
         <StatCell
           label={t("archive.stats.avgPerActivity")}
-          value={fmtUsd(stats.avgPerTrade, true)}
+          value={fmtUsd(stats.avgPerTrade, true, 2, intlLocale)}
           tone={stats.avgPerTrade >= 0 ? "up" : "down"}
         />
       </section>
@@ -703,6 +760,11 @@ export function ArchiveBrowser({ data }: { data: Activity[] }) {
             sort={sort}
             onSort={handleSort}
             retroDropLabel={retroDropLabel}
+            spreadTypeLowerFn={spreadTypeLowerFn}
+            sideFn={sideFn}
+            saleKindFn={saleKindFn}
+            instrumentFn={instrumentFn}
+            intlLocale={intlLocale}
           />
         ) : (
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
@@ -714,6 +776,11 @@ export function ArchiveBrowser({ data }: { data: Activity[] }) {
                   retroDropLabel,
                   t(`status.${r.status}` as const),
                   t(`spreadListCard.activityBadge.${r.type}` as const),
+                  spreadTypeLowerFn,
+                  sideFn,
+                  saleKindFn,
+                  instrumentFn,
+                  intlLocale,
                 )}
               />
             ))}
@@ -864,11 +931,21 @@ function ArchiveTable({
   sort,
   onSort,
   retroDropLabel,
+  spreadTypeLowerFn,
+  sideFn,
+  saleKindFn,
+  instrumentFn,
+  intlLocale,
 }: {
   rows: Activity[];
   sort: { key: SortKey; dir: "asc" | "desc" };
   onSort: (key: SortKey) => void;
   retroDropLabel: string;
+  spreadTypeLowerFn: (st: string) => string;
+  sideFn: (s: string) => string;
+  saleKindFn: (k: string) => string;
+  instrumentFn: (k: string) => string;
+  intlLocale: string;
 }) {
   const t = useT();
   return (
@@ -913,6 +990,11 @@ function ArchiveTable({
               key={r.id}
               row={r}
               retroDropLabel={retroDropLabel}
+              spreadTypeLowerFn={spreadTypeLowerFn}
+              sideFn={sideFn}
+              saleKindFn={saleKindFn}
+              instrumentFn={instrumentFn}
+              intlLocale={intlLocale}
             />
           ))}
         </TableBody>
@@ -973,14 +1055,25 @@ function SortableHeader({
 function ArchiveTableRow({
   row,
   retroDropLabel,
+  spreadTypeLowerFn,
+  sideFn,
+  saleKindFn,
+  instrumentFn,
+  intlLocale,
 }: {
   row: Activity;
   retroDropLabel: string;
+  spreadTypeLowerFn: (st: string) => string;
+  sideFn: (s: string) => string;
+  saleKindFn: (k: string) => string;
+  instrumentFn: (k: string) => string;
+  intlLocale: string;
 }) {
   const router = useRouter();
+  const t = useT();
   const status = STATUS_STYLES[row.status];
   const toneClass = row.tone === "up" ? "text-up" : "text-down";
-  const subtitle = describeActivity(row, retroDropLabel);
+  const subtitle = describeActivity(row, retroDropLabel, spreadTypeLowerFn, sideFn, saleKindFn, instrumentFn);
   const venues = venueOf(row);
 
   return (
@@ -1009,7 +1102,9 @@ function ArchiveTableRow({
             {row.name}
           </Link>
           <span className="flex items-center gap-1.5 font-mono text-[10px] text-text-tertiary">
-            <span className="mr-0.5 text-text-tertiary/70">{row.type.toUpperCase()}</span>
+            <span className="mr-0.5 text-text-tertiary/70">
+              {t(`spreadListCard.activityBadge.${row.type}` as Parameters<typeof t>[0])}
+            </span>
             {venues && <ExchangeVenuesChips venues={venues} size="sm" />}
             <span>· {subtitle}</span>
           </span>
@@ -1019,12 +1114,12 @@ function ArchiveTableRow({
         <span className="inline-flex items-center gap-1.5 text-[11px] text-text-tertiary">
           <span className={cn("h-1.5 w-1.5 rounded-full", status.dot)} />
           <span className="font-mono uppercase tracking-[0.12em]">
-            {status.label}
+            {t(`status.${row.status}` as Parameters<typeof t>[0])}
           </span>
         </span>
       </TableCell>
       <TableCell className="text-right font-mono tabular-nums text-[12px] text-text">
-        {row.capital > 0 ? fmtCapital(row.capital) : "—"}
+        {row.capital > 0 ? fmtCapital(row.capital, intlLocale) : "—"}
       </TableCell>
       <TableCell className="text-right font-mono tabular-nums text-[12px] text-text-secondary">
         {row.daysLabel}
@@ -1048,7 +1143,7 @@ function ArchiveTableRow({
           toneClass
         )}
       >
-        {fmtUsd(row.netPnl, true)}
+        {fmtUsd(row.netPnl, true, 2, intlLocale)}
       </TableCell>
     </TableRow>
   );

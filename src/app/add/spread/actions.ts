@@ -14,6 +14,7 @@ import {
   type ManualSpreadLegInput,
 } from "./db";
 import type { ActivityStatus, SpreadType, SpreadVariant } from "@/types/canonical";
+import { parseTagsFormValue } from "../_lib/review-helpers";
 
 // ---------------------------------------------------------------------------
 // Schema-aware decoding of the FormData payload.
@@ -228,6 +229,8 @@ interface DecodedPayload {
   primaryBase: string;
   matcher: string;
   source: string;
+  /** Free-form activity_tag strings parsed from the WizardTagInput payload. */
+  tags: string[];
 }
 
 function decodePayload(raw: Record<string, string>, form: FormData): DecodedPayload {
@@ -301,6 +304,7 @@ function decodePayload(raw: Record<string, string>, form: FormData): DecodedPayl
     primaryBase,
     matcher: (raw.matcher ?? "").trim(),
     source: (raw.source ?? "").trim(),
+    tags: parseTagsFormValue(raw.tags),
   };
 }
 
@@ -415,6 +419,7 @@ export async function logSpread(formData: FormData): Promise<void> {
         primaryBase: payload.primaryBase,
         legCount,
         openIntent: payload.openIntent,
+        tags: payload.tags,
       };
       const ok = await updateSpreadV2(userId, editId, patch);
       if (!ok) throw new Error("Spread not found or not owned by you");
@@ -447,6 +452,7 @@ export async function logSpread(formData: FormData): Promise<void> {
               intendedPrice: l.intendedPrice,
             })),
         manualLegs: isManualSource ? payload.manualLegs : [],
+        tags: payload.tags,
       };
       const result = await createSpreadV2(userId, input);
       activityId = result.id;

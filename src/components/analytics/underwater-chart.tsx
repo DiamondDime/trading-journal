@@ -12,6 +12,7 @@ import {
 } from "recharts";
 import { useT } from "@/lib/i18n/client";
 import type { MessageKey } from "@/lib/i18n/resolve";
+import { fmtUsdShort } from "@/components/analytics/_format";
 
 /**
  * Underwater drawdown chart — for each closing event, plots
@@ -42,15 +43,6 @@ function fmtPct(v: number): string {
   if (!Number.isFinite(v)) return "—";
   const sign = v > 0 ? "+" : v < 0 ? "−" : "";
   return `${sign}${Math.abs(v * 100).toFixed(1)}%`;
-}
-
-function fmtUsdShort(v: number): string {
-  const sign = v < 0 ? "−" : v > 0 ? "+" : "";
-  const abs = Math.abs(v);
-  if (abs >= 1_000_000) return `${sign}$${(abs / 1_000_000).toFixed(1)}M`;
-  if (abs >= 10_000) return `${sign}$${(abs / 1000).toFixed(0)}k`;
-  if (abs >= 1_000) return `${sign}$${(abs / 1000).toFixed(1)}k`;
-  return `${sign}$${abs.toFixed(0)}`;
 }
 
 export function UnderwaterChart({ points = [] }: Props) {

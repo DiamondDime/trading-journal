@@ -47,14 +47,15 @@ export function FeedSelectionBar() {
       setCount(checked.length);
     }
     recount();
-    form.addEventListener("change", recount);
-    // Also handle the form being reset externally (e.g. browser autofill).
-    form.addEventListener("reset", () => {
+    function onReset() {
       // Reset runs before the inputs actually update — defer one frame.
       window.requestAnimationFrame(recount);
-    });
+    }
+    form.addEventListener("change", recount);
+    form.addEventListener("reset", onReset);
     return () => {
       form.removeEventListener("change", recount);
+      form.removeEventListener("reset", onReset);
     };
   }, []);
 

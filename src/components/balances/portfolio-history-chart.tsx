@@ -34,6 +34,9 @@ const RANGES = [
   { key: "all", labelKey: "balances.history.ranges.all" },
 ] as const;
 
+// Unsigned compact USD formatter. Portfolio value is an absolute amount, not
+// a signed delta — it must NOT carry a leading "+" the way the P&L formatter
+// in analytics/_format.ts does. Kept deliberately separate; do not merge.
 function fmtUsdShort(v: number): string {
   const sign = v < 0 ? "−" : "";
   const abs = Math.abs(v);

@@ -10,6 +10,7 @@ import {
 import { listRemindersWithActivity } from "@/lib/db/reminders";
 import { RemindersSection } from "@/components/reminders/reminders-section";
 import { fmtUsd } from "@/lib/data/archive-data";
+import { stripSettleSuffix } from "@/lib/format/instrument";
 import { cn } from "@/lib/utils";
 
 /**
@@ -136,7 +137,15 @@ export default async function WatchlistPage() {
                 vesting: t("status.vesting"),
                 open: t("status.open"),
                 winding_down: t("status.winding_down"),
+                orphaned: t("status.orphaned"),
+                closed: t("status.closed"),
+                expired: t("status.expired"),
+                claimed: t("status.claimed"),
+                unwinding: t("status.unwinding"),
+                liquidated: t("status.liquidated"),
+                vested: t("status.vested"),
               }}
+              pnlLabel={t("watchlist.pnlLabel")}
               countdownT={{
                 today: t("watchlist.countdown.today"),
                 tomorrow: t("watchlist.countdown.tomorrow"),
@@ -182,7 +191,8 @@ interface SectionProps {
   items: WatchlistRow[];
   intlLocale: string;
   emptyCopy: string;
-  statusLabels: Record<"pending" | "vesting" | "open" | "winding_down", string>;
+  statusLabels: Record<string, string>;
+  pnlLabel: string;
   countdownT: {
     today: string;
     tomorrow: string;
@@ -197,6 +207,7 @@ function WatchlistSection({
   intlLocale,
   emptyCopy,
   statusLabels,
+  pnlLabel,
   countdownT,
 }: SectionProps) {
   return (
@@ -236,6 +247,7 @@ function WatchlistSection({
               deadlineLabel={descriptor.deadlineLabel}
               intlLocale={intlLocale}
               statusLabels={statusLabels}
+              pnlLabel={pnlLabel}
               countdownT={countdownT}
             />
           ))}
@@ -252,6 +264,7 @@ interface RowItemProps {
   deadlineLabel: string;
   intlLocale: string;
   statusLabels: SectionProps["statusLabels"];
+  pnlLabel: string;
   countdownT: SectionProps["countdownT"];
 }
 
@@ -260,10 +273,10 @@ function WatchlistRowItem({
   deadlineLabel,
   intlLocale,
   statusLabels,
+  pnlLabel,
   countdownT,
 }: RowItemProps) {
-  const status = row.status as keyof typeof statusLabels;
-  const statusLabel = statusLabels[status] ?? row.status;
+  const statusLabel = statusLabels[row.status] ?? row.status;
   const statusDot = STATUS_DOT[row.status] ?? "bg-text-tertiary";
 
   const tone =
@@ -314,7 +327,7 @@ function WatchlistRowItem({
                 <>
                   <span className="font-mono text-text-tertiary">·</span>
                   <span className="font-mono text-text-secondary tabular-nums">
-                    {row.primarySymbol}
+                    {stripSettleSuffix(row.primarySymbol)}
                   </span>
                 </>
               )}
@@ -356,7 +369,7 @@ function WatchlistRowItem({
 
           <div className="flex flex-col items-end justify-between gap-1 shrink-0 w-[112px]">
             <p className="font-mono text-[9px] uppercase tracking-[0.16em] text-text-tertiary">
-              {row.netPnlUsd != null ? "P&L" : ""}
+              {row.netPnlUsd != null ? pnlLabel : ""}
             </p>
             <p
               className={cn(

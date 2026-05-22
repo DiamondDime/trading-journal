@@ -9,10 +9,23 @@ import { getT, getLocale } from "@/lib/i18n/server";
 import { logYieldPosition } from "../actions";
 import type { Locale } from "@/lib/i18n/types";
 import type { TFunction } from "@/lib/i18n/resolve";
+import { WizardTagInput } from "@/components/activity/wizard-tag-input";
+import { listTagsForActivity } from "@/lib/db/satellite";
+import { requireUser } from "@/lib/auth/server";
+import {
+  getStr,
+  parseNum,
+  parseTagsParam,
+  intlLocale,
+  fmtUsd as fmtUsdShared,
+  fmtDate as fmtDateShared,
+} from "@/app/add/_lib/review-helpers";
 
 export const dynamic = "force-dynamic";
 
 type Search = Promise<{ [key: string]: string | string[] | undefined }>;
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 const ALL_FIELDS = [
   // common
@@ -33,7 +46,6 @@ const ALL_FIELDS = [
   "status",
   "strategyTag",
   "regimeTags",
-  "customTags",
   "name",
   // stake / validator
   "validatorAddress",
@@ -61,44 +73,16 @@ const ALL_FIELDS = [
   "edit",
 ] as const;
 
-function getStr(sp: Awaited<Search>, key: string, fallback = ""): string {
-  const v = sp[key];
-  return typeof v === "string" ? v : fallback;
-}
-
-function parseNum(s: string): number {
-  const n = Number(s);
-  return Number.isFinite(n) ? n : 0;
-}
-
-function intlLocale(locale: Locale): string {
-  return locale === "ru" ? "ru-RU" : "en-US";
-}
-
-function fmtUsd(n: number, locale: Locale, signed = false): string {
-  const abs = Math.abs(n).toLocaleString(intlLocale(locale), {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  });
-  const sign = signed ? (n >= 0 ? "+" : "−") : n < 0 ? "−" : "";
-  return `${sign}$${abs}`;
-}
+// Locale-threaded USD / date formatting comes from the shared review helpers
+// (imported as fmtUsdShared / fmtDateShared). fmtPct stays local — it's the
+// only yield-specific formatter.
+const fmtUsd = fmtUsdShared;
+const fmtDate = fmtDateShared;
 
 function fmtPct(n: number, signed = true): string {
   const abs = Math.abs(n).toFixed(2);
   const sign = signed ? (n >= 0 ? "+" : "−") : n < 0 ? "−" : "";
   return `${sign}${abs}%`;
-}
-
-function fmtDate(iso: string, locale: Locale): string {
-  if (!iso) return "—";
-  const d = new Date(iso);
-  if (!Number.isFinite(d.getTime())) return iso;
-  return d.toLocaleDateString(intlLocale(locale), {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  });
 }
 
 /**
@@ -142,7 +126,6 @@ export default async function YieldReviewPage(props: { searchParams: Search }) {
     status: getStr(sp, "status", "open"),
     strategyTag: getStr(sp, "strategyTag"),
     regimeTags: getStr(sp, "regimeTags"),
-    customTags: getStr(sp, "customTags"),
     name: getStr(sp, "name"),
     // kind-specific
     validatorAddress: getStr(sp, "validatorAddress"),
@@ -195,7 +178,16 @@ export default async function YieldReviewPage(props: { searchParams: Search }) {
       ),
     ),
   ).toString()}`;
-  const isEditing = getStr(sp, "edit") !== "";
+  const editIdRaw = getStr(sp, "edit");
+  const isEditing = editIdRaw !== "";
+
+  // Free-form tags pre-fill: edit mode reads existing activity_tag rows; a
+  // failed-submit round-trip rehydrates from the `tags` JSON query param.
+  const { id: userId } = await requireUser();
+  const defaultTags =
+    isEditing && UUID_RE.test(editIdRaw)
+      ? await listTagsForActivity(userId, editIdRaw)
+      : parseTagsParam(getStr(sp, "tags"));
 
   // Status is a 1:1 hand-off — the wizard already enforced one of
   // (open|unwinding|closed) in the field step's <WizardSelect>.
@@ -458,6 +450,17 @@ export default async function YieldReviewPage(props: { searchParams: Search }) {
         {ALL_FIELDS.map((k) => (
           <input key={k} type="hidden" name={k} value={getStr(sp, k)} />
         ))}
+
+        {/* ── Tags ──────────────────────────────────────────────────────── */}
+        <div className="mb-8">
+          <h2 className="mb-1 font-serif text-[11px] font-semibold uppercase tracking-[0.18em] text-text-tertiary">
+            {t("fields.tags")}
+          </h2>
+          <p className="mb-3 font-serif text-[12px] italic leading-snug text-text-tertiary">
+            {t("activity.tags.idleEmpty")}
+          </p>
+          <WizardTagInput defaultTags={defaultTags} />
+        </div>
 
         <div className="flex items-center justify-between border-t border-border pt-6">
           <Link

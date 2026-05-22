@@ -18,6 +18,7 @@
  * for money or qty (project convention, see CLAUDE.md).
  */
 import { sql } from "@/lib/db/client";
+import { setTagsForActivity } from "@/lib/db/satellite";
 import type { CreateYieldPositionData } from "@/lib/db/zod-schemas";
 import type { ActivityId, Decimal, YieldKind, YieldKindMeta } from "@/types/canonical";
 
@@ -65,6 +66,10 @@ function deriveYieldName(input: CreateYieldPositionData): string {
 export async function createYieldPosition(
   userId: string,
   input: CreateYieldPositionData,
+  /** Free-form activity_tag strings — written post-insert via the satellite
+   *  helper. Separate from the schema body because the v5 zod schema doesn't
+   *  carry a tags field. */
+  tags: readonly string[] = [],
 ): Promise<{ id: ActivityId }> {
   const openedIso = new Date(input.opened_at).toISOString();
   const closedIso = input.closed_at
@@ -119,6 +124,12 @@ export async function createYieldPosition(
 
     return activity.id;
   });
+
+  // Free-form tags via the satellite helper — after the transaction so the
+  // ownership check sees the committed activity row.
+  if (tags.length > 0) {
+    await setTagsForActivity(userId, activityId, tags);
+  }
 
   return { id: activityId as ActivityId };
 }
@@ -212,6 +223,8 @@ export interface YieldPositionPatch {
   regimeTags?: string[];
   customTags?: string[];
   strategyTag?: string | null;
+  /** Free-form activity_tag strings — set-replace semantics post-update. */
+  tags?: readonly string[];
   // Sub-kind-specific JSON payload, validated by the caller via
   // YieldKindMetaSchema. The wizard's edit flow always rewrites the meta
   // payload wholesale — kind itself is immutable post-create (changing it
@@ -233,7 +246,7 @@ export async function updateYieldPosition(
   patch: YieldPositionPatch,
 ): Promise<boolean> {
   if (!UUID_RE.test(activityId)) return false;
-  return sql.begin(async (tx) => {
+  const ok = await sql.begin(async (tx) => {
     // 1. Ownership check + supertype patch
     const parentPatches: Record<string, unknown> = {};
     if (patch.name !== undefined) parentPatches.name = patch.name;
@@ -302,6 +315,16 @@ export async function updateYieldPosition(
 
     return true;
   });
+
+  if (!ok) return false;
+
+  // Free-form tags — set-replace semantics. Skipped when the caller didn't
+  // pass a tags array (e.g. the detail-page close/unwind actions).
+  if (patch.tags !== undefined) {
+    await setTagsForActivity(userId, activityId, patch.tags);
+  }
+
+  return true;
 }
 
 // ============================================================================

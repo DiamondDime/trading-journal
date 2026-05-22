@@ -105,12 +105,12 @@ function toIso(v: unknown): string {
   return "";
 }
 
-function shortDate(input: unknown): { label: string; ymd: string } {
+function shortDate(input: unknown, locale = "en-US"): { label: string; ymd: string } {
   const iso = toIso(input);
   const d = new Date(iso);
   return {
     label: Number.isFinite(d.getTime())
-      ? d.toLocaleDateString("en-US", { month: "short", day: "numeric" })
+      ? d.toLocaleDateString(locale, { month: "short", day: "numeric" })
       : "—",
     ymd: iso.slice(0, 10),
   };
@@ -202,10 +202,11 @@ export interface SubtypeMeta {
 export function feedRowToActivity(
   row: ActivityFeedRowDb,
   meta?: SubtypeMeta,
+  locale = "en-US",
 ): Activity {
   const { serial, serialNum } = makeSerial(row.id, row.type);
   const closedRef = row.closedAt ?? row.openedAt ?? row.createdAt;
-  const { label: closedLabel, ymd: closedAt } = shortDate(closedRef);
+  const { label: closedLabel, ymd: closedAt } = shortDate(closedRef, locale);
   const { daysHeld, daysLabel } = daysBetween(row.openedAt, row.closedAt);
 
   const capital = Number(row.capitalDeployedUsd ?? 0);
@@ -333,6 +334,7 @@ function hrefFor(id: string, type: ActivityType): string {
 export function feedRowsToActivities(
   rows: ActivityFeedRowDb[],
   metaById: Map<string, SubtypeMeta> = new Map(),
+  locale = "en-US",
 ): Activity[] {
-  return rows.map((r) => feedRowToActivity(r, metaById.get(r.id)));
+  return rows.map((r) => feedRowToActivity(r, metaById.get(r.id), locale));
 }

@@ -102,7 +102,7 @@ export default async function BalancesPage({ searchParams }: PageProps) {
       <div className="space-y-8 px-8 py-8 lg:px-12">
         {/* Drift banner — surfaced when journal fills math conflicts with reported balances. */}
         {balances.drift.length > 0 && (
-          <DriftBanner drift={balances.drift} t={t} />
+          <DriftBanner drift={balances.drift} t={t} intlLocale={intlLocale} />
         )}
 
         {!hasAnything ? (
@@ -191,9 +191,11 @@ export default async function BalancesPage({ searchParams }: PageProps) {
 function DriftBanner({
   drift,
   t,
+  intlLocale,
 }: {
   drift: DriftHint[];
   t: Awaited<ReturnType<typeof getT>>;
+  intlLocale: string;
 }) {
   const headliner = drift[0];
   const more = drift.length - 1;
@@ -206,7 +208,7 @@ function DriftBanner({
   const logMovementHref =
     `/add/movement/fields?kind=transfer` +
     `&asset=${encodeURIComponent(headliner.asset)}` +
-    `&amount=${Number.isFinite(absDriftQty) ? absDriftQty : ""}` +
+    `${Number.isFinite(absDriftQty) && absDriftQty > 0 ? `&amount=${absDriftQty}` : ""}` +
     `&prefill=drift`;
 
   return (
@@ -218,8 +220,8 @@ function DriftBanner({
         <p className="mt-1 font-mono text-[12px] tabular-nums text-text-secondary">
           {t("balances.drift.assetLine", {
             asset: fmtBase(headliner.asset),
-            expected: fmtQtyHint(headliner.expectedQty, headliner.asset),
-            reported: fmtQtyHint(headliner.reportedQty, headliner.asset),
+            expected: fmtQtyHint(headliner.expectedQty, headliner.asset, intlLocale),
+            reported: fmtQtyHint(headliner.reportedQty, headliner.asset, intlLocale),
             pct: (headliner.driftPct * 100).toFixed(1),
           })}
         </p>
@@ -255,11 +257,11 @@ function fmtBase(asset: string): string {
   return asset.toUpperCase();
 }
 
-function fmtQtyHint(qty: string, asset: string): string {
+function fmtQtyHint(qty: string, asset: string, intlLocale: string): string {
   const n = Number(qty);
   if (!Number.isFinite(n)) return "—";
   const dp = Math.abs(n) >= 100 ? 2 : Math.abs(n) >= 1 ? 4 : 6;
-  return `${n.toLocaleString("en-US", { maximumFractionDigits: dp })} ${asset}`;
+  return `${n.toLocaleString(intlLocale, { maximumFractionDigits: dp })} ${asset}`;
 }
 
 function EmptyState({ t }: { t: Awaited<ReturnType<typeof getT>> }) {

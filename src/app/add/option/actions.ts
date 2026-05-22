@@ -11,6 +11,7 @@ import {
   type OptionCloseReason,
   type OptionExitPremium,
 } from "./db";
+import { parseTagsFormValue } from "../_lib/review-helpers";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 // Match `legs[i].field` shape that <WizardLegList> emits.
@@ -90,7 +91,8 @@ export async function logOption(formData: FormData): Promise<void> {
       !k.startsWith("legs[") &&
       k !== "edit" &&
       k !== "regime_tags" &&
-      k !== "custom_tags",
+      k !== "custom_tags" &&
+      k !== "tags",
   );
   const cleanedRaw: Record<string, string> = {};
   for (const [k, v] of scalarEntries) {
@@ -117,6 +119,8 @@ export async function logOption(formData: FormData): Promise<void> {
 
     const regimeTags = parseTagList(formData.get("regime_tags")?.toString());
     const customTags = parseTagList(formData.get("custom_tags")?.toString());
+    // Free-form tags from the review step's WizardTagInput (JSON array).
+    const tags = parseTagsFormValue(formData.get("tags"));
 
     const body = {
       ...cleanedRaw,
@@ -141,11 +145,11 @@ export async function logOption(formData: FormData): Promise<void> {
 
     if (editId) {
       isEdit = true;
-      const ok = await updateOption(userId, editId, input);
+      const ok = await updateOption(userId, editId, input, tags);
       if (!ok) throw new Error("Option not found or not owned by you");
       activityId = editId;
     } else {
-      const { id } = await createOption(userId, input);
+      const { id } = await createOption(userId, input, tags);
       activityId = id;
     }
   } catch (e) {
@@ -170,7 +174,9 @@ export async function logOption(formData: FormData): Promise<void> {
     for (const [k, v] of formData.entries()) {
       if (typeof v !== "string") continue;
       if (k.startsWith("legs[")) params.append(k, v);
-      if (k === "regime_tags" || k === "custom_tags") params.set(k, v);
+      if (k === "regime_tags" || k === "custom_tags" || k === "tags") {
+        params.set(k, v);
+      }
     }
     params.set("error", redirectError ?? "Unknown error logging option");
     if (editId) params.set("edit", editId);

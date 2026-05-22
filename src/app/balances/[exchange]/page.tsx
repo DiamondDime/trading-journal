@@ -64,6 +64,7 @@ function fmtUsd(value: string | null | undefined, locale: string): string {
 function fmtQty(value: string, locale: string): string {
   const n = Number(value);
   if (!Number.isFinite(n)) return "—";
+  if (n === 0) return "0";
   const dp = Math.abs(n) >= 100 ? 2 : Math.abs(n) >= 1 ? 4 : 8;
   return n.toLocaleString(locale, { maximumFractionDigits: dp });
 }

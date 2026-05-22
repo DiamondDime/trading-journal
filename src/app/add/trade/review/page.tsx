@@ -6,10 +6,22 @@ import { WizardErrorBanner } from "@/components/wizard/wizard-error-banner";
 import { WizardCardPreview } from "@/components/wizard/wizard-card-preview";
 import { WizardSubmitButton } from "@/components/wizard/wizard-submit-button";
 import { logTrade } from "../actions";
-import { getT } from "@/lib/i18n/server";
+import { getT, getLocale } from "@/lib/i18n/server";
 import type { ActivityStatus, TradeKind } from "@/types/canonical";
+import { WizardTagInput } from "@/components/activity/wizard-tag-input";
+import { listTagsForActivity } from "@/lib/db/satellite";
+import { requireUser } from "@/lib/auth/server";
+import {
+  getStr,
+  parseNum,
+  parseTagsParam,
+  fmtUsd as fmtUsdShared,
+  fmtDateTime,
+} from "@/app/add/_lib/review-helpers";
 
 export const dynamic = "force-dynamic";
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 // Field names the form passes through. Mirrors /fields/page.tsx hidden + named
 // inputs. Order is irrelevant — these become hidden inputs on the submit form.
@@ -59,28 +71,7 @@ const TRADE_FIELDS = [
 
 type Search = Promise<{ [key: string]: string | string[] | undefined }>;
 
-function getStr(sp: Awaited<Search>, key: string, fallback = ""): string {
-  const v = sp[key];
-  if (typeof v === "string") return v;
-  return fallback;
-}
-
 // ── Pure helpers ────────────────────────────────────────────────────────────
-
-function fmtUsd(n: number, signed = false): string {
-  if (!Number.isFinite(n)) return "—";
-  const abs = Math.abs(n).toLocaleString("en-US", {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  });
-  const sign = signed ? (n >= 0 ? "+" : "−") : n < 0 ? "−" : "";
-  return `${sign}$${abs}`;
-}
-
-function parseNum(s: string): number {
-  const n = Number(s);
-  return Number.isFinite(n) ? n : 0;
-}
 
 function daysBetween(openIso: string, closeIso: string): number {
   if (!openIso || !closeIso) return 0;
@@ -103,23 +94,20 @@ function fmtDays(d: number, t: Awaited<ReturnType<typeof getT>>): string {
   return t("wizard.trade.review.duration.days", { value: d.toFixed(0) });
 }
 
-function fmtDate(iso: string): string {
-  if (!iso) return "—";
-  const d = new Date(iso);
-  if (!Number.isFinite(d.getTime())) return iso;
-  return d.toLocaleString("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-}
-
 function deriveTradeName(symbol: string, side: string, kind: string): string {
   const base = symbol.split(/[-/_]/)[0] || symbol;
   return `${base} ${side} · ${kind}`;
 }
+
+// NFT marketplace brand labels. These are proper nouns, not translatable
+// copy — the fields-page <select> hardcodes the same display strings. `other`
+// falls through to the i18n "other" string at the callsite.
+const MARKETPLACE_LABELS: Record<string, string> = {
+  opensea: "OpenSea",
+  blur: "Blur",
+  magic_eden: "Magic Eden",
+  tensor: "Tensor",
+};
 
 /**
  * Realized P&L preview. Mirrors createTradeFromWizard's server-side formula
@@ -159,7 +147,12 @@ function isActivityStatus(v: string): v is ActivityStatus {
 
 export default async function TradeReviewPage(props: { searchParams: Search }) {
   const t = await getT();
+  const locale = await getLocale();
+  const intl = locale === "ru" ? "ru-RU" : "en-US";
+  const fmtUsd = (n: number, signed = false) => fmtUsdShared(n, locale, signed);
+  const fmtDate = (iso: string) => fmtDateTime(iso, locale);
   const sp = await props.searchParams;
+  const { id: userId } = await requireUser();
 
   const STEP_LABELS = [
     t("wizard.trade.stepLabels.source"),
@@ -231,7 +224,15 @@ export default async function TradeReviewPage(props: { searchParams: Search }) {
       TRADE_FIELDS.map((k) => [k, getStr(sp, k)] as const).filter(([, val]) => val !== ""),
     ),
   ).toString()}`;
-  const isEditing = getStr(sp, "edit") !== "";
+  const editIdRaw = getStr(sp, "edit");
+  const isEditing = editIdRaw !== "";
+
+  // Free-form tags pre-fill: edit mode reads existing activity_tag rows; a
+  // failed-submit round-trip rehydrates from the `tags` JSON query param.
+  const defaultTags =
+    isEditing && UUID_RE.test(editIdRaw)
+      ? await listTagsForActivity(userId, editIdRaw)
+      : parseTagsParam(getStr(sp, "tags"));
 
   const headlineTone: "up" | "down" | "neutral" = isOpen
     ? "neutral"
@@ -350,7 +351,13 @@ export default async function TradeReviewPage(props: { searchParams: Search }) {
         />
         <WizardSummaryRow
           label={t("wizard.trade.review.labels.instrument")}
-          value={v.instrument || "—"}
+          value={
+            v.instrument === "perp" ||
+            v.instrument === "spot" ||
+            v.instrument === "future"
+              ? t(`wizard.trade.fields.instrument.${v.instrument}` as const)
+              : v.instrument || "—"
+          }
           editHref={editAllHref}
         />
         <WizardSummaryRow
@@ -376,7 +383,7 @@ export default async function TradeReviewPage(props: { searchParams: Search }) {
         />
         <WizardSummaryRow
           label={t("wizard.trade.review.labels.qty")}
-          value={qty > 0 ? qty.toLocaleString("en-US", { maximumSignificantDigits: 6 }) : "—"}
+          value={qty > 0 ? qty.toLocaleString(intl, { maximumSignificantDigits: 6 }) : "—"}
           editHref={editAllHref}
         />
         <WizardSummaryRow
@@ -446,7 +453,11 @@ export default async function TradeReviewPage(props: { searchParams: Search }) {
             />
             <WizardSummaryRow
               label={t("wizard.trade.review.labels.marginMode")}
-              value={v.marginMode || "—"}
+              value={
+                v.marginMode === "cross" || v.marginMode === "isolated"
+                  ? t(`wizard.trade.fields.marginMode.${v.marginMode}` as const)
+                  : v.marginMode || "—"
+              }
               editHref={editAllHref}
             />
             <WizardSummaryRow
@@ -484,7 +495,14 @@ export default async function TradeReviewPage(props: { searchParams: Search }) {
             />
             <WizardSummaryRow
               label={t("wizard.trade.review.labels.escrowMethod")}
-              value={v.escrowMethod || "—"}
+              value={
+                v.escrowMethod === "direct" ||
+                v.escrowMethod === "custodian" ||
+                v.escrowMethod === "multisig" ||
+                v.escrowMethod === "other"
+                  ? t(`wizard.trade.fields.escrow.${v.escrowMethod}` as const)
+                  : v.escrowMethod || "—"
+              }
               editHref={editAllHref}
             />
             <WizardSummaryRow
@@ -512,7 +530,12 @@ export default async function TradeReviewPage(props: { searchParams: Search }) {
             />
             <WizardSummaryRow
               label={t("wizard.trade.review.labels.marketplace")}
-              value={v.marketplace || "—"}
+              value={
+                MARKETPLACE_LABELS[v.marketplace] ??
+                (v.marketplace === "other"
+                  ? t("wizard.trade.fields.escrow.other")
+                  : v.marketplace || "—")
+              }
               editHref={editAllHref}
             />
             <WizardSummaryRow
@@ -590,6 +613,15 @@ export default async function TradeReviewPage(props: { searchParams: Search }) {
         {TRADE_FIELDS.map((k) => (
           <input key={k} type="hidden" name={k} value={getStr(sp, k)} />
         ))}
+
+        {/* ── Tags ──────────────────────────────────────────────────────── */}
+        <div className="mb-8">
+          <SummaryHeading>{t("fields.tags")}</SummaryHeading>
+          <p className="mb-3 -mt-1 font-serif text-[12px] italic leading-snug text-text-tertiary">
+            {t("activity.tags.idleEmpty")}
+          </p>
+          <WizardTagInput defaultTags={defaultTags} />
+        </div>
 
         <div className="flex items-center justify-between border-t border-border pt-6">
           <Link

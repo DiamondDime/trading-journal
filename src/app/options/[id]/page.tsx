@@ -34,9 +34,9 @@ import { SetReminderButton } from "@/components/reminders/set-reminder-button";
 
 export const dynamic = "force-dynamic";
 
-function fmtUsd(n: number, signed = false): string {
+function fmtUsd(n: number, intlLocale: string, signed = false): string {
   if (!Number.isFinite(n)) return "—";
-  const abs = Math.abs(n).toLocaleString("en-US", {
+  const abs = Math.abs(n).toLocaleString(intlLocale, {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   });
@@ -221,7 +221,7 @@ export default async function OptionDetailPage({
                   }`}
                   style={{ fontSize: "clamp(56px, 9vw, 96px)" }}
                 >
-                  {fmtUsd(heroValue, true)}
+                  {fmtUsd(heroValue, intlLocale, true)}
                 </span>
                 <span className="font-serif text-2xl font-normal text-text-tertiary">
                   {isClosed
@@ -232,8 +232,8 @@ export default async function OptionDetailPage({
               {!isClosed && maxProfit !== null && maxLoss !== null && (
                 <p className="mt-3 font-mono text-sm text-text-secondary">
                   {t("optionDetail.maxProfitLossLine", {
-                    maxProfit: fmtUsd(maxProfit),
-                    maxLoss: fmtUsd(maxLoss),
+                    maxProfit: fmtUsd(maxProfit, intlLocale),
+                    maxLoss: fmtUsd(maxLoss, intlLocale),
                   })}
                 </p>
               )}
@@ -304,7 +304,9 @@ export default async function OptionDetailPage({
                         {fmtNumber(parseDec(leg.strike), 2, intlLocale)}
                       </TableCell>
                       <TableCell className="font-mono uppercase">
-                        {leg.optionKind}
+                        {leg.optionKind === "call"
+                          ? t("wizard.legList.call")
+                          : t("wizard.legList.put")}
                       </TableCell>
                       <TableCell
                         className={
@@ -345,8 +347,8 @@ export default async function OptionDetailPage({
                   <ExecRow label={t("optionDetail.row.targetPrice")} value={option.targetPrice ? fmtNumber(parseDec(option.targetPrice), 2, intlLocale) : "—"} mono />
                   <ExecRow label={t("optionDetail.row.stopPrice")} value={option.stopPrice ? fmtNumber(parseDec(option.stopPrice), 2, intlLocale) : "—"} mono />
                   <ExecRow label={t("optionDetail.row.ivAtOpen")} value={option.ivAtOpen ?? "—"} mono />
-                  <ExecRow label={t("optionDetail.row.maxProfit")} value={maxProfit === null ? "—" : fmtUsd(maxProfit)} mono />
-                  <ExecRow label={t("optionDetail.row.maxLoss")} value={maxLoss === null ? "—" : fmtUsd(maxLoss)} mono />
+                  <ExecRow label={t("optionDetail.row.maxProfit")} value={maxProfit === null ? "—" : fmtUsd(maxProfit, intlLocale)} mono />
+                  <ExecRow label={t("optionDetail.row.maxLoss")} value={maxLoss === null ? "—" : fmtUsd(maxLoss, intlLocale)} mono />
                   <ExecRow label={t("optionDetail.row.openedAt")} value={fmtDate(activity.openedAt, intlLocale)} mono />
                 </TableBody>
               </Table>
@@ -422,11 +424,11 @@ export default async function OptionDetailPage({
           )}
 
           {/* ── Tags ──────────────────────────────────────────── */}
-          {(activity.regimeTags.length > 0 || initialTags.length > 0) && (
-            <section className="mt-14">
-              <h2 className="font-serif text-xs font-semibold uppercase tracking-[0.18em] text-text-tertiary">
-                {t("optionDetail.sections.tags")}
-              </h2>
+          <section className="mt-14">
+            <h2 className="font-serif text-xs font-semibold uppercase tracking-[0.18em] text-text-tertiary">
+              {t("optionDetail.sections.tags")}
+            </h2>
+            {activity.regimeTags.length > 0 && (
               <div className="mt-4 flex flex-wrap gap-2">
                 {activity.regimeTags.map((tag) => (
                   <span
@@ -437,11 +439,11 @@ export default async function OptionDetailPage({
                   </span>
                 ))}
               </div>
-              <div className="mt-4">
-                <TagEditor activityId={activity.id} initialTags={initialTags} />
-              </div>
-            </section>
-          )}
+            )}
+            <div className="mt-4">
+              <TagEditor activityId={activity.id} initialTags={initialTags} />
+            </div>
+          </section>
 
           {/* ── Screenshots ───────────────────────────────────── */}
           <section className="mt-14">

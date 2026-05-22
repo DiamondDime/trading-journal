@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { requireUser } from "@/lib/auth/server";
 import { CreateAirdropBody } from "@/lib/db/zod-schemas";
 import { createAirdropV5, updateAirdropV5, type AirdropExtras } from "./db";
+import { parseTagsFormValue } from "../_lib/review-helpers";
 
 function stripNextInternals(entries: [string, FormDataEntryValue][]): [string, FormDataEntryValue][] {
   return entries.filter(([k]) => !k.startsWith("$ACTION_"));
@@ -23,7 +24,7 @@ const EXTRAS_KEYS = new Set([
   "validation",
   "error",
   "eligibilityConfidence",
-  "customTags",
+  "tags",
   "strategyTag",
 ]);
 
@@ -31,7 +32,7 @@ function extractExtras(raw: Record<string, string>): AirdropExtras {
   const confidence = raw.eligibilityConfidence ?? "";
   return {
     strategyTag: raw.strategyTag?.trim() ? raw.strategyTag.trim() : null,
-    customTagsRaw: raw.customTags ?? "",
+    tags: parseTagsFormValue(raw.tags),
     eligibilityConfidence:
       confidence === "snapshot_listed" ||
       confidence === "expected_unconfirmed" ||

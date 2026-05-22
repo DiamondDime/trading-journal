@@ -21,6 +21,7 @@
  */
 import 'server-only';
 import { sql } from '@/lib/db/client';
+import { setTagsForActivity } from '@/lib/db/satellite';
 import type { CreateOptionData, OptionLegData } from '@/lib/db/zod-schemas';
 import type {
   ActivityId,
@@ -178,6 +179,10 @@ function deriveStatus(
 export async function createOption(
   userId: string,
   input: CreateOptionData,
+  /** Free-form activity_tag strings — written post-insert via the satellite
+   *  helper. Separate from the schema body since CreateOptionBody has no tags
+   *  field. */
+  tags: readonly string[] = [],
 ): Promise<{ id: string }> {
   const openedIso = new Date(input.opened_at).toISOString();
   const closedIso = input.closed_at
@@ -292,6 +297,12 @@ export async function createOption(
     return activity.id;
   });
 
+  // Free-form tags via the satellite helper — after the transaction so the
+  // ownership check sees the committed activity row.
+  if (tags.length > 0) {
+    await setTagsForActivity(userId, activityId, tags);
+  }
+
   return { id: activityId };
 }
 
@@ -303,6 +314,8 @@ export async function updateOption(
   userId: string,
   activityId: string,
   input: CreateOptionData,
+  /** Free-form activity_tag strings — set-replace semantics post-update. */
+  tags: readonly string[] = [],
 ): Promise<boolean> {
   const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
   if (!UUID_RE.test(activityId)) return false;
@@ -406,11 +419,15 @@ export async function updateOption(
         `;
       }
     });
-    return true;
   } catch (e) {
     if (e instanceof Error && e.message === 'not_found') return false;
     throw e;
   }
+
+  // Free-form tags — set-replace semantics. Runs after a successful commit.
+  await setTagsForActivity(userId, activityId, tags);
+
+  return true;
 }
 
 // ============================================================================

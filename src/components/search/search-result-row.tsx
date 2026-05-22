@@ -29,6 +29,7 @@ export async function SearchResultRow({
   const statusLabel = t(statusKey(item.status));
   const typeLabel = t(typeKey(item.type));
   const tone = headlineTone(item.headlineValue, item.headlineFormat);
+  const formattedHeadline = formatHeadline(item.headlineValue, item.headlineFormat, effectiveIntlLocale);
 
   return (
     <Link
@@ -83,7 +84,7 @@ export async function SearchResultRow({
                 : 'text-text',
             )}
           >
-            {formatHeadline(item.headlineValue, item.headlineFormat)}
+            {formattedHeadline}
           </p>
           <p className="mt-1 font-mono text-[10px] uppercase tracking-[0.14em] text-text-tertiary">
             {item.openedAt ? formatRelative(item.openedAt, effectiveIntlLocale) : '—'}
@@ -145,7 +146,7 @@ function typeKey(t: SearchResultItem['type']):
  * `v_activity_feed` (apr_pct/apy_pct as %, mtm_x as multiplier, usd in
  * signed dollars, bps as basis points).
  */
-function formatHeadline(value: string | null, format: HeadlineFormat): string {
+function formatHeadline(value: string | null, format: HeadlineFormat, intlLocale: string): string {
   if (value == null) return '—';
   const n = Number(value);
   if (!Number.isFinite(n)) return '—';
@@ -159,7 +160,7 @@ function formatHeadline(value: string | null, format: HeadlineFormat): string {
       return `${n.toFixed(2)}×`;
     case 'usd': {
       const sign = n >= 0 ? '+$' : '−$';
-      return `${sign}${Math.abs(n).toLocaleString('en-US', {
+      return `${sign}${Math.abs(n).toLocaleString(intlLocale, {
         minimumFractionDigits: 2,
         maximumFractionDigits: 2,
       })}`;

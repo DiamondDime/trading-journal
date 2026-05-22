@@ -15,6 +15,7 @@ import {
 import type { HoldTimeBucketRow } from "@/lib/db/activity";
 import { useT } from "@/lib/i18n/client";
 import type { MessageKey } from "@/lib/i18n/resolve";
+import { fmtUsdShort } from "@/components/analytics/_format";
 
 /**
  * Hold-time histogram with secondary line for avg P&L per bucket.
@@ -42,16 +43,6 @@ const BUCKET_LABEL_KEY: Record<HoldTimeBucketRow["bucket"], MessageKey> = {
   "1-3m": "analytics.activityMix.holdBuckets.position",
   "3m+": "analytics.activityMix.holdBuckets.longHold",
 };
-
-function fmtUsdShort(v: number): string {
-  if (!Number.isFinite(v)) return "—";
-  const sign = v < 0 ? "−" : v > 0 ? "+" : "";
-  const abs = Math.abs(v);
-  if (abs >= 1_000_000) return `${sign}$${(abs / 1_000_000).toFixed(1)}M`;
-  if (abs >= 10_000) return `${sign}$${(abs / 1000).toFixed(0)}k`;
-  if (abs >= 1_000) return `${sign}$${(abs / 1000).toFixed(1)}k`;
-  return `${sign}$${abs.toFixed(0)}`;
-}
 
 export function HoldTimeHistogram({ rows }: Props) {
   const t = useT();

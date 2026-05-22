@@ -35,6 +35,7 @@ export interface TradeFeedRow {
   realizedPnlQuote: string;
   totalFeesQuote: string;
   totalFundingQuote: string;
+  netPnlQuote: string;
   quoteCurrency: string;
   marginMode: 'cross' | 'isolated' | 'spot';
   leverage: string | null;
@@ -355,6 +356,7 @@ export async function listTradeFeed(
     realizedPnlQuote: r.realizedPnlQuote,
     totalFeesQuote: r.totalFeesQuote,
     totalFundingQuote: r.totalFundingQuote,
+    netPnlQuote: r.netPnlQuote,
     quoteCurrency: r.quoteCurrency,
     marginMode: r.marginMode,
     leverage: r.leverage,

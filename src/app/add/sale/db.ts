@@ -18,6 +18,7 @@
  * the custom variant — JSON-encoded into the jsonb column.
  */
 import { sql } from "@/lib/db/client";
+import { setTagsForActivity } from "@/lib/db/satellite";
 import type {
   VestingSchedule,
   Decimal,
@@ -208,6 +209,8 @@ export interface SaleExtendedInput {
   tier: string | null;
   bonusPct: string | null;
   strategyTag: string | null;
+  /** Free-form activity_tag strings — set-replace semantics post-write. */
+  tags: readonly string[];
 }
 
 /**
@@ -294,6 +297,12 @@ export async function createSaleFull(
     return activity.id;
   });
 
+  // Free-form tags via the satellite helper — after the transaction so the
+  // ownership check sees the committed activity row.
+  if (extra.tags.length > 0) {
+    await setTagsForActivity(userId, activityId, extra.tags);
+  }
+
   return { id: activityId };
 }
 
@@ -328,7 +337,7 @@ export async function updateSaleFull(
     linearDays,
   );
 
-  return sql.begin(async (tx) => {
+  const ok = await sql.begin(async (tx) => {
     const parentRows = await tx<{ id: string }[]>`
       UPDATE public.activity
       SET
@@ -371,4 +380,12 @@ export async function updateSaleFull(
 
     return true;
   });
+
+  if (!ok) return false;
+
+  // Free-form tags — set-replace semantics. The wizard always sends the
+  // current chip set, so this is correct for the edit path too.
+  await setTagsForActivity(userId, activityId, extra.tags);
+
+  return true;
 }

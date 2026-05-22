@@ -11,6 +11,7 @@ import {
   updateYieldPosition,
   recordRewardSnapshot,
 } from "./db";
+import { parseTagsFormValue } from "../_lib/review-helpers";
 
 // ─── Form-internal helpers ──────────────────────────────────────────────────
 
@@ -181,6 +182,8 @@ export async function logYieldPosition(formData: FormData): Promise<void> {
     const { id: userId } = await requireUser();
     const shaped = buildCreateInput(formData);
     const input: CreateYieldPositionData = CreateYieldPositionBody.parse(shaped);
+    // Free-form tags from the review step's WizardTagInput (JSON array).
+    const tags = parseTagsFormValue(formData.get("tags"));
 
     if (editId) {
       isEdit = true;
@@ -198,11 +201,12 @@ export async function logYieldPosition(formData: FormData): Promise<void> {
         customTags: input.custom_tags as string[],
         strategyTag: input.strategy_tag ?? null,
         kindMeta: input.kind_meta,
+        tags,
       });
       if (!ok) throw new Error("Yield position not found or not owned by you");
       activityId = editId;
     } else {
-      const { id } = await createYieldPosition(userId, input);
+      const { id } = await createYieldPosition(userId, input, tags);
       activityId = id;
     }
   } catch (e) {

@@ -35,8 +35,11 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
  *  in `actions.ts` and passes them in via this extras bag. */
 export interface AirdropExtras {
   strategyTag: string | null;
-  /** Free-form custom tags, comma-separated string from the form. */
-  customTagsRaw: string;
+  /**
+   * Free-form activity_tag strings from the WizardTagInput's JSON payload.
+   * Set-replace semantics — the full chip set every time.
+   */
+  tags: readonly string[];
   /** Confidence radio value — folded into eligibility_reason as a prefix. */
   eligibilityConfidence: 'snapshot_listed' | 'expected_unconfirmed' | 'claimed_confirmed' | null;
 }
@@ -104,21 +107,6 @@ export function parseEligibilityReason(raw: string | null | undefined): {
   };
 }
 
-/** Normalised customTags pulled from the wizard's comma-separated input. */
-function normaliseCustomTags(raw: string): string[] {
-  const seen = new Set<string>();
-  const out: string[] = [];
-  for (const part of raw.split(',')) {
-    const t = part.trim();
-    if (!t || t.length > 60) continue;
-    const key = t.toLowerCase();
-    if (seen.has(key)) continue;
-    seen.add(key);
-    out.push(t);
-  }
-  return out;
-}
-
 // ============================================================================
 // createAirdropV5 — insert a fresh airdrop with every v5 column populated.
 // ============================================================================
@@ -162,8 +150,6 @@ export async function createAirdropV5(
     extras.eligibilityConfidence,
     nullableStr(input.eligibilityReason ?? input.note),
   );
-
-  const customTags = normaliseCustomTags(extras.customTagsRaw);
 
   const activityId = await sql.begin(async (tx) => {
     const [activity] = await tx<{ id: string }[]>`
@@ -215,10 +201,10 @@ export async function createAirdropV5(
     return activity.id;
   });
 
-  // Custom tags via the satellite helper — runs after the transaction so the
-  // ownership check sees the freshly-inserted activity row.
-  if (customTags.length > 0) {
-    await setTagsForActivity(userId, activityId, customTags);
+  // Free-form tags via the satellite helper — runs after the transaction so
+  // the ownership check sees the freshly-inserted activity row.
+  if (extras.tags.length > 0) {
+    await setTagsForActivity(userId, activityId, extras.tags);
   }
 
   return { id: activityId };
@@ -259,8 +245,6 @@ export async function updateAirdropV5(
     extras.eligibilityConfidence,
     nullableStr(input.eligibilityReason ?? input.note),
   );
-
-  const customTags = normaliseCustomTags(extras.customTagsRaw);
 
   const ok = await sql.begin(async (tx) => {
     const parentRows = await tx<{ id: string }[]>`
@@ -306,8 +290,8 @@ export async function updateAirdropV5(
 
   if (!ok) return false;
 
-  // Rewrite custom tags (deletes + reinserts inside setTagsForActivity).
-  await setTagsForActivity(userId, activityId, customTags);
+  // Rewrite free-form tags (deletes + reinserts inside setTagsForActivity).
+  await setTagsForActivity(userId, activityId, extras.tags);
 
   return true;
 }

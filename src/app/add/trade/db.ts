@@ -15,6 +15,7 @@
 // ============================================================================
 import "server-only";
 import { sql } from "@/lib/db/client";
+import { setTagsForActivity } from "@/lib/db/satellite";
 import type { CreateTradeData } from "@/lib/db/zod-schemas";
 
 // ─── Exchange label → catalog code ─────────────────────────────────────────
@@ -235,6 +236,8 @@ export interface ExtendedTradeInput extends CreateTradeData {
   royaltyPct?: string;
   // Strategy (activity supertype, v5)
   strategyTag?: string;
+  /** Free-form activity_tag strings — set-replace semantics post-write. */
+  tags?: readonly string[];
 }
 
 function parseDecForCompute(s: string | undefined): number {
@@ -473,6 +476,12 @@ export async function createTradeFromWizard(
     return activity.id;
   });
 
+  // Free-form tags via the satellite helper — after the transaction so the
+  // ownership check sees the committed activity row.
+  if (input.tags && input.tags.length > 0) {
+    await setTagsForActivity(userId, activityId, input.tags);
+  }
+
   return { id: activityId };
 }
 
@@ -524,7 +533,7 @@ export async function updateTradeFromWizard(
     exitPlanBlocks.push(input.exitNote.trim());
   const exitPlanCombined = exitPlanBlocks.length ? exitPlanBlocks.join("\n\n") : null;
 
-  return sql.begin(async (tx) => {
+  const ok = await sql.begin(async (tx) => {
     // 1. Verify ownership + update supertype.
     const parentRows = await tx<{ id: string }[]>`
       UPDATE public.activity
@@ -574,6 +583,16 @@ export async function updateTradeFromWizard(
 
     return true;
   });
+
+  if (!ok) return false;
+
+  // Free-form tags — set-replace semantics. Skipped when the caller didn't
+  // pass a tags array (leaves existing activity_tag rows untouched).
+  if (input.tags !== undefined) {
+    await setTagsForActivity(userId, activityId, input.tags);
+  }
+
+  return true;
 }
 
 /** Fetch a trade activity for the edit-mode seeding on /fields. */

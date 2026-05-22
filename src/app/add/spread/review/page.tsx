@@ -18,32 +18,24 @@ import { logSpread } from "../actions";
 import { requireUser } from "@/lib/auth/server";
 import { getPickerOptionsByPositionIds, type PickerOptionRow } from "../db";
 import type { ActivityStatus } from "@/types/canonical";
-import { getT } from "@/lib/i18n/server";
+import { getT, getLocale } from "@/lib/i18n/server";
 import type { ManualLegInput } from "@/components/spread/manual-leg-builder";
+import { WizardTagInput } from "@/components/activity/wizard-tag-input";
+import { listTagsForActivity } from "@/lib/db/satellite";
+import {
+  MATCHER_TO_DB_TYPE,
+  isMatcherSpreadType as isSpreadType,
+  parseTagsParam,
+  parseNum,
+  getStr,
+  getAllStr,
+  fmtUsd as fmtUsdShared,
+  fmtDateTime,
+} from "@/app/add/_lib/review-helpers";
 
 export const dynamic = "force-dynamic";
 
-const SPREAD_TYPE_VALUES = [
-  "cash_carry",
-  "funding",
-  "cross_exchange",
-  "calendar",
-  "dex_cex",
-] as const;
-type MatcherSpreadType = (typeof SPREAD_TYPE_VALUES)[number];
-function isSpreadType(v: string): v is MatcherSpreadType {
-  return (SPREAD_TYPE_VALUES as readonly string[]).includes(v);
-}
-
-const MATCHER_TO_DB_TYPE: Record<MatcherSpreadType,
-  "cash_carry" | "funding_capture" | "cross_exchange_perp_arb" | "calendar" | "dex_cex_arb"
-> = {
-  cash_carry: "cash_carry",
-  funding: "funding_capture",
-  cross_exchange: "cross_exchange_perp_arb",
-  calendar: "calendar",
-  dex_cex: "dex_cex_arb",
-};
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 // Translate a leg side / instrument kind enum value to a localized label.
 function sideKey(s: string): "side.long" | "side.short" | "side.buy" | "side.sell" {
@@ -137,68 +129,27 @@ function manualLegPnlReview(leg: ManualLegInput): number | null {
 
 type Search = Promise<{ [key: string]: string | string[] | undefined }>;
 
-function getStr(sp: Awaited<Search>, key: string, fallback = ""): string {
-  const v = sp[key];
-  if (typeof v === "string") return v;
-  if (Array.isArray(v) && v.length > 0 && typeof v[0] === "string") return v[0];
-  return fallback;
+function fmtCapital(n: number, intl: string): string {
+  return `$${n.toLocaleString(intl, { maximumFractionDigits: 0 })}`;
 }
 
-function getAllStr(sp: Awaited<Search>, key: string): string[] {
-  const v = sp[key];
-  if (typeof v === "string") return [v];
-  if (Array.isArray(v)) return v.filter((x): x is string => typeof x === "string");
-  return [];
-}
-
-function parseNum(s: string): number {
-  const n = Number(s);
-  return Number.isFinite(n) ? n : 0;
-}
-
-function fmtUsd(n: number, signed = false): string {
-  const abs = Math.abs(n).toLocaleString("en-US", {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  });
-  const sign = signed ? (n >= 0 ? "+" : "−") : n < 0 ? "−" : "";
-  return `${sign}$${abs}`;
-}
-
-function fmtCapital(n: number): string {
-  return `$${n.toLocaleString("en-US", { maximumFractionDigits: 0 })}`;
-}
-
-function fmtPrice(n: string) {
+function fmtPrice(n: string, intl: string) {
   const v = Number.parseFloat(n);
   if (!Number.isFinite(v)) return n;
-  if (v < 1) return v.toLocaleString("en-US", { maximumSignificantDigits: 4 });
-  return v.toLocaleString("en-US", {
+  if (v < 1) return v.toLocaleString(intl, { maximumSignificantDigits: 4 });
+  return v.toLocaleString(intl, {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   });
 }
 
-function fmtQty(n: string) {
+function fmtQty(n: string, intl: string) {
   const v = Number.parseFloat(n);
   if (!Number.isFinite(v)) return n;
   if (v >= 1_000_000) return v.toExponential(2);
-  if (v >= 1000) return v.toLocaleString("en-US", { maximumFractionDigits: 0 });
-  if (v < 1) return v.toLocaleString("en-US", { maximumSignificantDigits: 4 });
-  return v.toLocaleString("en-US", { maximumFractionDigits: 4 });
-}
-
-function fmtDate(iso: string): string {
-  if (!iso) return "—";
-  const d = new Date(iso);
-  if (!Number.isFinite(d.getTime())) return iso;
-  return d.toLocaleString("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
+  if (v >= 1000) return v.toLocaleString(intl, { maximumFractionDigits: 0 });
+  if (v < 1) return v.toLocaleString(intl, { maximumSignificantDigits: 4 });
+  return v.toLocaleString(intl, { maximumFractionDigits: 4 });
 }
 
 function daysBetween(a: string, b: string): number {
@@ -241,6 +192,10 @@ function asStatus(s: string): ActivityStatus {
 export default async function SpreadReviewPage(props: { searchParams: Search }) {
   const sp = await props.searchParams;
   const t = await getT();
+  const locale = await getLocale();
+  const intl = locale === "ru" ? "ru-RU" : "en-US";
+  const fmtUsd = (n: number, signed = false) => fmtUsdShared(n, locale, signed);
+  const fmtDate = (iso: string) => fmtDateTime(iso, locale);
   const { id: userId } = await requireUser();
 
   const STEP_LABELS = [
@@ -322,7 +277,16 @@ export default async function SpreadReviewPage(props: { searchParams: Search }) 
     if (v) editParams.append(`legIntended:${pid}`, v);
   }
   const editAllHref = `/add/spread/fields?${editParams.toString()}`;
-  const isEditing = getStr(sp, "edit") !== "";
+  const editIdRaw = getStr(sp, "edit");
+  const isEditing = editIdRaw !== "";
+
+  // Free-form tags pre-fill. Edit mode reads the activity's existing
+  // activity_tag rows; a failed-submit round-trip rehydrates from the `tags`
+  // query param (JSON array). New-create with no round-trip → empty.
+  const defaultTags =
+    isEditing && UUID_RE.test(editIdRaw)
+      ? await listTagsForActivity(userId, editIdRaw)
+      : parseTagsParam(getStr(sp, "tags"));
 
   // Pre-compute card preview inputs from the formula in spread_pnl.
   const dbSpreadType = isSpreadType(v.spreadType)
@@ -537,23 +501,23 @@ export default async function SpreadReviewPage(props: { searchParams: Search }) 
                         </span>
                       </TableCell>
                       <TableCell className="text-right font-mono text-[11px] tabular-nums text-text-secondary">
-                        {fmtQty(l.qty)}
+                        {fmtQty(l.qty, intl)}
                       </TableCell>
                       <TableCell className="text-right">
                         <span className="font-mono text-[11px] tabular-nums text-text">
-                          {fmtPrice(l.avgEntryPrice)}
+                          {fmtPrice(l.avgEntryPrice, intl)}
                         </span>
                         {l.avgExitPrice && (
                           <>
                             <span className="mx-1 text-text-tertiary">→</span>
                             <span className="font-mono text-[11px] tabular-nums text-text-secondary">
-                              {fmtPrice(l.avgExitPrice)}
+                              {fmtPrice(l.avgExitPrice, intl)}
                             </span>
                           </>
                         )}
                       </TableCell>
                       <TableCell className="text-right font-mono text-[11px] tabular-nums text-text">
-                        {intended ? fmtPrice(intended) : "—"}
+                        {intended ? fmtPrice(intended, intl) : "—"}
                       </TableCell>
                     </TableRow>
                   );
@@ -687,7 +651,7 @@ export default async function SpreadReviewPage(props: { searchParams: Search }) 
         <div>
           <WizardSummaryRow
             label={t("wizard.spread.review.rows.capital")}
-            value={capital > 0 ? fmtCapital(capital) : "—"}
+            value={capital > 0 ? fmtCapital(capital, intl) : "—"}
             editHref={editAllHref}
           />
           <WizardSummaryRow
@@ -859,6 +823,17 @@ export default async function SpreadReviewPage(props: { searchParams: Search }) 
             />
           );
         })}
+
+        {/* ── Tags ──────────────────────────────────────────────────────── */}
+        <div className="mb-8">
+          <h2 className="mb-1 font-serif text-[11px] font-semibold uppercase tracking-[0.18em] text-text-tertiary">
+            {t("fields.tags")}
+          </h2>
+          <p className="mb-3 font-serif text-[12px] italic leading-snug text-text-tertiary">
+            {t("activity.tags.idleEmpty")}
+          </p>
+          <WizardTagInput defaultTags={defaultTags} />
+        </div>
 
         <div className="flex items-center justify-between border-t border-border pt-6">
           <Link

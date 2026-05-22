@@ -44,6 +44,7 @@ import {
   type SpreadLegRow,
   type FundingRollup,
 } from "./db";
+import { stripSettleSuffix } from "@/lib/format/instrument";
 
 export const dynamic = "force-dynamic";
 
@@ -284,15 +285,15 @@ export default async function SpreadDetailPage({
           <p className="mt-3 font-mono text-sm text-text-secondary">
             {t("spreadDetail.hero.netPrefix")}{" "}
             <span className={`${headlineTone} font-medium`}>
-              {fmtUsd(netPnl, true)}
+              {fmtUsd(netPnl, true, 2, intlLocale)}
             </span>{" "}
-            {t("spreadDetail.hero.realizedSuffix", { capital: fmtCapital(capital) })}
+            {t("spreadDetail.hero.realizedSuffix", { capital: fmtCapital(capital, intlLocale) })}
           </p>
           {/* Funding P&L — aggregated from funding_events across the spread's
               position-linked legs. Rendered only when the spread has at least
               one position-linked leg (funding === null for pure manual
               spreads); we never fabricate a zero. */}
-          {funding !== null && <FundingLine funding={funding} t={t} />}
+          {funding !== null && <FundingLine funding={funding} t={t} intlLocale={intlLocale} />}
         </div>
       </section>
 
@@ -364,7 +365,7 @@ export default async function SpreadDetailPage({
         </p>
         <div className="mt-4 overflow-x-auto rounded-md border border-border bg-surface">
           {useRealLegs ? (
-            <RealLegsTable legs={realLegs} manualLabel={manualLabel} t={t} />
+            <RealLegsTable legs={realLegs} manualLabel={manualLabel} t={t} intlLocale={intlLocale} />
           ) : (
             <DerivedLegsTable legs={derivedLegs} t={t} />
           )}
@@ -530,10 +531,10 @@ const EM_DASH = "—";
  * em-dash for null/blank/non-numeric input so an open leg's missing exit
  * price (or a manual leg with no fees entered) reads cleanly.
  */
-function fmtLegUsd(value: string | null): string {
+function fmtLegUsd(value: string | null, locale = "en-US"): string {
   if (value === null || value.trim() === "") return EM_DASH;
   const n = Number(value);
-  return Number.isFinite(n) ? fmtUsd(n) : EM_DASH;
+  return Number.isFinite(n) ? fmtUsd(n, false, 2, locale) : EM_DASH;
 }
 
 /**
@@ -541,11 +542,11 @@ function fmtLegUsd(value: string | null): string {
  * USD so they render as plain grouped numbers; trailing zeros from the
  * numeric(38,18) column are trimmed. Em-dash for null/blank/non-numeric.
  */
-function fmtLegQty(value: string | null): string {
+function fmtLegQty(value: string | null, locale = "en-US"): string {
   if (value === null || value.trim() === "") return EM_DASH;
   const n = Number(value);
   if (!Number.isFinite(n)) return EM_DASH;
-  return n.toLocaleString("en-US", { maximumFractionDigits: 8 });
+  return n.toLocaleString(locale, { maximumFractionDigits: 8 });
 }
 
 /** Side pill that tolerates a null side (manual legs may omit it). */
@@ -580,7 +581,7 @@ function AttrRow({
       <TableCell className="text-text-tertiary text-sm">{label}</TableCell>
       {cells.map((cell, i) => (
         <TableCell
-          key={i}
+          key={`${label}-${i}`}
           className={
             mono ? "font-mono tabular-nums text-text" : "text-text"
           }
@@ -602,10 +603,12 @@ function RealLegsTable({
   legs,
   manualLabel,
   t,
+  intlLocale,
 }: {
   legs: SpreadLegRow[];
   manualLabel: string;
   t: TFunction;
+  intlLocale: string;
 }) {
   const legHeader = (leg: SpreadLegRow, i: number): string =>
     leg.role && leg.role.trim() !== ""
@@ -646,11 +649,15 @@ function RealLegsTable({
         <AttrRow
           label={t("spreadDetail.legs.symbol")}
           mono
-          cells={legs.map((leg) => leg.symbol ?? EM_DASH)}
+          cells={legs.map((leg) => leg.symbol ? stripSettleSuffix(leg.symbol) : EM_DASH)}
         />
         <AttrRow
           label={t("spreadDetail.legs.instrument")}
-          cells={legs.map((leg) => leg.instrumentType ?? EM_DASH)}
+          cells={legs.map((leg) =>
+            leg.instrumentType
+              ? t(`instrumentKind.${leg.instrumentType}` as Parameters<typeof t>[0]) || leg.instrumentType
+              : EM_DASH
+          )}
         />
         <AttrRow
           label={t("fields.side")}
@@ -661,22 +668,22 @@ function RealLegsTable({
         <AttrRow
           label={t("spreadDetail.legs.qty")}
           mono
-          cells={legs.map((leg) => fmtLegQty(leg.qty))}
+          cells={legs.map((leg) => fmtLegQty(leg.qty, intlLocale))}
         />
         <AttrRow
           label={t("spreadDetail.legs.entryPrice")}
           mono
-          cells={legs.map((leg) => fmtLegUsd(leg.entryPrice))}
+          cells={legs.map((leg) => fmtLegUsd(leg.entryPrice, intlLocale))}
         />
         <AttrRow
           label={t("spreadDetail.legs.exitPrice")}
           mono
-          cells={legs.map((leg) => fmtLegUsd(leg.exitPrice))}
+          cells={legs.map((leg) => fmtLegUsd(leg.exitPrice, intlLocale))}
         />
         <AttrRow
           label={t("spreadDetail.legs.fees")}
           mono
-          cells={legs.map((leg) => fmtLegUsd(leg.feesUsd))}
+          cells={legs.map((leg) => fmtLegUsd(leg.feesUsd, intlLocale))}
         />
       </TableBody>
     </Table>
@@ -756,9 +763,11 @@ function DerivedLegsTable({
 function FundingLine({
   funding,
   t,
+  intlLocale,
 }: {
   funding: FundingRollup;
   t: TFunction;
+  intlLocale: string;
 }) {
   const net = Number(funding.netUsd);
   const safeNet = Number.isFinite(net) ? net : 0;
@@ -769,16 +778,16 @@ function FundingLine({
     <p className="mt-1 font-mono text-sm text-text-secondary">
       {t("spreadDetail.funding.label")}{" "}
       <span className={`${tone} font-medium`}>
-        {fmtUsd(safeNet, true)}
+        {fmtUsd(safeNet, true, 2, intlLocale)}
       </span>
       {funding.eventCount > 0 && (
         <span className="text-text-tertiary">
           {"  ·  "}
           {t("spreadDetail.funding.received")}{" "}
-          {fmtUsd(Number.isFinite(received) ? received : 0)}
+          {fmtUsd(Number.isFinite(received) ? received : 0, false, 2, intlLocale)}
           {"  ·  "}
           {t("spreadDetail.funding.paid")}{" "}
-          {fmtUsd(Number.isFinite(paid) ? paid : 0)}
+          {fmtUsd(Number.isFinite(paid) ? paid : 0, false, 2, intlLocale)}
         </span>
       )}
     </p>

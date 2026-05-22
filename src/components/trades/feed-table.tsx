@@ -21,6 +21,7 @@ import Link from "next/link";
 import { ExchangeChip } from "@/components/settings/exchange-logo";
 import { cn } from "@/lib/utils";
 import { getT, getLocale } from "@/lib/i18n/server";
+import { stripSettleSuffix } from "@/lib/format/instrument";
 import type { TradeFeedRow } from "@/app/trades/db";
 
 interface Props {
@@ -29,45 +30,38 @@ interface Props {
 
 // ── Formatters ────────────────────────────────────────────────────────────
 
-function fmtQty(s: string): string {
+function fmtQty(s: string, locale: string): string {
   const v = Number.parseFloat(s);
   if (!Number.isFinite(v)) return s;
   if (Math.abs(v) >= 1_000_000) return v.toExponential(2);
   if (Math.abs(v) >= 1000)
-    return v.toLocaleString("en-US", { maximumFractionDigits: 0 });
+    return v.toLocaleString(locale, { maximumFractionDigits: 0 });
   if (Math.abs(v) < 1)
-    return v.toLocaleString("en-US", { maximumSignificantDigits: 4 });
-  return v.toLocaleString("en-US", { maximumFractionDigits: 4 });
+    return v.toLocaleString(locale, { maximumSignificantDigits: 4 });
+  return v.toLocaleString(locale, { maximumFractionDigits: 4 });
 }
 
-function fmtPrice(s: string | null): string {
+function fmtPrice(s: string | null, locale: string): string {
   if (s == null) return "—";
   const v = Number.parseFloat(s);
   if (!Number.isFinite(v)) return s;
   if (Math.abs(v) < 1)
-    return v.toLocaleString("en-US", { maximumSignificantDigits: 4 });
-  return v.toLocaleString("en-US", {
+    return v.toLocaleString(locale, { maximumSignificantDigits: 4 });
+  return v.toLocaleString(locale, {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   });
 }
 
-function fmtSignedAmount(s: string, quote: string): string {
+function fmtSignedAmount(s: string, quote: string, locale: string): string {
   const v = Number.parseFloat(s);
   if (!Number.isFinite(v)) return s;
   const sign = v < 0 ? "−" : v > 0 ? "+" : "";
-  const abs = Math.abs(v).toLocaleString("en-US", {
+  const abs = Math.abs(v).toLocaleString(locale, {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   });
   return `${sign}${abs} ${quote}`;
-}
-
-function netPnl(row: TradeFeedRow): number {
-  const realized = Number.parseFloat(row.realizedPnlQuote) || 0;
-  const fees = Number.parseFloat(row.totalFeesQuote) || 0;
-  const funding = Number.parseFloat(row.totalFundingQuote) || 0;
-  return realized - fees + funding;
 }
 
 function fmtDate(iso: string | null, intlLocale: string): string {
@@ -140,7 +134,8 @@ export async function FeedTable({ rows }: Props) {
           </thead>
           <tbody>
             {rows.map((row) => {
-              const pnl = netPnl(row);
+              const pnlStr = row.netPnlQuote;
+              const pnlNum = Number.parseFloat(pnlStr) || 0;
               const fundingNum = Number.parseFloat(row.totalFundingQuote) || 0;
               const sideTone =
                 row.side === "long" ? "text-up" : "text-down";
@@ -156,7 +151,7 @@ export async function FeedTable({ rows }: Props) {
                       name="legs"
                       value={row.id}
                       aria-label={t("trades.feed.bulk.selectOneAria", {
-                        symbol: row.instrument,
+                        symbol: stripSettleSuffix(row.instrument),
                       })}
                       className="h-4 w-4 cursor-pointer accent-text"
                     />
@@ -176,10 +171,10 @@ export async function FeedTable({ rows }: Props) {
                   <td className={CELL_CLASS}>
                     <span className="flex flex-col leading-tight">
                       <span className="font-serif text-[13px] font-medium text-text">
-                        {row.instrument}
+                        {stripSettleSuffix(row.instrument)}
                       </span>
                       <span className="font-mono text-[9px] uppercase tracking-[0.14em] text-text-tertiary">
-                        {row.instrumentType}
+                        {t(`instrumentKind.${row.instrumentType}`)}
                       </span>
                     </span>
                   </td>
@@ -190,22 +185,22 @@ export async function FeedTable({ rows }: Props) {
                         sideTone,
                       )}
                     >
-                      {row.side}
+                      {t(`side.${row.side}`)}
                     </span>
                   </td>
                   <td className={cn(CELL_CLASS, "text-right")}>
                     <span className="font-mono text-[12px] tabular-nums text-text">
-                      {fmtQty(row.totalQty)}
+                      {fmtQty(row.totalQty, intlLocale)}
                     </span>
                   </td>
                   <td className={cn(CELL_CLASS, "text-right")}>
                     <span className="font-mono text-[12px] tabular-nums text-text">
-                      {fmtPrice(row.avgEntryPrice)}
+                      {fmtPrice(row.avgEntryPrice, intlLocale)}
                       {row.avgExitPrice && (
                         <>
                           <span className="mx-1 text-text-tertiary">→</span>
                           <span className="text-text-secondary">
-                            {fmtPrice(row.avgExitPrice)}
+                            {fmtPrice(row.avgExitPrice, intlLocale)}
                           </span>
                         </>
                       )}
@@ -226,10 +221,10 @@ export async function FeedTable({ rows }: Props) {
                     <span
                       className={cn(
                         "font-mono text-[12px] font-medium tabular-nums",
-                        pnl > 0 ? "text-up" : pnl < 0 ? "text-down" : "text-text",
+                        pnlNum > 0 ? "text-up" : pnlNum < 0 ? "text-down" : "text-text",
                       )}
                     >
-                      {fmtSignedAmount(String(pnl), row.quoteCurrency)}
+                      {fmtSignedAmount(pnlStr, row.quoteCurrency, intlLocale)}
                     </span>
                   </td>
                   <td className={cn(CELL_CLASS, "text-right")}>
@@ -243,7 +238,7 @@ export async function FeedTable({ rows }: Props) {
                             : "text-text-secondary",
                       )}
                     >
-                      {fmtSignedAmount(row.totalFundingQuote, row.quoteCurrency)}
+                      {fmtSignedAmount(row.totalFundingQuote, row.quoteCurrency, intlLocale)}
                     </span>
                   </td>
                   <td className={CELL_CLASS}>

@@ -186,7 +186,7 @@ export default async function TradeDetailPage({
             </div>
             <p className="mt-3 flex flex-wrap items-center gap-2 text-base text-text-secondary">
               <ExchangeChip venue={trade.exchange} size="sm" />
-              <span>{trade.exchange} · {trade.symbol} · {trade.instrumentKind} · {sideLabel}</span>
+              <span>{trade.exchange} · {trade.symbol} · {t(`instrumentKind.${trade.instrumentKind}` as Parameters<typeof t>[0])} · {sideLabel}</span>
             </p>
             <p className="mt-1 font-mono text-sm text-text-tertiary">
               {t("tradeDetail.heldSuffix", { days: daysLabel })}
@@ -220,9 +220,9 @@ export default async function TradeDetailPage({
               <p className="mt-3 font-mono text-sm text-text-secondary">
                 {t("tradeDetail.hero.netPrefix")}{" "}
                 <span className={`${headlineTone} font-medium`}>
-                  {fmtUsd(netPnl, true)}
+                  {fmtUsd(netPnl, true, 2, intlLocale)}
                 </span>{" "}
-                {t("tradeDetail.hero.onCapital", { capital: fmtCapital(capital) })}
+                {t("tradeDetail.hero.onCapital", { capital: fmtCapital(capital, intlLocale) })}
               </p>
             </div>
           </section>
@@ -298,7 +298,7 @@ export default async function TradeDetailPage({
                     label={t("tradeDetail.rows.grossPnl")}
                     value={
                       <span className={gross >= 0 ? "text-up" : "text-down"}>
-                        {fmtUsd(gross, true)}
+                        {fmtUsd(gross, true, 2, intlLocale)}
                       </span>
                     }
                     mono
@@ -307,7 +307,7 @@ export default async function TradeDetailPage({
                     label={t("tradeDetail.rows.fees")}
                     value={
                       <span className="text-text-secondary">
-                        {fmtUsd(fees * -1, true)}
+                        {fmtUsd(fees * -1, true, 2, intlLocale)}
                       </span>
                     }
                     mono
@@ -316,7 +316,7 @@ export default async function TradeDetailPage({
                     label={t("tradeDetail.rows.netPnl")}
                     value={
                       <span className={`font-medium ${headlineTone}`}>
-                        {fmtUsd(netPnl, true)}
+                        {fmtUsd(netPnl, true, 2, intlLocale)}
                       </span>
                     }
                     mono

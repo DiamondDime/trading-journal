@@ -6,9 +6,19 @@ import { WizardErrorBanner } from "@/components/wizard/wizard-error-banner";
 import { WizardCardPreview } from "@/components/wizard/wizard-card-preview";
 import { WizardSubmitButton } from "@/components/wizard/wizard-submit-button";
 import { WizardValidationSummary } from "@/components/wizard/wizard-validation-summary";
-import { getT } from "@/lib/i18n/server";
+import { getT, getLocale } from "@/lib/i18n/server";
 import type { VestingSchedule, ActivityStatus } from "@/types/canonical";
 import { logSale } from "../actions";
+import { WizardTagInput } from "@/components/activity/wizard-tag-input";
+import { listTagsForActivity } from "@/lib/db/satellite";
+import { requireUser } from "@/lib/auth/server";
+import {
+  getStr,
+  parseNum,
+  parseTagsParam,
+  fmtUsd as fmtUsdShared,
+  fmtDate as fmtDateShared,
+} from "@/app/add/_lib/review-helpers";
 
 // Reads searchParams per-request — never static. Master plan §0 punch-list:
 // every wizard step that reads searchParams must opt out of static rendering.
@@ -58,40 +68,9 @@ const SALE_KINDS = [
 
 type Search = Promise<{ [key: string]: string | string[] | undefined }>;
 
-function getStr(sp: Awaited<Search>, key: string, fallback = ""): string {
-  const v = sp[key];
-  if (typeof v === "string") return v;
-  if (Array.isArray(v) && v.length > 0 && typeof v[0] === "string")
-    return v[0];
-  return fallback;
-}
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 // ── Pure helpers ────────────────────────────────────────────────────────────
-
-function fmtUsd(n: number, signed = false): string {
-  const abs = Math.abs(n).toLocaleString("en-US", {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  });
-  const sign = signed ? (n >= 0 ? "+" : "−") : n < 0 ? "−" : "";
-  return `${sign}$${abs}`;
-}
-
-function parseNum(s: string): number {
-  const n = Number(s);
-  return Number.isFinite(n) ? n : 0;
-}
-
-function fmtDate(iso: string): string {
-  if (!iso) return "—";
-  const d = new Date(iso);
-  if (!Number.isFinite(d.getTime())) return iso;
-  return d.toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  });
-}
 
 function fmtMultiplier(m: number): string {
   // Sale headlines use a ×N format. Show 2 decimals up to 9.99×, then 1 dp.
@@ -99,9 +78,37 @@ function fmtMultiplier(m: number): string {
   return `${formatted}×`;
 }
 
-function fmtTokens(n: number): string {
+function fmtTokens(n: number, intl: string): string {
   if (n === 0) return "—";
-  return n.toLocaleString("en-US", { maximumSignificantDigits: 6 });
+  return n.toLocaleString(intl, { maximumSignificantDigits: 6 });
+}
+
+/** Valid fundraising-round tokens that resolve to a localized label. */
+const FUNDRAISING_ROUNDS = [
+  "seed",
+  "private",
+  "public",
+  "strategic",
+  "other",
+] as const;
+function isFundraisingRound(
+  s: string,
+): s is (typeof FUNDRAISING_ROUNDS)[number] {
+  return (FUNDRAISING_ROUNDS as readonly string[]).includes(s);
+}
+
+/** Valid allocation-method tokens that resolve to a localized label. */
+const ALLOCATION_METHODS = [
+  "fcfs",
+  "lottery",
+  "staking",
+  "whitelist",
+  "other",
+] as const;
+function isAllocationMethod(
+  s: string,
+): s is (typeof ALLOCATION_METHODS)[number] {
+  return (ALLOCATION_METHODS as readonly string[]).includes(s);
 }
 
 
@@ -343,6 +350,11 @@ function deriveStatus(
 
 export default async function SaleReviewPage(props: { searchParams: Search }) {
   const t = await getT();
+  const locale = await getLocale();
+  const intl = locale === "ru" ? "ru-RU" : "en-US";
+  const fmtUsd = (n: number, signed = false) => fmtUsdShared(n, locale, signed);
+  const fmtDate = (iso: string) => fmtDateShared(iso, locale);
+  const { id: userId } = await requireUser();
   const STEP_LABELS = [
     t("wizard.sale.stepLabels.kind"),
     t("wizard.sale.stepLabels.details"),
@@ -447,7 +459,15 @@ export default async function SaleReviewPage(props: { searchParams: Search }) {
       ),
     ),
   ).toString()}`;
-  const isEditing = getStr(sp, "edit") !== "";
+  const editIdRaw = getStr(sp, "edit");
+  const isEditing = editIdRaw !== "";
+
+  // Free-form tags pre-fill: edit mode reads existing activity_tag rows; a
+  // failed-submit round-trip rehydrates from the `tags` JSON query param.
+  const defaultTags =
+    isEditing && UUID_RE.test(editIdRaw)
+      ? await listTagsForActivity(userId, editIdRaw)
+      : parseTagsParam(getStr(sp, "tags"));
 
   const previewName = v.asset
     ? `${v.asset.toUpperCase()} — ${v.venue || "—"} ${
@@ -536,7 +556,7 @@ export default async function SaleReviewPage(props: { searchParams: Search }) {
             {tokens > 0 && (
               <>
                 {" · "}
-                {fmtTokens(tokens)}{" "}
+                {fmtTokens(tokens, intl)}{" "}
                 {v.asset || t("wizard.sale.review.tokensFallback")}
               </>
             )}
@@ -610,12 +630,20 @@ export default async function SaleReviewPage(props: { searchParams: Search }) {
         <div>
           <WizardSummaryRow
             label={t("wizard.sale.review.rows.fundraisingRound")}
-            value={v.fundraisingRound || "—"}
+            value={
+              isFundraisingRound(v.fundraisingRound)
+                ? t(`wizard.sale.fields.fundraisingRound.${v.fundraisingRound}` as const)
+                : v.fundraisingRound || "—"
+            }
             editHref={editAllHref}
           />
           <WizardSummaryRow
             label={t("wizard.sale.review.rows.allocationMethod")}
-            value={v.allocationMethod || "—"}
+            value={
+              isAllocationMethod(v.allocationMethod)
+                ? t(`wizard.sale.fields.allocationMethod.${v.allocationMethod}` as const)
+                : v.allocationMethod || "—"
+            }
             editHref={editAllHref}
           />
           <WizardSummaryRow
@@ -641,7 +669,7 @@ export default async function SaleReviewPage(props: { searchParams: Search }) {
           />
           <WizardSummaryRow
             label={t("wizard.sale.review.rows.tokensAllocated")}
-            value={fmtTokens(tokens)}
+            value={fmtTokens(tokens, intl)}
             editHref={editAllHref}
           />
           <WizardSummaryRow
@@ -780,6 +808,17 @@ export default async function SaleReviewPage(props: { searchParams: Search }) {
         {SALE_FIELDS.map((k) => (
           <input key={k} type="hidden" name={k} value={getStr(sp, k)} />
         ))}
+
+        {/* ── Tags ──────────────────────────────────────────────────────── */}
+        <div className="mb-8">
+          <h2 className="mb-1 font-serif text-[11px] font-semibold uppercase tracking-[0.18em] text-text-tertiary">
+            {t("fields.tags")}
+          </h2>
+          <p className="mb-3 font-serif text-[12px] italic leading-snug text-text-tertiary">
+            {t("activity.tags.idleEmpty")}
+          </p>
+          <WizardTagInput defaultTags={defaultTags} />
+        </div>
 
         <div className="flex items-center justify-between border-t border-border pt-6">
           <Link

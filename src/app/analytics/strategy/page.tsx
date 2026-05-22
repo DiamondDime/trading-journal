@@ -21,11 +21,8 @@ import { cn } from "@/lib/utils";
  * each click round-trips through the server and the page re-renders with
  * the new ordering — no client state, no stale data.
  *
- * Each row links to /spreads/archive?strategy=<tag> so the user can pivot
- * from "this strategy is bleeding" to the underlying activities in one
- * click. (Archive filter chip support for ?strategy= is a follow-up — for
- * now the link parameter is read by archive's URL-decoder for any chip
- * already present in the URL.)
+ * Each row links to /spreads/archive. A strategy= drill-down param will be
+ * added once the archive filter is implemented.
  */
 export const dynamic = "force-dynamic";
 
@@ -363,9 +360,8 @@ async function RollupRow({ row, intlLocale }: RowProps) {
   const displayName = row.isUntagged
     ? t("analytics.strategy.untaggedLabel")
     : row.strategy;
-  const href = row.isUntagged
-    ? `/spreads/archive`
-    : `/spreads/archive?strategy=${encodeURIComponent(row.strategy)}`;
+  // TODO: reinstate ?strategy= param once archive filter is implemented.
+  const href = `/spreads/archive`;
 
   return (
     <tr className="border-b border-border last:border-b-0 transition-colors hover:bg-subtle">
@@ -394,7 +390,7 @@ async function RollupRow({ row, intlLocale }: RowProps) {
         {row.activityCount}
       </td>
       <td className="px-4 py-3 text-right font-mono text-[13px] tabular-nums text-text-secondary">
-        {fmtCapitalUsd(row.totalCapitalDeployedUsd)}
+        {fmtCapitalUsd(row.totalCapitalDeployedUsd, intlLocale)}
       </td>
       <td
         className={cn(
@@ -447,7 +443,7 @@ interface EmptyProps {
   intlLocale: string;
 }
 
-async function StrategyEmptyState({ untaggedRow, totalCapital }: EmptyProps) {
+async function StrategyEmptyState({ untaggedRow, totalCapital, intlLocale }: EmptyProps) {
   const t = await getT();
   const hasActivities = untaggedRow && untaggedRow.activityCount > 0;
   return (
@@ -459,7 +455,7 @@ async function StrategyEmptyState({ untaggedRow, totalCapital }: EmptyProps) {
         {hasActivities
           ? t("analytics.strategy.empty.bodyWithActivities", {
               count: untaggedRow!.activityCount,
-              capital: fmtCapitalUsd(totalCapital),
+              capital: fmtCapitalUsd(totalCapital, intlLocale),
             })
           : t("analytics.strategy.empty.bodyNoActivities")}
       </p>
@@ -490,7 +486,7 @@ function parseSortField(v: string | undefined): StrategySortField {
     : "netPnl";
 }
 
-function fmtCapitalUsd(n: number): string {
+function fmtCapitalUsd(n: number, intlLocale: string): string {
   if (n === 0) return "$0";
-  return `$${n.toLocaleString("en-US", { maximumFractionDigits: 0 })}`;
+  return `$${n.toLocaleString(intlLocale, { maximumFractionDigits: 0 })}`;
 }

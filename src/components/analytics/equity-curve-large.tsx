@@ -13,6 +13,7 @@ import {
 import type { EquityPoint } from "@/components/spread/equity-curve-chart";
 import { useT } from "@/lib/i18n/client";
 import type { MessageKey } from "@/lib/i18n/resolve";
+import { fmtUsdShort } from "@/components/analytics/_format";
 
 /**
  * Track-record full-width equity curve — 480px tall variant of the dashboard
@@ -31,15 +32,6 @@ interface Props {
   peakUsd?: number;
   currentDrawdownUsd?: number;
   currentEquity?: number;
-}
-
-function fmtUsdShort(v: number): string {
-  const sign = v < 0 ? "−" : "";
-  const abs = Math.abs(v);
-  if (abs >= 1_000_000) return `${sign}$${(abs / 1_000_000).toFixed(1)}M`;
-  if (abs >= 10_000) return `${sign}$${(abs / 1000).toFixed(0)}k`;
-  if (abs >= 1_000) return `${sign}$${(abs / 1000).toFixed(1)}k`;
-  return `${sign}$${abs.toFixed(0)}`;
 }
 
 export function EquityCurveLarge({
@@ -125,7 +117,7 @@ export function EquityCurveLarge({
               strokeDasharray="3 3"
               strokeWidth={1.5}
               label={{
-                value: `−${fmtUsdShort(currentDrawdownUsd).replace("$", "$")}`,
+                value: `−${fmtUsdShort(currentDrawdownUsd)}`,
                 position: "insideTopRight",
                 fontSize: 11,
                 fill: "var(--accent-down)",

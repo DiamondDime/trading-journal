@@ -5,8 +5,18 @@ import { WizardSummaryRow } from "@/components/wizard/wizard-summary-row";
 import { WizardErrorBanner } from "@/components/wizard/wizard-error-banner";
 import { WizardCardPreview } from "@/components/wizard/wizard-card-preview";
 import { WizardSubmitButton } from "@/components/wizard/wizard-submit-button";
-import { getT } from "@/lib/i18n/server";
+import { getT, getLocale } from "@/lib/i18n/server";
 import { logAirdrop } from "../actions";
+import { WizardTagInput } from "@/components/activity/wizard-tag-input";
+import { listTagsForActivity } from "@/lib/db/satellite";
+import { requireUser } from "@/lib/auth/server";
+import {
+  getStr,
+  parseNum,
+  parseTagsParam,
+  fmtUsd as fmtUsdShared,
+  fmtDate as fmtDateShared,
+} from "@/app/add/_lib/review-helpers";
 
 // Renders per-request — reads form-stage searchParams to compose the preview.
 // force-dynamic prevents Next 16 from prerendering an empty version.
@@ -33,54 +43,24 @@ const AIRDROP_FIELDS = [
   "currentPriceUsd",
   "note",
   "regimeTags",
-  "customTags",
   "strategyTag",
   "edit",
 ] as const;
 
 type Search = Promise<{ [key: string]: string | string[] | undefined }>;
 
-function getStr(sp: Awaited<Search>, key: string, fallback = ""): string {
-  const v = sp[key];
-  if (typeof v === "string") return v;
-  return fallback;
-}
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 // ── Pure helpers ────────────────────────────────────────────────────────────
-
-function fmtUsd(n: number, signed = false): string {
-  const abs = Math.abs(n).toLocaleString("en-US", {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  });
-  const sign = signed ? (n >= 0 ? "+" : "−") : n < 0 ? "−" : "";
-  return `${sign}$${abs}`;
-}
-
-function parseNum(s: string): number {
-  const n = Number(s);
-  return Number.isFinite(n) ? n : 0;
-}
-
-function fmtDate(iso: string): string {
-  if (!iso) return "—";
-  const d = new Date(iso);
-  if (!Number.isFinite(d.getTime())) return iso;
-  return d.toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  });
-}
 
 function fmtMultiplier(m: number): string {
   const formatted = m >= 10 ? m.toFixed(1) : m.toFixed(2);
   return `${formatted}×`;
 }
 
-function fmtTokens(n: number): string {
+function fmtTokens(n: number, intl: string): string {
   if (n === 0) return "—";
-  return n.toLocaleString("en-US", { maximumSignificantDigits: 6 });
+  return n.toLocaleString(intl, { maximumSignificantDigits: 6 });
 }
 
 /** Days between today and a YYYY-MM-DD date string. Negative = past. */
@@ -96,6 +76,11 @@ function daysUntil(dateStr: string): number | null {
 
 export default async function AirdropReviewPage(props: { searchParams: Search }) {
   const t = await getT();
+  const locale = await getLocale();
+  const intl = locale === "ru" ? "ru-RU" : "en-US";
+  const fmtUsd = (n: number, signed = false) => fmtUsdShared(n, locale, signed);
+  const fmtDate = (iso: string) => fmtDateShared(iso, locale);
+  const { id: userId } = await requireUser();
   const sp = await props.searchParams;
 
   const STEP_LABELS = [
@@ -110,6 +95,10 @@ export default async function AirdropReviewPage(props: { searchParams: Search })
     asset: getStr(sp, "asset"),
     tokenChain: getStr(sp, "tokenChain"),
     snapshotDate: getStr(sp, "snapshotDate"),
+    // `note` and `eligibilityReason` are the SAME field — the fields page's
+    // free-text textarea is named `note`, the v5 column is `eligibility_reason`
+    // (the action aliases one onto the other). Resolve to a single value so
+    // the review summary doesn't render the text in two separate rows.
     eligibilityReason:
       getStr(sp, "eligibilityReason") || getStr(sp, "note"),
     eligibilityConfidence: getStr(sp, "eligibilityConfidence"),
@@ -122,14 +111,20 @@ export default async function AirdropReviewPage(props: { searchParams: Search })
     claimWindowEnd: getStr(sp, "claimWindowEnd"),
     usdValueAtClaim: getStr(sp, "usdValueAtClaim", "0"),
     currentPriceUsd: getStr(sp, "currentPriceUsd"),
-    note: getStr(sp, "note") || getStr(sp, "eligibilityReason"),
     regimeTags: getStr(sp, "regimeTags"),
-    customTags: getStr(sp, "customTags"),
     strategyTag: getStr(sp, "strategyTag"),
   };
 
   const isPending = v.status === "pending";
-  const isEditing = getStr(sp, "edit") !== "";
+  const editIdRaw = getStr(sp, "edit");
+  const isEditing = editIdRaw !== "";
+
+  // Free-form tags pre-fill: edit mode reads existing activity_tag rows; a
+  // failed-submit round-trip rehydrates from the `tags` JSON query param.
+  const defaultTags =
+    isEditing && UUID_RE.test(editIdRaw)
+      ? await listTagsForActivity(userId, editIdRaw)
+      : parseTagsParam(getStr(sp, "tags"));
 
   const tokens = parseNum(v.tokensClaimed);
   const valueAtClaim = parseNum(v.usdValueAtClaim);
@@ -294,7 +289,7 @@ export default async function AirdropReviewPage(props: { searchParams: Search })
             {tokens > 0 && (
               <>
                 {" · "}
-                {fmtTokens(tokens)}{" "}
+                {fmtTokens(tokens, intl)}{" "}
                 {v.asset || t("wizard.airdrop.review.hero.tokensFallback")}
               </>
             )}
@@ -366,7 +361,7 @@ export default async function AirdropReviewPage(props: { searchParams: Search })
         <div>
           <WizardSummaryRow
             label={t("wizard.airdrop.review.row.tokensClaimed")}
-            value={fmtTokens(tokens)}
+            value={fmtTokens(tokens, intl)}
             editHref={editAllHref}
           />
           <WizardSummaryRow
@@ -453,19 +448,6 @@ export default async function AirdropReviewPage(props: { searchParams: Search })
             value={v.regimeTags || "—"}
             editHref={editAllHref}
           />
-          <WizardSummaryRow
-            label={t("wizard.airdrop.review.row.customTags")}
-            value={v.customTags || "—"}
-            editHref={editAllHref}
-          />
-          {v.note && (
-            <WizardSummaryRow
-              label={t("wizard.airdrop.review.row.note")}
-              value={v.note}
-              editHref={editAllHref}
-              mono={false}
-            />
-          )}
         </div>
       </section>
 
@@ -484,6 +466,17 @@ export default async function AirdropReviewPage(props: { searchParams: Search })
         {AIRDROP_FIELDS.map((k) => (
           <input key={k} type="hidden" name={k} value={getStr(sp, k)} />
         ))}
+
+        {/* ── Tags ──────────────────────────────────────────────────────── */}
+        <div className="mb-8">
+          <h2 className="mb-1 font-serif text-[11px] font-semibold uppercase tracking-[0.18em] text-text-tertiary">
+            {t("fields.tags")}
+          </h2>
+          <p className="mb-3 font-serif text-[12px] italic leading-snug text-text-tertiary">
+            {t("activity.tags.idleEmpty")}
+          </p>
+          <WizardTagInput defaultTags={defaultTags} />
+        </div>
 
         <div className="flex items-center justify-between border-t border-border pt-6">
           <Link

@@ -124,7 +124,6 @@ export default async function YieldFieldsPage(props: { searchParams: Search }) {
         status: row.status,
         strategyTag: row.strategyTag ?? "",
         regimeTags: row.regimeTags.join(", "),
-        customTags: row.customTags.join(", "),
         name: row.name,
       };
       // kind_meta flattening
@@ -195,7 +194,6 @@ export default async function YieldFieldsPage(props: { searchParams: Search }) {
     status: v("status", "open"),
     strategyTag: v("strategyTag"),
     regimeTags: v("regimeTags"),
-    customTags: v("customTags"),
     name: v("name"),
     // kind-specific
     validatorAddress: v("validatorAddress"),

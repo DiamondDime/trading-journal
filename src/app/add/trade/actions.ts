@@ -9,6 +9,7 @@ import {
   updateTradeFromWizard,
   type ExtendedTradeInput,
 } from "./db";
+import { parseTagsFormValue } from "../_lib/review-helpers";
 
 // Next.js's server-action machinery injects internal keys like `$ACTION_ID_*`
 // into the FormData. Strip them before Zod parsing since CreateTradeBody is
@@ -85,6 +86,11 @@ function partitionExtras(
       if (v) (extras as Record<string, string>)[k] = v;
       continue;
     }
+    if (k === "tags") {
+      // Free-form tags ride in a JSON-array hidden input. CreateTradeBody is
+      // strict — drop the key from `body` and surface it via `extras`.
+      continue;
+    }
     // Strip optional v5 fields that are blank — Zod's `.optional()` doesn't
     // accept `""`, only `undefined`. Empty strings show up because the wizard
     // emits every named input regardless of whether the user touched it.
@@ -142,7 +148,11 @@ export async function logTrade(formData: FormData): Promise<void> {
     const { body, extras } = partitionExtras(cleanedRaw);
 
     const input = CreateTradeBody.parse(body);
-    const extended: ExtendedTradeInput = { ...input, ...extras };
+    const extended: ExtendedTradeInput = {
+      ...input,
+      ...extras,
+      tags: parseTagsFormValue(cleanedRaw.tags),
+    };
 
     if (editId) {
       isEdit = true;

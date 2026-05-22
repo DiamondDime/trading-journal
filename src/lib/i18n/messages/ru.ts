@@ -253,6 +253,12 @@ export const ru: MessageDict = {
     otc: 'OTC',
     nft: 'NFT',
   },
+  saleKind: {
+    ido: 'IDO',
+    launchpad: 'Лаунчпад',
+    premarket: 'Премаркет',
+    otc: 'OTC',
+  },
   yieldKind: {
     stake:     'Стейкинг',
     lend:      'Лендинг',
@@ -730,6 +736,7 @@ export const ru: MessageDict = {
     searchPlaceholder: 'Поиск по активу, бирже, заметкам…',
     searchAria: 'Поиск по архиву',
     clearSearch: 'Очистить поиск',
+    strategyPrefix: 'стратегия',
     view: {
       table: 'Таблица',
       cards: 'Карточки',
@@ -1122,6 +1129,8 @@ export const ru: MessageDict = {
       bulkTagEmpty: 'Нет активностей без тегов — всё размечено.',
       bulkTagDone: 'Тег "{tag}" применён к {count} активностям.',
       bulkTagDoneHint: 'Страница режима обновится при следующем посещении.',
+      bulkTagErrorLoad: 'Не удалось загрузить активности.',
+      bulkTagErrorApply: 'Не удалось применить тег.',
       empty: {
         headline: 'Для анализа режимов нужно больше данных.',
         body: 'Разметь хотя бы {min} активностей контекстом режима (фандинг, контанго, risk-on), чтобы увидеть, какие рынки тебе платят.',
@@ -1281,6 +1290,7 @@ export const ru: MessageDict = {
       body: 'Запиши пендинг-эирдроп, открытый опцион или продажу в вестинге — здесь появятся, отсортированные по срочности.',
       cta: 'Записать активность →',
     },
+    pnlLabel: 'П&Л',
   },
   movementEvents: {
     eyebrow: 'журнал · движения',

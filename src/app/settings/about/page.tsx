@@ -70,7 +70,7 @@ export default async function AboutSettingsPage() {
             </p>
 
             <Link
-              href="/settings/exchanges"
+              href="/partners"
               className="mt-3 inline-flex items-center gap-1.5 font-mono text-[11px] uppercase tracking-[0.18em] text-text underline decoration-text-tertiary decoration-1 underline-offset-2 transition-colors hover:decoration-text"
             >
               {t("settings.about.supportCta")}

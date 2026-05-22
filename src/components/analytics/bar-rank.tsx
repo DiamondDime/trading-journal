@@ -13,6 +13,7 @@ import {
 } from "recharts";
 import { useT } from "@/lib/i18n/client";
 import type { MessageKey } from "@/lib/i18n/resolve";
+import { fmtUsdShort } from "@/components/analytics/_format";
 
 /**
  * Horizontal bar chart for ranked dollar values (e.g. P&L by asset, P&L by
@@ -38,16 +39,6 @@ interface Props {
   rowHeight?: number;
   /** Show value labels at the bar end. Default true. */
   showValueLabels?: boolean;
-}
-
-function fmtUsdShort(v: number): string {
-  if (!Number.isFinite(v)) return "—";
-  const sign = v < 0 ? "−" : v > 0 ? "+" : "";
-  const abs = Math.abs(v);
-  if (abs >= 1_000_000) return `${sign}$${(abs / 1_000_000).toFixed(1)}M`;
-  if (abs >= 10_000) return `${sign}$${(abs / 1000).toFixed(0)}k`;
-  if (abs >= 1_000) return `${sign}$${(abs / 1000).toFixed(1)}k`;
-  return `${sign}$${abs.toFixed(0)}`;
 }
 
 export function BarRank({ rows, rowHeight = 26, showValueLabels = true }: Props) {

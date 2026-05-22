@@ -251,6 +251,12 @@ export const en = {
     otc: 'OTC',
     nft: 'NFT',
   },
+  saleKind: {
+    ido: 'IDO',
+    launchpad: 'Launchpad',
+    premarket: 'Premarket',
+    otc: 'OTC',
+  },
   yieldKind: {
     stake:     'Staking',
     lend:      'Lending',
@@ -702,6 +708,7 @@ export const en = {
     searchPlaceholder: 'Search activity, venue, note…',
     searchAria: 'Search archive activities',
     clearSearch: 'Clear search',
+    strategyPrefix: 'strategy',
     view: {
       table: 'Table',
       cards: 'Cards',
@@ -1090,6 +1097,8 @@ export const en = {
       bulkTagEmpty: 'No untagged activities found — you\'re all caught up.',
       bulkTagDone: 'Applied "{tag}" to {count} activities.',
       bulkTagDoneHint: 'The regime page will reflect the change on your next visit.',
+      bulkTagErrorLoad: 'Failed to load activities.',
+      bulkTagErrorApply: 'Failed to apply tag.',
       empty: {
         headline: 'Regime analysis needs more data.',
         body: 'Tag at least {min} activities with regime context (e.g. funding-positive, contango, risk-on) to see which markets pay you.',
@@ -1246,6 +1255,7 @@ export const en = {
       body: 'Log a pending airdrop, an open option, or a vesting sale and it will surface here ranked by urgency.',
       cta: 'Log activity →',
     },
+    pnlLabel: 'P&L',
   },
   movementEvents: {
     eyebrow: 'journal · movements',

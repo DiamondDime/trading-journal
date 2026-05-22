@@ -20,10 +20,10 @@ import type { MovementEventKind } from "@/types/canonical";
 export const dynamic = "force-dynamic";
 
 export async function generateMetadata(): Promise<Metadata> {
-  // Cookie read inside getT keeps this per-request.
+  const t = await getT();
   return {
-    title: "Movement events · Crypto Journal",
-    description: "Losses, write-offs, and manual book adjustments — things that touch P&L but aren't a trade.",
+    title: t("movementEvents.title"),
+    description: t("movementEvents.subtitle"),
   };
 }
 

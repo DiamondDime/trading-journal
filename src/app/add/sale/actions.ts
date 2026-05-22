@@ -13,6 +13,7 @@ import {
   type SaleExtendedInput,
 } from "./db";
 import type { VestingSchedule } from "@/types/canonical";
+import { parseTagsFormValue } from "../_lib/review-helpers";
 
 /**
  * Server action for the sale wizard's final submit.
@@ -105,6 +106,7 @@ function buildExtendedInput(
         ? raw.bonusPct
         : null,
     strategyTag: raw.strategyTag || null,
+    tags: parseTagsFormValue(raw.tags),
   };
 }
 
@@ -145,6 +147,7 @@ export async function logSale(formData: FormData): Promise<void> {
       "vestingScheduleJson",
       "strategyTag",
       "eligibilityReason",
+      "tags",
     ].forEach((k) => delete bodyOnly[k]);
 
     const input = CreateSaleBody.parse(bodyOnly);

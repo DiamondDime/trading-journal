@@ -170,9 +170,9 @@ function fmtPercent(n: number | null, mult100 = true): string {
   return `${v.toFixed(1)}%`;
 }
 
-function fmtExpectancy(n: number): string {
+function fmtExpectancy(n: number, locale: string): string {
   // Expectancy can be ≪ 1 dollar; show 2 dp + signed prefix.
-  return fmtUsd(n, true);
+  return fmtUsd(n, true, 2, locale);
 }
 
 // R-distribution caption helpers — keep formatters tight + mono-friendly.
@@ -231,10 +231,13 @@ export default async function SpreadsPage({ searchParams }: SpreadsPageProps) {
     switch (a.type) {
       case "spread":
         return `${a.variant} · ${a.venues}`;
-      case "trade":
-        return `${a.exchange} · ${a.instrument} · ${a.side}`;
+      case "trade": {
+        // TradeRow.instrument is "perp"|"spot"|"future"; i18n uses "dated_future" for future.
+        const ikKey = a.instrument === "future" ? "instrumentKind.dated_future" : `instrumentKind.${a.instrument}` as const;
+        return `${a.exchange} · ${t(ikKey as Parameters<typeof t>[0])} · ${t(`side.${a.side}` as const)}`;
+      }
       case "sale":
-        return `${a.saleKind.toUpperCase()} · ${a.venue}`;
+        return `${t(`saleKind.${a.saleKind}` as const)} · ${a.venue}`;
       case "airdrop":
         return `${a.protocol} · ${t("spreadsList.retroDrop")}`;
     }
@@ -432,7 +435,7 @@ export default async function SpreadsPage({ searchParams }: SpreadsPageProps) {
     summary:
       r.type === "airdrop"
         ? `${r.daysLabel} · ${r.note || "—"}`
-        : `${fmtCapital(r.capital)} · ${r.daysLabel} · ${r.note || "—"}`,
+        : `${fmtCapital(r.capital, intlLocale)} · ${r.daysLabel} · ${r.note || "—"}`,
     href: r.href,
     activityType: r.type,
     venues: venueOf(r),
@@ -483,7 +486,7 @@ export default async function SpreadsPage({ searchParams }: SpreadsPageProps) {
           <KpiCard
             variant="hero"
             label={t("dashboard.kpi.netPnlYtd")}
-            value={fmtUsd(totals.net, true)}
+            value={fmtUsd(totals.net, true, 2, intlLocale)}
             delta={t("dashboard.deltas.acrossActivities", { count: totals.count })}
           />
           <KpiCard
@@ -508,13 +511,13 @@ export default async function SpreadsPage({ searchParams }: SpreadsPageProps) {
           />
           <KpiCard
             label={t("dashboard.kpi.bestActivity")}
-            value={bestDisplay ? fmtUsd(bestDisplay.netPnl, true) : "—"}
+            value={bestDisplay ? fmtUsd(bestDisplay.netPnl, true, 2, intlLocale) : "—"}
             tone="up"
             delta={bestDelta(bestDisplay)}
           />
           <KpiCard
             label={t("dashboard.kpi.worstActivity")}
-            value={worstDisplay ? fmtUsd(worstDisplay.netPnl, true) : "—"}
+            value={worstDisplay ? fmtUsd(worstDisplay.netPnl, true, 2, intlLocale) : "—"}
             tone="down"
             delta={bestDelta(worstDisplay)}
           />
@@ -532,8 +535,8 @@ export default async function SpreadsPage({ searchParams }: SpreadsPageProps) {
             delta={
               more.profitFactor != null
                 ? t("dashboard.deltas.avgWinLoss", {
-                    win: fmtUsd(more.avgWin),
-                    loss: fmtUsd(-more.avgLoss),
+                    win: fmtUsd(more.avgWin, false, 2, intlLocale),
+                    loss: fmtUsd(-more.avgLoss, false, 2, intlLocale),
                   })
                 : t("dashboard.deltas.needsBoth")
             }
@@ -550,7 +553,7 @@ export default async function SpreadsPage({ searchParams }: SpreadsPageProps) {
           />
           <KpiCardWithCaption
             label={t("dashboard.kpi.expectancy")}
-            value={fmtExpectancy(more.expectancy)}
+            value={fmtExpectancy(more.expectancy, intlLocale)}
             tone={more.expectancy >= 0 ? "up" : "down"}
             caption={t("dashboard.captions.expectancy")}
             delta={
@@ -567,7 +570,7 @@ export default async function SpreadsPage({ searchParams }: SpreadsPageProps) {
             delta={
               drawdown.maxDrawdownUsd > 0
                 ? t("dashboard.deltas.drawdownFrom", {
-                    usd: fmtUsd(-drawdown.maxDrawdownUsd),
+                    usd: fmtUsd(-drawdown.maxDrawdownUsd, false, 2, intlLocale),
                     date: drawdown.peakAt
                       ? new Date(drawdown.peakAt).toLocaleDateString(intlLocale, {
                           month: "short",
@@ -652,7 +655,7 @@ export default async function SpreadsPage({ searchParams }: SpreadsPageProps) {
                 {t("dashboard.sections.recentCount", {
                   n: recentRows.length,
                   total: totals.count,
-                  pnl: fmtUsd(recentNetSum),
+                  pnl: fmtUsd(recentNetSum, false, 2, intlLocale),
                 })}
               </span>
             </div>
@@ -718,7 +721,7 @@ export default async function SpreadsPage({ searchParams }: SpreadsPageProps) {
               </h3>
               <p className="mt-1 font-serif text-[12px] italic text-text-tertiary">
                 {rUnit > 0
-                  ? t("dashboard.sections.rDistCaption", { value: fmtUsd(rUnit) })
+                  ? t("dashboard.sections.rDistCaption", { value: fmtUsd(rUnit, false, 2, intlLocale) })
                   : t("dashboard.sections.rDistCaptionNoUnit")}
               </p>
             </div>
