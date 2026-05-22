@@ -2448,6 +2448,7 @@ export const ru: MessageDict = {
           shape: 'Форма',
           numbers: 'Цифры',
           timing: 'Время',
+          lifecycle: 'Статус и жизненный цикл',
           intent: 'Намерение на входе',
           perp: 'Перп',
           otc: 'OTC',
@@ -2455,15 +2456,13 @@ export const ru: MessageDict = {
           thesisTags: 'Идея и теги',
           rollups: 'Стратегия',
         },
-        liquidated: {
-          label: 'Позиция была ликвидирована',
-          helper: 'Поставь галочку, если биржа принудительно закрыла позицию. По умолчанию — закрыта.',
-        },
+        statusOpenHint: 'Открытая позиция — цену и дату выхода добавите позже, когда закроете её.',
         labels: {
           exchange: 'Биржа',
           symbol: 'Тикер',
           instrument: 'Инструмент',
           side: 'Сторона',
+          status: 'Статус позиции',
           capital: 'Капитал',
           qty: 'Объём',
           entryPrice: 'Цена входа',
@@ -3546,6 +3545,7 @@ export const ru: MessageDict = {
     hero: {
       netPrefix: 'Чистыми',
       onCapital: 'на капитал {capital}',
+      openNote: 'Позиция ещё открыта — реализованного P&L пока нет.',
     },
     priceAction: {
       title: 'Движение цены',

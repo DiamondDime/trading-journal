@@ -429,21 +429,29 @@ export async function createTrade(
   userId: string,
   input: CreateTradeData,
 ): Promise<{ id: string }> {
+  // An open position has no exit price, no closed date, and no realized P&L.
+  // exitPrice / closedAt are gated by CreateTradeBody's superRefine, so they
+  // are present whenever status is 'closed' | 'liquidated'.
+  const isOpen = input.status === 'open';
   const opened = new Date(input.openedAt).toISOString();
-  const closed = new Date(input.closedAt).toISOString();
+  const closed =
+    !isOpen && input.closedAt ? new Date(input.closedAt).toISOString() : null;
   const qty = parseDec(input.qty);
   const entry = parseDec(input.entryPrice);
-  const exit = parseDec(input.exitPrice);
+  const exit = input.exitPrice ? parseDec(input.exitPrice) : 0;
   const capital = parseDec(input.capital);
   const fees = parseDec(input.fees ?? '0');
-  // Signed PnL — long: (exit-entry)*qty, short: (entry-exit)*qty
+  // Signed PnL — long: (exit-entry)*qty, short: (entry-exit)*qty. Zero while
+  // the trade is open since the leg has not been realized.
   const dir = input.side === 'short' ? -1 : 1;
-  const gross = qty * (exit - entry) * dir;
-  const net = gross - fees;
+  const gross = isOpen ? 0 : qty * (exit - entry) * dir;
+  const net = isOpen ? 0 : gross - fees;
   const daysHeld =
-    (new Date(closed).getTime() - new Date(opened).getTime()) / 86_400_000;
+    isOpen || !closed
+      ? 0
+      : (new Date(closed).getTime() - new Date(opened).getTime()) / 86_400_000;
   const realizedApr =
-    capital > 0 && daysHeld > 0
+    !isOpen && capital > 0 && daysHeld > 0
       ? (net / capital) * (365 / daysHeld)
       : null;
 
@@ -455,7 +463,7 @@ export async function createTrade(
   const connectionId = await ensureManualConnection(userId);
 
   const activityId = await sql.begin(async (tx) => {
-    // 1. Position shell — captures the trade as a closed position.
+    // 1. Position shell — open trades stay status='open' with NULL exit.
     const [position] = await tx<{ id: string }[]>`
       INSERT INTO public.positions (
         user_id, exchange_connection_id,
@@ -467,8 +475,10 @@ export async function createTrade(
         ${userId}::uuid, ${connectionId}::uuid,
         ${input.symbol}, ${instrumentKind}::instrument_type, ${input.side},
         ${input.instrument === 'spot' ? 'spot' : 'cross'}::margin_mode,
-        ${qty.toString()}, '0', ${entry.toString()}, ${exit.toString()},
-        ${opened}::timestamptz, ${closed}::timestamptz, 'closed',
+        ${qty.toString()}, ${isOpen ? qty.toString() : '0'},
+        ${entry.toString()}, ${isOpen ? null : exit.toString()},
+        ${opened}::timestamptz, ${closed}::timestamptz,
+        ${isOpen ? 'open' : 'closed'}::position_status,
         ${gross.toString()}, ${fees.toString()}, 'USD'
       )
       RETURNING id
@@ -482,10 +492,11 @@ export async function createTrade(
         capital_deployed_usd, realized_pnl_usd, fees_usd, net_pnl_usd,
         regime_tags, custom_tags
       ) VALUES (
-        ${userId}::uuid, 'trade', 'closed',
+        ${userId}::uuid, 'trade', ${input.status}::activity_status,
         ${deriveTradeName(input)},
         ${opened}::timestamptz, ${closed}::timestamptz,
-        ${capital.toString()}, ${gross.toString()}, ${fees.toString()}, ${net.toString()},
+        ${capital.toString()}, ${isOpen ? null : gross.toString()},
+        ${fees.toString()}, ${isOpen ? null : net.toString()},
         ${input.regimeTags as string[]}, ${[] as string[]}
       )
       RETURNING id
@@ -500,7 +511,7 @@ export async function createTrade(
         ${activity.id}::uuid, ${position.id}::uuid, ${input.symbol},
         ${exchangeCode}, ${instrumentKind}::instrument_type, ${input.side},
         ${input.note || null},
-        ${qty.toString()}, ${entry.toString()}, ${exit.toString()},
+        ${qty.toString()}, ${entry.toString()}, ${isOpen ? null : exit.toString()},
         ${realizedApr !== null ? realizedApr.toString() : null}
       )
     `;

@@ -12,6 +12,7 @@ import { cn } from "@/lib/utils";
 import { requireUser } from "@/lib/auth/server";
 import { getT } from "@/lib/i18n/server";
 import { getTradeForEdit, mapExchangeCodeToLabel } from "../db";
+import { TradeStatusFields } from "./_status-fields";
 
 export const dynamic = "force-dynamic";
 
@@ -178,10 +179,16 @@ export default async function TradeFieldsPage(props: { searchParams: Search }) {
 
   const kindRaw = getStr(sp, "kind") || dbDefaults.kind || "spot";
   const kind = (KINDS as readonly string[]).includes(kindRaw) ? kindRaw : "spot";
-  // Status is always closed for journal entries. The only exception is
-  // liquidations, surfaced via a checkbox rather than a 3-way picker.
-  const isLiquidatedDefault =
-    dbDefaults.status === "liquidated" || getStr(sp, "status") === "liquidated";
+  // Trade status — URL (back-from-review) > edit-mode DB row > closed default.
+  // Open trades carry no exit price or close date; the status control hides
+  // those fields and the schema makes them optional for an open position.
+  const STATUSES = ["open", "closed", "liquidated"] as const;
+  const statusRaw = getStr(sp, "status") || dbDefaults.status || "closed";
+  const statusDefault: (typeof STATUSES)[number] = (
+    STATUSES as readonly string[]
+  ).includes(statusRaw)
+    ? (statusRaw as (typeof STATUSES)[number])
+    : "closed";
 
   // URL > DB > empty. URL overrides DB so back-from-review keeps user edits.
   const defaults = {
@@ -408,24 +415,6 @@ export default async function TradeFieldsPage(props: { searchParams: Search }) {
               required
             />
           </WizardField>
-          <WizardField
-            label={t("wizard.trade.fields.labels.exitPrice")}
-            htmlFor="exitPrice"
-            helper={t("wizard.trade.fields.helpers.usd")}
-            required
-          >
-            <WizardInput
-              id="exitPrice"
-              name="exitPrice"
-              type="number"
-              step="any"
-              min="0"
-              inputMode="decimal"
-              defaultValue={defaults.exitPrice}
-              placeholder="66380.00"
-              required
-            />
-          </WizardField>
 
           {/* Fees decomposition. Two boxes keeps the cost-attribution clean
               for the review's stacked-bar render. Either-or vs the old total
@@ -470,54 +459,14 @@ export default async function TradeFieldsPage(props: { searchParams: Search }) {
             <input type="hidden" name="fees" value={defaults.fees} />
           )}
         </div>
-        {/* Liquidation checkbox — unchecked = closed (default), checked = liquidated.
-            The `status` query param is absent when unchecked; the review page and
-            action both default to "closed" on absence. When checked, status=liquidated
-            is emitted into the GET query string. */}
-        <label className="flex items-start gap-2 text-[12px]">
-          <input
-            type="checkbox"
-            name="status"
-            value="liquidated"
-            defaultChecked={isLiquidatedDefault}
-            className="mt-0.5 h-3.5 w-3.5 accent-text"
-          />
-          <span className="flex flex-col gap-0.5">
-            <span className="font-mono text-[10px] uppercase tracking-[0.16em] text-text-tertiary">
-              {t("wizard.trade.fields.liquidated.label")}
-            </span>
-            <span className="font-serif italic text-text-tertiary">
-              {t("wizard.trade.fields.liquidated.helper")}
-            </span>
-          </span>
-        </label>
-
-        {/* ── Timing ─────────────────────────────────────────────────── */}
-        <SectionLabel>{t("wizard.trade.fields.sections.timing")}</SectionLabel>
-        <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
-          <WizardField label={t("wizard.trade.fields.labels.openedAt")} htmlFor="openedAt" required>
-            <WizardInput
-              id="openedAt"
-              name="openedAt"
-              type="datetime-local"
-              defaultValue={defaults.openedAt}
-              required
-            />
-          </WizardField>
-          <WizardField
-            label={t("wizard.trade.fields.labels.closedAt")}
-            htmlFor="closedAt"
-            required
-          >
-            <WizardInput
-              id="closedAt"
-              name="closedAt"
-              type="datetime-local"
-              defaultValue={defaults.closedAt}
-              required
-            />
-          </WizardField>
-        </div>
+        {/* ── Status & lifecycle ─────────────────────────────────────── */}
+        <SectionLabel>{t("wizard.trade.fields.sections.lifecycle")}</SectionLabel>
+        <TradeStatusFields
+          defaultStatus={statusDefault}
+          defaultOpenedAt={defaults.openedAt}
+          defaultClosedAt={defaults.closedAt}
+          defaultExitPrice={defaults.exitPrice}
+        />
 
         {/* ── Open-intent ────────────────────────────────────────────── */}
         <SectionLabel>{t("wizard.trade.fields.sections.intent")}</SectionLabel>

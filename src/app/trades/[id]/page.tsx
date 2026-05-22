@@ -129,6 +129,9 @@ export default async function TradeDetailPage({
   const apr = fmtAprPct(trade.realizedApr);
   const headlineTone = apr.tone === "up" ? "text-up" : "text-down";
   const netPnl = Number(activity.netPnlUsd ?? 0);
+  // Open trades have no realized P&L — render an em dash, not a misleading
+  // $0.00 that reads as break-even.
+  const isOpen = activity.status === "open";
   const capital = Number(activity.capitalDeployedUsd ?? 0);
   const qty = Number(trade.qty);
   const entry = Number(trade.avgEntryPrice);
@@ -217,13 +220,19 @@ export default async function TradeDetailPage({
                   {t("tradeDetail.aprBadge")}
                 </span>
               </div>
-              <p className="mt-3 font-mono text-sm text-text-secondary">
-                {t("tradeDetail.hero.netPrefix")}{" "}
-                <span className={`${headlineTone} font-medium`}>
-                  {fmtUsd(netPnl, true, 2, intlLocale)}
-                </span>{" "}
-                {t("tradeDetail.hero.onCapital", { capital: fmtCapital(capital, intlLocale) })}
-              </p>
+              {isOpen ? (
+                <p className="mt-3 font-mono text-sm text-text-tertiary">
+                  {t("tradeDetail.hero.openNote")}
+                </p>
+              ) : (
+                <p className="mt-3 font-mono text-sm text-text-secondary">
+                  {t("tradeDetail.hero.netPrefix")}{" "}
+                  <span className={`${headlineTone} font-medium`}>
+                    {fmtUsd(netPnl, true, 2, intlLocale)}
+                  </span>{" "}
+                  {t("tradeDetail.hero.onCapital", { capital: fmtCapital(capital, intlLocale) })}
+                </p>
+              )}
             </div>
           </section>
 
@@ -297,9 +306,13 @@ export default async function TradeDetailPage({
                   <ExecRow
                     label={t("tradeDetail.rows.grossPnl")}
                     value={
-                      <span className={gross >= 0 ? "text-up" : "text-down"}>
-                        {fmtUsd(gross, true, 2, intlLocale)}
-                      </span>
+                      isOpen ? (
+                        "—"
+                      ) : (
+                        <span className={gross >= 0 ? "text-up" : "text-down"}>
+                          {fmtUsd(gross, true, 2, intlLocale)}
+                        </span>
+                      )
                     }
                     mono
                   />
@@ -315,9 +328,13 @@ export default async function TradeDetailPage({
                   <ExecRow
                     label={t("tradeDetail.rows.netPnl")}
                     value={
-                      <span className={`font-medium ${headlineTone}`}>
-                        {fmtUsd(netPnl, true, 2, intlLocale)}
-                      </span>
+                      isOpen ? (
+                        "—"
+                      ) : (
+                        <span className={`font-medium ${headlineTone}`}>
+                          {fmtUsd(netPnl, true, 2, intlLocale)}
+                        </span>
+                      )
                     }
                     mono
                   />

@@ -2397,6 +2397,7 @@ export const en = {
           shape: 'Shape',
           numbers: 'Numbers',
           timing: 'Timing',
+          lifecycle: 'Status & lifecycle',
           intent: 'Open intent',
           perp: 'Perp details',
           otc: 'OTC details',
@@ -2404,15 +2405,13 @@ export const en = {
           thesisTags: 'Thesis & tags',
           rollups: 'Strategy',
         },
-        liquidated: {
-          label: 'This position was liquidated',
-          helper: 'Check this if the exchange forcibly closed the position. Defaults to closed.',
-        },
+        statusOpenHint: 'Open position — add the exit price and close date later, when you close it.',
         labels: {
           exchange: 'Exchange',
           symbol: 'Symbol',
           instrument: 'Instrument',
           side: 'Side',
+          status: 'Position status',
           capital: 'Capital deployed',
           qty: 'Quantity',
           entryPrice: 'Entry price',
@@ -3589,6 +3588,7 @@ export const en = {
     hero: {
       netPrefix: 'Net',
       onCapital: 'realized on {capital} capital',
+      openNote: 'Position still open — no realized P&L yet.',
     },
     priceAction: {
       title: 'Price action',

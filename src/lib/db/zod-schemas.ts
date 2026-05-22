@@ -494,10 +494,13 @@ export const CreateTradeBody = z
     capital:             NonNegativeDecimal,
     qty:                 PositiveDecimal,
     entryPrice:          PositiveDecimal,
-    exitPrice:           PositiveDecimal,
+    // exitPrice / closedAt are required only for closed | liquidated trades —
+    // the superRefine below enforces that. An open position omits both.
+    exitPrice:           PositiveDecimal.optional(),
     fees:                NonNegativeDecimal.optional().default('0'),
     openedAt:            z.string().min(1),  // datetime-local string
-    closedAt:            z.string().min(1),
+    closedAt:            z.string().optional(),
+    status:              z.enum(['open', 'closed', 'liquidated']).default('closed'),
     note:                z.string().max(4000).optional().default(''),
     regimeTags:          TagListString,
     // Pass-through fields from earlier wizard steps. Not validated as content.
@@ -520,19 +523,37 @@ export const CreateTradeBody = z
   .strict()
   .superRefine((val, ctx) => {
     const opened = new Date(val.openedAt).getTime();
-    const closed = new Date(val.closedAt).getTime();
     if (!Number.isFinite(opened)) {
       ctx.addIssue({ code: 'custom', path: ['openedAt'], message: 'invalid datetime' });
     }
-    if (!Number.isFinite(closed)) {
-      ctx.addIssue({ code: 'custom', path: ['closedAt'], message: 'invalid datetime' });
-    }
-    if (Number.isFinite(opened) && Number.isFinite(closed) && closed < opened) {
-      ctx.addIssue({
-        code: 'custom',
-        path: ['closedAt'],
-        message: 'closed_at must be >= opened_at',
-      });
+    // Exit price + closed date are mandatory for a closed or liquidated trade
+    // and absent for an open position. An open trade has no realized P&L.
+    if (val.status === 'closed' || val.status === 'liquidated') {
+      if (!val.exitPrice) {
+        ctx.addIssue({
+          code: 'custom',
+          path: ['exitPrice'],
+          message: 'exit price is required to close a trade',
+        });
+      }
+      if (!val.closedAt) {
+        ctx.addIssue({
+          code: 'custom',
+          path: ['closedAt'],
+          message: 'closed date is required to close a trade',
+        });
+      } else {
+        const closed = new Date(val.closedAt).getTime();
+        if (!Number.isFinite(closed)) {
+          ctx.addIssue({ code: 'custom', path: ['closedAt'], message: 'invalid datetime' });
+        } else if (Number.isFinite(opened) && closed < opened) {
+          ctx.addIssue({
+            code: 'custom',
+            path: ['closedAt'],
+            message: 'closed_at must be >= opened_at',
+          });
+        }
+      }
     }
     // marginMode only makes sense for non-spot kinds. (kind defaults to 'spot'.)
     if (val.marginMode !== undefined && val.kind === 'spot') {

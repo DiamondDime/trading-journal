@@ -219,8 +219,6 @@ export async function tradeExistsForPosition(positionId: string): Promise<boolea
 export interface ExtendedTradeInput extends CreateTradeData {
   /** When non-empty, link this trade to an existing open position (auto path). */
   positionId?: string;
-  /** Wizard status — 'open' allows nullable exit prices. */
-  tradeStatus?: "open" | "closed" | "liquidated";
   /** Per-kind extension payloads. Validated by the action; persisted as columns. */
   entryThesis?: string;
   exitNote?: string;
@@ -294,13 +292,12 @@ export async function createTradeFromWizard(
   userId: string,
   input: ExtendedTradeInput,
 ): Promise<CreatedTrade> {
-  const status = input.tradeStatus ?? "closed";
+  const status = input.status;
   const isOpen = status === "open";
 
   const opened = new Date(input.openedAt).toISOString();
-  const closed = isOpen
-    ? null
-    : new Date(input.closedAt).toISOString();
+  const closed =
+    !isOpen && input.closedAt ? new Date(input.closedAt).toISOString() : null;
 
   const qty = parseDecForCompute(input.qty);
   const entry = parseDecForCompute(input.entryPrice);
@@ -491,11 +488,12 @@ export async function updateTradeFromWizard(
   activityId: string,
   input: ExtendedTradeInput,
 ): Promise<boolean> {
-  const status = input.tradeStatus ?? "closed";
+  const status = input.status;
   const isOpen = status === "open";
 
   const opened = new Date(input.openedAt).toISOString();
-  const closed = isOpen ? null : new Date(input.closedAt).toISOString();
+  const closed =
+    !isOpen && input.closedAt ? new Date(input.closedAt).toISOString() : null;
 
   const qty = parseDecForCompute(input.qty);
   const entry = parseDecForCompute(input.entryPrice);

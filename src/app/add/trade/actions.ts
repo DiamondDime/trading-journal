@@ -26,7 +26,6 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 // flow straight into createTradeFromWizard / updateTradeFromWizard as
 // pass-through — the action layer doesn't need to re-validate them.
 const PASSTHROUGH_KEYS = [
-  "tradeStatus",
   "entryThesis",
   "exitNote",
   "counterparty",
@@ -52,32 +51,18 @@ function partitionExtras(
 ): {
   body: Record<string, string>;
   extras: Pick<ExtendedTradeInput, (typeof PASSTHROUGH_KEYS)[number]> & {
-    tradeStatus?: "open" | "closed" | "liquidated";
     positionId?: string;
   };
 } {
   const body: Record<string, string> = {};
   const extras = {} as Pick<ExtendedTradeInput, (typeof PASSTHROUGH_KEYS)[number]> & {
-    tradeStatus?: "open" | "closed" | "liquidated";
     positionId?: string;
   };
 
   for (const [k, vRaw] of Object.entries(raw)) {
     const v = vRaw.trim();
-    if (k === "status") {
-      // Status comes in as `status` from the form but the DB layer reads
-      // `tradeStatus`. Map and validate against the allowed values.
-      if (v === "open" || v === "closed" || v === "liquidated") {
-        extras.tradeStatus = v;
-      } else if (v) {
-        // Unknown status — let the DB layer reject through a CHECK violation
-        // rather than silently defaulting. Surface a clean error below.
-        throw new Error(
-          `Unknown trade status "${v}". Allowed: open / closed / liquidated.`,
-        );
-      }
-      continue;
-    }
+    // `status` is part of CreateTradeBody (a z.enum) — it flows into `body`
+    // and is validated there, so it is not special-cased here.
     if (k === "positionId") {
       if (v && UUID_RE.test(v)) extras.positionId = v;
       continue;
@@ -96,6 +81,8 @@ function partitionExtras(
     // emits every named input regardless of whether the user touched it.
     if (
       [
+        "exitPrice",
+        "closedAt",
         "leverage",
         "marginMode",
         "targetPrice",
