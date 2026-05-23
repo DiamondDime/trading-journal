@@ -82,25 +82,40 @@ if (existsSync("public")) {
  * copying — this is robust whether the link is relative or absolute and
  * regardless of how many hops the chain has.
  */
-function dereferenceSymlinks(dir) {
+function dereferenceSymlinks(dir, { strict = true } = {}) {
   const dereferenced = [];
   for (const entry of readdirSync(dir)) {
     const entryPath = join(dir, entry);
     const stat = lstatSync(entryPath);
 
     if (stat.isSymbolicLink()) {
-      // Resolve the link target. If it's broken, fail loudly — a dangling
-      // link in the bundle means a real packaging/runtime bug, not something
-      // to paper over.
+      // Resolve the link target. In strict mode (Next.js standalone) a
+      // broken link is a packaging bug — fail loudly. In lenient mode
+      // (worker-ts/node_modules, where pnpm may create dangling links for
+      // optional OS-specific deps), drop the link and continue so the
+      // build doesn't fail on harmless platform mismatches.
       let realTarget;
       try {
         realTarget = realpathSync(entryPath);
       } catch (err) {
-        throw new Error(
-          `[prepare-standalone] dangling symlink in standalone bundle: ` +
-            `${entryPath} (${err.code ?? err.message}). ` +
-            `Refusing to package a broken bundle.`,
+        if (strict) {
+          throw new Error(
+            `[prepare-standalone] dangling symlink in standalone bundle: ` +
+              `${entryPath} (${err.code ?? err.message}). ` +
+              `Refusing to package a broken bundle.`,
+          );
+        }
+        console.warn(
+          `[prepare-standalone] skipping dangling symlink ${entryPath} ` +
+            `(${err.code ?? err.message})`,
         );
+        try {
+          rmSync(entryPath, { force: true });
+        } catch {
+          // Best-effort cleanup; if removal fails the asar packer will
+          // surface a real error.
+        }
+        continue;
       }
       // Replace the symlink with a real, fully-materialised copy.
       rmSync(entryPath, { recursive: true, force: true });
@@ -112,7 +127,7 @@ function dereferenceSymlinks(dir) {
     }
 
     if (stat.isDirectory()) {
-      dereferenced.push(...dereferenceSymlinks(entryPath));
+      dereferenced.push(...dereferenceSymlinks(entryPath, { strict }));
     }
   }
   return dereferenced;
@@ -136,7 +151,9 @@ if (dereferenced.length > 0) {
 // every top-level dep here so the bundle is a plain file tree.
 const WORKER_NODE_MODULES = join("worker-ts", "node_modules");
 if (existsSync(WORKER_NODE_MODULES)) {
-  const workerDereferenced = dereferenceSymlinks(WORKER_NODE_MODULES);
+  const workerDereferenced = dereferenceSymlinks(WORKER_NODE_MODULES, {
+    strict: false,
+  });
   if (workerDereferenced.length > 0) {
     console.log(
       `[prepare-standalone] dereferenced ${workerDereferenced.length} symlink(s) in ${WORKER_NODE_MODULES}`,
