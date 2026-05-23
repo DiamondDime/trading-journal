@@ -49,6 +49,16 @@ files:
   # (PGlite ignores Postgres-specific features, but the migration runner
   # owned by the DB agent decides what to do.)
   - supabase/migrations/**/*
+  # Sync worker — built TypeScript + production deps. Spawned by Electron
+  # main; connects to the in-process PGlite via pglite-socket exposed by the
+  # Next.js subprocess. `pnpm electron:build` runs `cd worker-ts && pnpm
+  # build` before this glob picks up `dist/`. `scripts/prepare-standalone.mjs`
+  # dereferences worker-ts/node_modules symlinks (pnpm hoists; asar can't
+  # handle symlinks). Test/dev deps are excluded explicitly below.
+  - worker-ts/dist/**/*
+  - worker-ts/package.json
+  - worker-ts/node_modules/**/*
+  - "!worker-ts/node_modules/{typescript,tsx,vitest,@vitest,@types}/**"
   - package.json
   - "!**/.DS_Store"
   - "!**/*.map"
@@ -63,6 +73,9 @@ files:
 asar: true
 asarUnpack:
   - .next/standalone/**/*
+  # The worker is spawned as a Node subprocess; asar.unpack so the subprocess
+  # (which doesn't go through Electron's asar shim) can resolve modules.
+  - worker-ts/**/*
 compression: maximum
 # Version-LESS artifact names. This is deliberate: it makes
 #   https://github.com/<owner>/<repo>/releases/latest/download/Journal-mac-arm64.dmg

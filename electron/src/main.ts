@@ -46,9 +46,8 @@ const STARTUP_TIMEOUT_MS = 30_000;
 // Singletons we have to clean up on exit.
 let mainWindow: BrowserWindow | null = null;
 let nextServer: ChildProcess | null = null;
-// Worker subprocess will be owned by the worker agent. Reserved here so that
-// the lifecycle in `app.on('before-quit')` already handles it.
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
+// The sync worker subprocess. Assigned by `superviseSyncWorker()` and
+// cleaned up in `before-quit`.
 let syncWorker: ChildProcess | null = null;
 
 /**
@@ -134,6 +133,8 @@ function spawnNextServer(
   mcpToken: string,
   userId: string,
   workerSecret: string,
+  credentialsMasterKey: string,
+  pgliteSocketDir: string,
 ): ChildProcess {
   const serverEntry = resolveStandaloneServerEntry();
   if (!existsSync(serverEntry)) {
@@ -161,12 +162,17 @@ function spawnNextServer(
       DESKTOP_MODE: '1',
       PORT: String(port),
       HOSTNAME: '127.0.0.1',
-      // PGlite lives IN-PROCESS inside the Next.js subprocess now (no TCP
-      // wire bridge). These two env vars point its boot routine at the
-      // user-data dir for the WASM-backed datafiles, and the asar-packed
-      // migrations directory for the first-run schema apply.
+      // PGlite lives IN-PROCESS inside the Next.js subprocess. These two env
+      // vars point its boot routine at the user-data dir for the WASM-backed
+      // datafiles, and the asar-packed migrations directory for the first-run
+      // schema apply.
       PGLITE_DATA_DIR: pgliteDataDir,
       PGLITE_MIGRATIONS_DIR: migrationsDir,
+      // Side-channel: instrumentation.ts will start pglite-socket inside the
+      // Next.js subprocess and bind a UNIX socket at
+      // `<PGLITE_SOCKET_DIR>/.s.PGSQL.5432`. The sync-worker subprocess
+      // connects to that socket via postgres.js to share the same PGlite.
+      PGLITE_SOCKET_DIR: pgliteSocketDir,
       // Shared secret with the `trading-journal-mcp` package. The Next.js
       // server uses this to authenticate requests on /api/mcp/v1/*. The
       // source of truth is ~/.journal/mcp.json; we forward it here so the
@@ -182,6 +188,12 @@ function spawnNextServer(
       // connect" form in production even before the worker is running.
       // The daemon reads this same value from journal.json when it boots.
       WORKER_HTTP_SECRET: workerSecret,
+      // Per-install AES-256-GCM master key. Used by the Next.js subprocess to
+      // encrypt API keys when the user adds an exchange connection, and by
+      // the worker subprocess (via the same env value) to decrypt them on
+      // sync. Source of truth is journal.json — both processes get the same
+      // value here. Required for any exchange connection to be useful.
+      CREDENTIALS_MASTER_KEY: credentialsMasterKey,
       // Don't inherit the parent process's ELECTRON_RUN_AS_NODE flag, etc.
       ELECTRON_RUN_AS_NODE: '1',
       NODE_ENV: 'production',
@@ -206,6 +218,155 @@ function spawnNextServer(
     }
   });
   return child;
+}
+
+/**
+ * Resolve the path to the built sync worker's entry. The worker lives at
+ * `worker-ts/dist/main.js` after `pnpm --filter worker-ts build`. Packaged
+ * builds keep it in `app.asar.unpacked` (alongside the standalone bundle)
+ * because Node subprocesses can't `require()` through asar transparently.
+ */
+function resolveWorkerEntry(): string {
+  if (app.isPackaged) {
+    return join(
+      process.resourcesPath,
+      'app.asar.unpacked',
+      'worker-ts',
+      'dist',
+      'main.js',
+    );
+  }
+  return resolve(__dirname, '..', '..', 'worker-ts', 'dist', 'main.js');
+}
+
+/** Poll for a file's existence (e.g. the pglite-socket socket file). */
+async function waitForFile(filePath: string, timeoutMs: number): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if (existsSync(filePath)) return;
+    await new Promise((r) => setTimeout(r, 100));
+  }
+  throw new Error(`File ${filePath} did not appear within ${timeoutMs}ms`);
+}
+
+interface WorkerSpawnOpts {
+  socketPath: string;
+  userId: string;
+  workerSecret: string;
+  credentialsMasterKey: string;
+}
+
+/**
+ * Spawn the TS sync worker as a Node subprocess. It connects to PGlite via
+ * the pglite-socket UNIX socket exposed by the Next.js subprocess, decrypts
+ * stored API keys with `CREDENTIALS_MASTER_KEY`, and runs an indefinite
+ * sync loop. Each cycle: list eligible connections, fetch fills + funding,
+ * aggregate positions. Crashes are restarted by `superviseSyncWorker`.
+ */
+function spawnSyncWorker(opts: WorkerSpawnOpts): ChildProcess | null {
+  const entry = resolveWorkerEntry();
+  if (!existsSync(entry)) {
+    console.warn(
+      `[worker] entry ${entry} not found — sync disabled. ` +
+        `Run \`pnpm --filter @csj/worker-ts build\` and re-pack.`,
+    );
+    return null;
+  }
+  const cwd = resolve(entry, '..', '..');
+  // postgres.js follows libpq: host=<dir>, port=<port>; it opens
+  // `<dir>/.s.PGSQL.<port>`. We URL-encode the dir so the connection string
+  // round-trips through node:url without losing path separators.
+  const sockDir = resolve(opts.socketPath, '..');
+  const databaseUrl =
+    `postgresql:///postgres?host=${encodeURIComponent(sockDir)}&port=5432`;
+
+  const child = spawn(process.execPath, [entry], {
+    cwd,
+    env: {
+      ...process.env,
+      ELECTRON_RUN_AS_NODE: '1',
+      NODE_ENV: 'production',
+      // worker-ts/src/db.ts honours these two when DESKTOP_MODE=1.
+      DESKTOP_MODE: '1',
+      DESKTOP_SOCKET_PATH: opts.socketPath,
+      // Fallback DATABASE_URL — worker-ts/src/db.ts.resolveDatabaseUrl()
+      // prefers DESKTOP_SOCKET_PATH but DATABASE_URL is also valid input.
+      DATABASE_URL: databaseUrl,
+      CREDENTIALS_MASTER_KEY: opts.credentialsMasterKey,
+      APP_USER_ID: opts.userId,
+      WORKER_HTTP_SECRET: opts.workerSecret,
+      // Reasonable defaults for a single-user desktop install. The webapp
+      // (Hetzner) overrides these via its systemd unit.
+      WORKER_POLL_INTERVAL_SECONDS:
+        process.env.WORKER_POLL_INTERVAL_SECONDS ?? '60',
+      WORKER_LOOKBACK_DAYS: process.env.WORKER_LOOKBACK_DAYS ?? '30',
+      WORKER_LOG_LEVEL: process.env.WORKER_LOG_LEVEL ?? 'info',
+    },
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
+
+  child.stdout?.on('data', (chunk: Buffer) => {
+    process.stdout.write(`[worker] ${chunk.toString()}`);
+  });
+  child.stderr?.on('data', (chunk: Buffer) => {
+    process.stderr.write(`[worker!] ${chunk.toString()}`);
+  });
+  return child;
+}
+
+/**
+ * Restart-on-crash supervision for the sync worker. Three failures within
+ * 30 seconds → stop trying; otherwise restart with a 1.5x exponential delay
+ * capped at 30s. Surface a one-line log on each restart so a degraded loop
+ * is observable in the parent process's stderr.
+ */
+function superviseSyncWorker(opts: WorkerSpawnOpts): void {
+  let attempt = 0;
+  const recentExits: number[] = [];
+  const RECENT_WINDOW_MS = 30_000;
+  const RECENT_FAILURE_LIMIT = 3;
+
+  const launch = (): void => {
+    const child = spawnSyncWorker(opts);
+    if (!child) {
+      // Entry missing; nothing to supervise.
+      syncWorker = null;
+      return;
+    }
+    syncWorker = child;
+
+    child.on('exit', (code, signal) => {
+      const ts = Date.now();
+      recentExits.push(ts);
+      // Trim entries older than the rolling window.
+      while (recentExits.length > 0 && recentExits[0] < ts - RECENT_WINDOW_MS) {
+        recentExits.shift();
+      }
+      console.error(
+        `[worker] exited code=${code} signal=${signal} ` +
+          `(recent failures: ${recentExits.length}/${RECENT_FAILURE_LIMIT})`,
+      );
+      if (signal === 'SIGTERM') {
+        // Quit-driven shutdown; don't restart.
+        syncWorker = null;
+        return;
+      }
+      if (recentExits.length >= RECENT_FAILURE_LIMIT) {
+        console.error(
+          `[worker] giving up — ${RECENT_FAILURE_LIMIT} failures within ` +
+            `${RECENT_WINDOW_MS}ms. Manual restart required (relaunch the app).`,
+        );
+        syncWorker = null;
+        return;
+      }
+      attempt += 1;
+      const delayMs = Math.min(2_000 * 1.5 ** (attempt - 1), 30_000);
+      console.error(`[worker] restarting in ${Math.round(delayMs)}ms...`);
+      setTimeout(launch, delayMs);
+    });
+  };
+
+  launch();
 }
 
 function createMainWindow(targetUrl: string): BrowserWindow {
@@ -286,6 +447,11 @@ async function boot(): Promise<void> {
       (provisioned.generated ? ' (fresh install)' : ' (existing)'),
   );
 
+  // pglite-socket location — shared with the Next.js subprocess (which binds
+  // the socket) and the worker subprocess (which connects to it).
+  const pgliteSocketDir = join(userData, 'data', 'socket');
+  const pgliteSocketPath = join(pgliteSocketDir, '.s.PGSQL.5432');
+
   let targetPort: number;
   if (isDev) {
     // electron:dev runs `next dev` separately; just point at it.
@@ -303,6 +469,8 @@ async function boot(): Promise<void> {
       mcp.token,
       provisioned.userId,
       provisioned.workerSecret,
+      provisioned.credentialsMasterKey,
+      pgliteSocketDir,
     );
     await waitForServer(targetPort);
   }
@@ -315,8 +483,26 @@ async function boot(): Promise<void> {
   // -------------------------------------------------------------------------
   attachAutoUpdater(mainWindow);
 
-  // TODO(worker): when the sync worker is ported, spawn it here using the
-  //   same env (DESKTOP_MODE=1, PGLITE_DATA_DIR=...) so it shares the DB.
+  // -------------------------------------------------------------------------
+  // Sync worker — wait for the Next.js subprocess to bind the pglite-socket,
+  // then spawn the worker. In dev mode we skip the spawn (the developer can
+  // run `pnpm worker-ts:dev` against their local Postgres if they want sync).
+  // -------------------------------------------------------------------------
+  if (!isDev) {
+    try {
+      await waitForFile(pgliteSocketPath, STARTUP_TIMEOUT_MS);
+      console.log('[main] pglite-socket ready, supervising sync worker');
+      superviseSyncWorker({
+        socketPath: pgliteSocketPath,
+        userId: provisioned.userId,
+        workerSecret: provisioned.workerSecret,
+        credentialsMasterKey: provisioned.credentialsMasterKey,
+      });
+    } catch (err) {
+      // The UI still works without the worker; surface and continue.
+      console.error('[main] sync worker not started:', err);
+    }
+  }
 }
 
 app.whenReady().then(() => {

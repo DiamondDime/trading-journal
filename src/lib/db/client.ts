@@ -32,6 +32,7 @@
  * later, set the `app.current_user_id` session GUC inside a transaction
  * before issuing user-scoped queries.
  */
+import type { PGlite } from "@electric-sql/pglite";
 import postgres from "postgres";
 import { createPGliteSql } from "./pglite-shim";
 
@@ -50,6 +51,24 @@ declare global {
 }
 
 const DESKTOP_MODE = process.env.DESKTOP_MODE === "1";
+
+/**
+ * Module-level memo for the PGlite instance. Shared between the shim (which
+ * services `sql` queries from the rest of the app) and the side-channel
+ * pglite-socket server (which exposes the same PGlite to the worker
+ * subprocess). Without this, calling `bootPGlite()` from two places would
+ * open two PGlite instances against the same data dir and corrupt state.
+ */
+let _pglitePromise: Promise<PGlite> | null = null;
+
+/**
+ * Resolve the in-process PGlite instance, booting it on first call. Returns
+ * the same Promise on every subsequent call.
+ */
+export function getPGliteInstance(): Promise<PGlite> {
+  _pglitePromise ??= bootPGlite();
+  return _pglitePromise;
+}
 
 /**
  * Lazy PGlite boot. Called by the shim the first time any query fires.
@@ -189,7 +208,7 @@ function buildPgClient(): ReturnType<typeof postgres> {
 export const sql: SqlClient =
   globalThis.__pgSql ??
   (DESKTOP_MODE
-    ? (createPGliteSql(bootPGlite) as unknown as SqlClient)
+    ? (createPGliteSql(getPGliteInstance) as unknown as SqlClient)
     : buildPgClient());
 
 // Memoise across module reloads. In dev this is for HMR; in production

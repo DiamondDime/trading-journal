@@ -1,6 +1,6 @@
 {
   "name": "crypto-journal",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "private": true,
   "description": "Single-user crypto trading journal — spreads, trades, sales, airdrops, yield, options, movement events.",
   "author": "DiamondDime",
@@ -45,14 +45,15 @@
     "electron:prepare-standalone": "node scripts/prepare-standalone.mjs",
     "electron:dev": "pnpm electron:emit && concurrently -k -n next,electron -c blue,magenta \"next dev\" \"wait-on tcp:3000 && cross-env DESKTOP_DEV=1 DESKTOP_DEV_PORT=3000 electron .\"",
     "electron:clean": "rm -rf dist-electron",
-    "electron:pack": "pnpm electron:clean && pnpm electron:emit && next build && pnpm electron:prepare-standalone && electron-builder --dir --mac",
-    "electron:build": "pnpm electron:clean && pnpm electron:emit && next build && pnpm electron:prepare-standalone && electron-builder --mac",
-    "electron:build:win": "pnpm electron:clean && pnpm electron:emit && next build && pnpm electron:prepare-standalone && electron-builder --win",
-    "electron:build:all": "pnpm electron:clean && pnpm electron:emit && next build && pnpm electron:prepare-standalone && electron-builder --mac --win",
+    "electron:pack": "pnpm electron:clean && pnpm electron:emit && next build && pnpm worker-ts:build && pnpm electron:prepare-standalone && electron-builder --dir --mac",
+    "electron:build": "pnpm electron:clean && pnpm electron:emit && next build && pnpm worker-ts:build && pnpm electron:prepare-standalone && electron-builder --mac",
+    "electron:build:win": "pnpm electron:clean && pnpm electron:emit && next build && pnpm worker-ts:build && pnpm electron:prepare-standalone && electron-builder --win",
+    "electron:build:all": "pnpm electron:clean && pnpm electron:emit && next build && pnpm worker-ts:build && pnpm electron:prepare-standalone && electron-builder --mac --win",
     "worker-ts:dev": "cd worker-ts && pnpm dev",
     "worker-ts:once": "cd worker-ts && pnpm start --once",
     "worker-ts:typecheck": "cd worker-ts && pnpm typecheck",
     "worker-ts:test": "cd worker-ts && pnpm test",
+    "worker-ts:build": "cd worker-ts && pnpm install --frozen-lockfile=false && pnpm build",
     "release": "if [ -f scripts/release.sh ]; then bash scripts/release.sh; else echo 'TODO — see electron/ scaffolding'; exit 1; fi"
   },
   "dependencies": {

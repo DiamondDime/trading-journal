@@ -129,4 +129,26 @@ if (dereferenced.length > 0) {
   console.log("[prepare-standalone] no symlinks in standalone bundle");
 }
 
+// --- 3. Dereference worker-ts/node_modules ----------------------------------
+// The sync worker subprocess (worker-ts/dist/main.js) is shipped alongside the
+// standalone bundle so Electron main can spawn it. pnpm uses symlinked
+// node_modules — same asar-packing problem as the standalone tree. Materialise
+// every top-level dep here so the bundle is a plain file tree.
+const WORKER_NODE_MODULES = join("worker-ts", "node_modules");
+if (existsSync(WORKER_NODE_MODULES)) {
+  const workerDereferenced = dereferenceSymlinks(WORKER_NODE_MODULES);
+  if (workerDereferenced.length > 0) {
+    console.log(
+      `[prepare-standalone] dereferenced ${workerDereferenced.length} symlink(s) in ${WORKER_NODE_MODULES}`,
+    );
+  } else {
+    console.log(`[prepare-standalone] no symlinks in ${WORKER_NODE_MODULES}`);
+  }
+} else {
+  console.warn(
+    `[prepare-standalone] ${WORKER_NODE_MODULES} not found — sync worker won't ship. ` +
+      `Run \`cd worker-ts && pnpm install && pnpm build\` first.`,
+  );
+}
+
 console.log("standalone assets copied");

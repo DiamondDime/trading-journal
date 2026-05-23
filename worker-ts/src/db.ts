@@ -53,17 +53,22 @@ let _sql: SqlClient | undefined;
 
 /**
  * Resolve the DB connection string. Honors:
- *  - `DATABASE_URL` (preferred — webapp mode + most local dev)
- *  - `DESKTOP_MODE=1` + `DESKTOP_SOCKET_PATH=/tmp/csj.sock` → UNIX socket
- *    (Electron + pglite-socket).
+ *  - `DESKTOP_MODE=1` + `DESKTOP_SOCKET_PATH=<dir>/.s.PGSQL.<port>` → UNIX
+ *    socket (Electron + pglite-socket). postgres.js follows libpq: it expects
+ *    `host=<dir>` and opens `<dir>/.s.PGSQL.<port>` itself, so we strip the
+ *    filename and pass the directory as the host. Database name is `postgres`
+ *    — PGlite's default; pglite-socket doesn't care which DB is requested.
+ *  - `DATABASE_URL` (preferred — webapp mode + most local dev).
  */
 export function resolveDatabaseUrl(): string {
-  if (process.env.DESKTOP_MODE === '1' && process.env.DESKTOP_SOCKET_PATH) {
-    // postgres.js accepts a `socket:` prefix to indicate a UNIX socket; for
-    // safety also export a normal pg URL pointing at the socket directory.
-    return `postgresql:///crypto_spread_journal?host=${encodeURIComponent(
-      process.env.DESKTOP_SOCKET_PATH,
-    )}`;
+  const sockPath = process.env.DESKTOP_SOCKET_PATH;
+  if (process.env.DESKTOP_MODE === '1' && sockPath) {
+    // Strip the `.s.PGSQL.<port>` suffix to get the directory libpq expects.
+    const lastSlash = sockPath.lastIndexOf('/');
+    const sockDir = lastSlash > 0 ? sockPath.slice(0, lastSlash) : sockPath;
+    const portMatch = sockPath.match(/\.s\.PGSQL\.(\d+)$/);
+    const port = portMatch ? portMatch[1] : '5432';
+    return `postgresql:///postgres?host=${encodeURIComponent(sockDir)}&port=${port}`;
   }
   return process.env.DATABASE_URL ?? DEFAULT_DATABASE_URL;
 }
@@ -71,11 +76,18 @@ export function resolveDatabaseUrl(): string {
 export function getSql(): SqlClient {
   if (_sql) return _sql;
   const conn = resolveDatabaseUrl();
+  // Connection pool sizing:
+  //   - Hetzner / webapp (real Postgres): max=4 is fine and lets us interleave
+  //     fill inserts with the funding/aggregation pass for the next connection.
+  //   - Desktop (PGlite + pglite-socket 0.1.5): PGlite is single-writer, and
+  //     pglite-socket@0.1.5 triggers EPIPE under multi-connection-per-client
+  //     load (verified by scripts/spike-pglite-socket.mjs). Pin to 1.
+  const isDesktop = process.env.DESKTOP_MODE === '1';
+  const max = isDesktop ? 1 : 4;
   _sql = postgres(conn, {
     onnotice: () => {},
     transform: postgres.camel,
-    // The worker is the only writer for these rows; small pool is fine.
-    max: 4,
+    max,
     // Generous statement timeout — adapter pages can be large.
     idle_timeout: 30,
   });

@@ -31,8 +31,12 @@ const STATE_FILE_MODE = 0o600;
 const STATE_DIR_MODE = 0o700;
 const SECRET_BYTES = 32;
 const SECRET_HEX_LEN = SECRET_BYTES * 2;
+const MASTER_KEY_BYTES = 32;
+// base64(32 bytes) is 44 chars (43 data + 1 '='). Validate length + charset.
+const MASTER_KEY_B64_LEN = 44;
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const HEX_RE = /^[0-9a-f]{64}$/i;
+const B64_RE = /^[A-Za-z0-9+/]{43}=$/;
 
 /** Demo-account email used for the local profile shim. Not actually delivered. */
 const DEFAULT_USER_EMAIL = 'local@journal.app';
@@ -40,12 +44,19 @@ const DEFAULT_USER_EMAIL = 'local@journal.app';
 interface JournalState {
   userId: string;
   workerSecret: string;
+  /**
+   * Per-install AES-256-GCM master key, base64. Used by both the Next.js
+   * subprocess (to encrypt API keys on save) and the worker subprocess
+   * (to decrypt them on sync). Generated once and never rotated automatically.
+   */
+  credentialsMasterKey: string;
 }
 
 export interface ProvisionedUser {
   userId: string;
   workerSecret: string;
-  /** Whether either field was generated fresh on this call. */
+  credentialsMasterKey: string;
+  /** Whether any field was generated fresh on this call. */
   generated: boolean;
   statePath: string;
 }
@@ -56,7 +67,7 @@ export interface ProvisionedUser {
  * treat malformed content as "regenerate" rather than throwing — the file is
  * ours to manage and a corrupt file is recoverable by writing a fresh one.
  */
-function parseJournalState(raw: string): JournalState | null {
+function parseJournalState(raw: string): Partial<JournalState> | null {
   let parsed: unknown;
   try {
     parsed = JSON.parse(raw);
@@ -65,9 +76,25 @@ function parseJournalState(raw: string): JournalState | null {
   }
   if (typeof parsed !== 'object' || parsed === null) return null;
   const obj = parsed as Record<string, unknown>;
-  if (typeof obj.userId !== 'string' || !UUID_RE.test(obj.userId)) return null;
-  if (typeof obj.workerSecret !== 'string' || !HEX_RE.test(obj.workerSecret)) return null;
-  return { userId: obj.userId, workerSecret: obj.workerSecret };
+  const out: Partial<JournalState> = {};
+  if (typeof obj.userId === 'string' && UUID_RE.test(obj.userId)) {
+    out.userId = obj.userId;
+  }
+  if (typeof obj.workerSecret === 'string' && HEX_RE.test(obj.workerSecret)) {
+    out.workerSecret = obj.workerSecret;
+  }
+  // credentialsMasterKey was added later than the other two — older journal.json
+  // files won't have it, and that's NOT a "regenerate everything" condition.
+  // Return the parsed partial so the caller can fill in just the missing field
+  // without invalidating an already-provisioned userId / workerSecret.
+  if (
+    typeof obj.credentialsMasterKey === 'string' &&
+    obj.credentialsMasterKey.length === MASTER_KEY_B64_LEN &&
+    B64_RE.test(obj.credentialsMasterKey)
+  ) {
+    out.credentialsMasterKey = obj.credentialsMasterKey;
+  }
+  return out;
 }
 
 /**
@@ -86,14 +113,11 @@ export async function loadOrProvisionUser(userDataDir: string): Promise<Provisio
   // but the mode-set is defensive.
   await fs.mkdir(dir, { recursive: true, mode: STATE_DIR_MODE });
 
-  // Try to load existing state.
+  // Load existing state if any.
+  let existing: Partial<JournalState> | null = null;
   try {
     const raw = await fs.readFile(statePath, 'utf8');
-    const existing = parseJournalState(raw);
-    if (existing) {
-      return { ...existing, generated: false, statePath };
-    }
-    // Fall through to regeneration — stale/corrupt file.
+    existing = parseJournalState(raw);
   } catch (err) {
     const code = (err as NodeJS.ErrnoException).code;
     if (code !== 'ENOENT') {
@@ -101,24 +125,53 @@ export async function loadOrProvisionUser(userDataDir: string): Promise<Provisio
       // a Next.js subprocess that'll error on every DB query.
       throw err;
     }
-    // ENOENT — fall through to generation.
+    // ENOENT — first launch.
   }
 
-  const userId = randomUUID();
-  const workerSecret = randomBytes(SECRET_BYTES).toString('hex');
-  if (workerSecret.length !== SECRET_HEX_LEN) {
-    throw new Error(
-      `Worker secret generation produced ${workerSecret.length} chars; expected ${SECRET_HEX_LEN}`,
-    );
+  // Fill in any missing fields. We migrate forward without invalidating prior
+  // state: a journal.json that has userId + workerSecret but no master key
+  // (pre-v0.2.1 installs) gets the master key generated and merged in. The
+  // already-encrypted API keys would have been broken anyway since the old
+  // builds had no per-install master key — so there's nothing to migrate.
+  let generated = !existing;
+  let userId = existing?.userId;
+  let workerSecret = existing?.workerSecret;
+  let credentialsMasterKey = existing?.credentialsMasterKey;
+
+  if (!userId) {
+    userId = randomUUID();
+    generated = true;
+  }
+  if (!workerSecret) {
+    workerSecret = randomBytes(SECRET_BYTES).toString('hex');
+    if (workerSecret.length !== SECRET_HEX_LEN) {
+      throw new Error(
+        `Worker secret generation produced ${workerSecret.length} chars; expected ${SECRET_HEX_LEN}`,
+      );
+    }
+    generated = true;
+  }
+  if (!credentialsMasterKey) {
+    credentialsMasterKey = randomBytes(MASTER_KEY_BYTES).toString('base64');
+    if (credentialsMasterKey.length !== MASTER_KEY_B64_LEN) {
+      throw new Error(
+        `Master key generation produced ${credentialsMasterKey.length} chars; expected ${MASTER_KEY_B64_LEN}`,
+      );
+    }
+    generated = true;
   }
 
-  const body = JSON.stringify({ userId, workerSecret });
-  await fs.writeFile(statePath, body, { mode: STATE_FILE_MODE });
-  // writeFile's `mode` applies only on file creation; force the bit on existing
-  // files too. Cheap and explicit.
-  await fs.chmod(statePath, STATE_FILE_MODE);
+  // Only write the file when we generated something fresh — keeps the mtime
+  // stable across plain launches.
+  if (generated) {
+    const body = JSON.stringify({ userId, workerSecret, credentialsMasterKey });
+    await fs.writeFile(statePath, body, { mode: STATE_FILE_MODE });
+    // writeFile's `mode` applies only on file creation; force the bit on
+    // existing files too. Cheap and explicit.
+    await fs.chmod(statePath, STATE_FILE_MODE);
+  }
 
-  return { userId, workerSecret, generated: true, statePath };
+  return { userId, workerSecret, credentialsMasterKey, generated, statePath };
 }
 
 /**
