@@ -1,6 +1,6 @@
 {
   "name": "crypto-journal",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "private": true,
   "description": "Single-user crypto trading journal — spreads, trades, sales, airdrops, yield, options, movement events.",
   "author": "DiamondDime",
